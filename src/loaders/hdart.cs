@@ -38,8 +38,8 @@ namespace Underworld
                 }
                 switch (UWClass._RES)
                 {
-                    case UWClass.GAME_UW1: return Path.Combine(uwsettings.instance.hdartpath, "uw1");
-                    case UWClass.GAME_UW2: return Path.Combine(uwsettings.instance.hdartpath, "uw2");
+                    case UWClass.GAME_UW1: return Path.Combine(uwsettings.instance.HdArtPath(), "uw1");
+                    case UWClass.GAME_UW2: return Path.Combine(uwsettings.instance.HdArtPath(), "uw2");
                     default: return null; //the demo has its own art files, none are exported for it.
                 }
             }

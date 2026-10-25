@@ -110,10 +110,10 @@ public class uwsettings
     // Folder of the MT-32 or CM-32L ROM images for synth mt32 and cm32l. Empty uses DefaultRomDir.
     public string rompath { get; set; } = "";
     // Folder of higher resolution indexed art made from the player's own data (see HdArt).
-    // Empty uses the original art.
+    // Empty uses the original art. A relative path is taken from the program's folder (HdArtPath).
     public string hdartpath { get; set; } = "";
     // Folder holding the art sets the launcher offers (each a subfolder with uw1/ and uw2/).
-    // Empty uses the folder that hdartpath is in.
+    // Empty uses the folder that hdartpath is in, else DefaultHdArtRoot. Relative as hdartpath.
     public string hdartroot { get; set; } = "";
     // Language of the game text: "en", or one with a translation (see Localization).
     public string language { get; set; } = "en";
@@ -127,6 +127,25 @@ public class uwsettings
 
     /// <summary>ROMS beside the program (AppPaths.ProgramDir).</summary>
     public static string DefaultRomDir() => Path.Combine(AppPaths.ProgramDir(), "ROMS");
+
+    /// <summary>HD beside the program, as ROMS: where the launcher makes the Pixel HD art sets.</summary>
+    public static string DefaultHdArtRoot() => Path.Combine(AppPaths.ProgramDir(), "HD");
+
+    /// <summary>hdartpath, a relative one ("HD/rotsprite4x") taken from the program's folder so the set moves with the program.</summary>
+    public string HdArtPath() => FromProgramDir(hdartpath);
+
+    /// <summary>hdartroot, relative as hdartpath.</summary>
+    public string HdArtRoot() => FromProgramDir(hdartroot);
+
+    static string FromProgramDir(string path) =>
+        string.IsNullOrWhiteSpace(path) || Path.IsPathRooted(path) ? path ?? "" : Path.Combine(AppPaths.ProgramDir(), path);
+
+    /// <summary><paramref name="path"/> relative to the program's folder when it is inside it, else as it is: what to store in hdartpath.</summary>
+    public static string ToProgramRelative(string path)
+    {
+        var rel = Path.GetRelativePath(AppPaths.ProgramDir(), path);
+        return rel.StartsWith("..") || Path.IsPathRooted(rel) ? path : rel;
+    }
 
     public void Save()
     {

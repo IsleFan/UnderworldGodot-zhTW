@@ -155,11 +155,12 @@ public partial class LaunchMenu : Control
 		ApplyTexts();
 		ShowSynthRows();
 #if DEBUG
-		//Testing aid: UW_TESTHDGEN=folder makes the Pixel HD set there as the button does, prints the outcome and quits.
+		//Testing aid: UW_TESTHDGEN=folder makes the Pixel HD set there as the button does (=default: where the
+		//button would put it), prints the outcome and quits.
 		var testHdGen = OS.GetEnvironment("UW_TESTHDGEN");
 		if (!string.IsNullOrEmpty(testHdGen))
 		{
-			_uwSettings.hdartroot = testHdGen;
+			_uwSettings.hdartroot = testHdGen == "default" ? "" : testHdGen;
 			_uwSettings.hdartpath = "";
 			if (int.TryParse(OS.GetEnvironment("UW_TESTHDGEN_SCALE"), out int testScale))
 			{
@@ -540,7 +541,11 @@ public partial class LaunchMenu : Control
 			HdStatus.Text = T("Choose a game folder first.", "請先在遊戲卡片選好遊戲目錄。");
 			return;
 		}
-		string root = ArtRoot() ?? Path.Combine(OS.GetUserDataDir(), "hd");
+		string root = ArtRoot();
+		if (!CanWrite(root))
+		{//beside the program is read only (an Applications or Program Files folder, a macOS app run from its download): the user's data folder
+			root = Path.Combine(OS.GetUserDataDir(), "HD");
+		}
 		int scale = HdScale.GetItemMetadata(HdScale.Selected).AsInt32();
 		string work = Path.Combine(root, "." + HdArtGenerator.SetName(scale) + "-new");
 		SetGenerating(true);
@@ -555,6 +560,21 @@ public partial class LaunchMenu : Control
 				});
 			}
 		}).ContinueWith(task => Callable.From(() => FinishHdArt(task.Exception, games, root, work, scale)).CallDeferred());
+	}
+
+	/// <summary>Whether files can be made in <paramref name="dir"/> (made if missing). Godot is kept out of it with a .gdignore.</summary>
+	private static bool CanWrite(string dir)
+	{
+		try
+		{
+			Directory.CreateDirectory(dir);
+			File.WriteAllText(Path.Combine(dir, ".gdignore"), "");
+			return true;
+		}
+		catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)
+		{
+			return false;
+		}
 	}
 
 	private void ShowHdProgress(string game, int done)
@@ -579,8 +599,11 @@ public partial class LaunchMenu : Control
 				Directory.CreateDirectory(set);
 				Directory.Move(Path.Combine(work, game), dest);
 			}
-			if (string.IsNullOrWhiteSpace(_uwSettings.hdartroot)) { _uwSettings.hdartroot = root; }
-			_uwSettings.hdartpath = set;
+			if (string.IsNullOrWhiteSpace(_uwSettings.hdartroot) && root != uwsettings.DefaultHdArtRoot())
+			{
+				_uwSettings.hdartroot = uwsettings.ToProgramRelative(root);
+			}
+			_uwSettings.hdartpath = uwsettings.ToProgramRelative(set);
 			_uwSettings.Save();
 			PopulateArtOptions();
 			HdStatus.Text = T($"Pixel HD art ({scale}x) is ready and chosen above.", $"像素高清素材（{scale} 倍）已產生完成，美術已切換過去。");
@@ -625,19 +648,20 @@ public partial class LaunchMenu : Control
 	}
 
 	/// <summary>
-	/// The folder the art sets are in: hdartroot, else the folder holding the current set.
+	/// The folder the art sets are in: hdartroot, else the folder holding the current set, else HD
+	/// beside the program (uwsettings.DefaultHdArtRoot), where the launcher makes them.
 	/// </summary>
 	private string ArtRoot()
 	{
 		if (!string.IsNullOrWhiteSpace(_uwSettings.hdartroot))
 		{
-			return _uwSettings.hdartroot;
+			return _uwSettings.HdArtRoot();
 		}
 		if (!string.IsNullOrWhiteSpace(_uwSettings.hdartpath))
 		{
-			return Path.GetDirectoryName(_uwSettings.hdartpath.TrimEnd('/', '\\'));
+			return Path.GetDirectoryName(_uwSettings.HdArtPath().TrimEnd('/', '\\'));
 		}
-		return null;
+		return uwsettings.DefaultHdArtRoot();
 	}
 
 	/// <summary>
@@ -781,17 +805,15 @@ public partial class LaunchMenu : Control
 	{
 		if (index == 0)
 		{
-			if (string.IsNullOrWhiteSpace(_uwSettings.hdartroot))
+			if (string.IsNullOrWhiteSpace(_uwSettings.hdartroot) && ArtRoot() != uwsettings.DefaultHdArtRoot())
 			{//the sets were found beside hdartpath's: keep that folder, or the next launch lists none
-				_uwSettings.hdartroot = ArtRoot() ?? "";
+				_uwSettings.hdartroot = uwsettings.ToProgramRelative(ArtRoot());
 			}
 			_uwSettings.hdartpath = "";
 		}
 		else
 		{
-			string root = ArtRoot();
-			if (root == null) { return; }
-			_uwSettings.hdartpath = Path.Combine(root, ArtOptionSelector.GetItemMetadata(index).AsString());
+			_uwSettings.hdartpath = uwsettings.ToProgramRelative(Path.Combine(ArtRoot(), ArtOptionSelector.GetItemMetadata(index).AsString()));
 		}
 		_uwSettings.Save();
 	}
