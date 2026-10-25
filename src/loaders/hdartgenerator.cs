@@ -8,10 +8,10 @@ using System.Threading;
 namespace Underworld
 {
     /// <summary>
-    /// Makes the "Pixel HD" art sets (RotSprite at 2x or 4x, read by HdArt) from the player's own game
+    /// Makes the "Pixel HD" art sets (RotSprite at 2x, 4x or 8x, read by HdArt) from the player's own game
     /// files, on the player's machine, so no game art is ever distributed.
     ///
-    /// A port of upscale-lab's export_hd.py in its rotsprite2x and rotsprite4x modes, whose decoders follow the
+    /// A port of upscale-lab's export_hd.py in its rotsprite2x, rotsprite4x and rotsprite8x modes, whose decoders follow the
     /// loaders here (GRLoader, CritterLoader, WeaponsLoader, BytLoader, TextureLoader). Everything
     /// but the fonts comes out byte for byte the same as that script's output; the fonts are
     /// made by GenerateFonts, which needs Godot. This part has no Godot types, so the headless
@@ -19,13 +19,13 @@ namespace Underworld
     ///
     /// RotSprite's upscale without the rotation: a Scale2x that treats similar colours as equal
     /// (and keeps the centre when a neighbour is only similar to it) run three times to 8x, then
-    /// the most common index of each block (2x2 for 4x, 4x4 for 2x). Every output byte is an index the original
+    /// the most common index of each block (2x2 for 4x, 4x4 for 2x; 8x is the three passes as they are). Every output byte is an index the original
     /// picture used, so palettes, lighting and the shaders work as with the original art.
     /// </summary>
     public static class HdArtGenerator
     {
-        /// <summary>The scales offered: 2x and 4x.</summary>
-        public static readonly int[] Scales = { 2, 4 };
+        /// <summary>The scales offered: 2x, 4x and 8x (about 80 MB, 250 MB and 1 GB a set for both games).</summary>
+        public static readonly int[] Scales = { 2, 4, 8 };
 
         /// <summary>The folder name of the set at <paramref name="scale"/>, which the launcher shows as Pixel HD (RotSprite2x, RotSprite4x).</summary>
         public static string SetName(int scale) => $"rotsprite{scale}x";
@@ -59,7 +59,7 @@ namespace Underworld
         }
 
         /// <summary>
-        /// Writes the set at <paramref name="scale"/> (2 or 4) for one game (<paramref name="game"/> is "uw1"
+        /// Writes the set at <paramref name="scale"/> (one of Scales) for one game (<paramref name="game"/> is "uw1"
         /// or "uw2", <paramref name="gameDir"/> the folder holding DATA and CRIT) under <paramref name="setDir"/>/{game}/,
         /// everything but the fonts. <paramref name="progress"/> gets each part's name and how many pictures are done.
         /// </summary>
@@ -285,7 +285,7 @@ namespace Underworld
             return outp;
         }
 
-        /// <summary>RotSprite's upscale to <paramref name="scale"/> (2 or 4): three similar-colour Scale2x passes to 8x, then block modes.</summary>
+        /// <summary>RotSprite's upscale to <paramref name="scale"/> (2, 4 or 8): three similar-colour Scale2x passes to 8x, then block modes (none at 8x).</summary>
         public static Picture RotSprite(Picture idx, byte[] colours, int scale, bool transparent0)
         {
             var sim = SimilarTable(colours, transparent0);

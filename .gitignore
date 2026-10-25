@@ -8,6 +8,9 @@ uwsettings.json
 # The player's own MT-32 ROM images (DefaultRomDir)
 /ROMS/
 /HD/
+# game folders the launcher copies out of a GOG installation beside the program
+/UW1/
+/UW2/
 .runsettings
 .idea/
 .env

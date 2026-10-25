@@ -17,7 +17,7 @@
   - UW1：對話、書本、卷軸、訊息、物品、過場字幕，以及介面圖片上的英文，全部改成繁體中文；組句訊息（「你看到一把……」）改用中文語序。
   - UW2：125 位 NPC 的對話、書本、法術、牆上文字、過場字幕全數翻譯；用語沿用 UW1 譯文，人名、地名附上英文原名，例如「伊歐洛(Iolo)」。
   - 蜥蜴人的語言保留原文，後面附上中文意思（字義取自遊戲裡穆爾戈的手勢翻譯）。
-- **像素高清美術**：除了原版(低像素風格)，在啟動畫面按「產生像素高清素材」，就會用你自己的遊戲檔案在這台電腦產生 2 倍或 4 倍解析度的「像素高清(RotSprite2x／RotSprite4x)」（大約一分鐘）：牆面、怪物、物品、介面全部放大，斜線與輪廓補平但保留像素風格；文字與過場字幕用平滑的高清字。素材保留原版調色盤，光影與調色盤動畫照常運作，也不散布任何遊戲美術。
+- **像素高清美術**：除了原版(低像素風格)，在啟動畫面按「產生像素高清素材」，就會用你自己的遊戲檔案在這台電腦產生 2、4 或 8 倍解析度的「像素高清(RotSprite2x／4x／8x)」（大約一分鐘；8 倍約佔 1 GB）：牆面、怪物、物品、介面全部放大，斜線與輪廓補平但保留像素風格；文字與過場字幕用平滑的高清字。素材保留原版調色盤，光影與調色盤動畫照常運作，也不散布任何遊戲美術。
 - **原汁原味的音樂**：MT-32／CM-32L（需自備 ROM）、Sound Blaster／AdLib 的 OPL 配樂，或內建的 SoundFont；音效一律是 Sound Blaster 版。
 - **存檔與原版 DOS 版互通**：本專案存的 UW2 進度，可以用 GOG 原版 UW2.EXE 讀取（已實測開過的門、生命值、位置、裝備、背包與容器內容）；反過來也行。
 - **現代化的便利**：可調整視窗大小或全螢幕、滑鼠可移出視窗、有啟動畫面可以選遊戲、語言、美術與配樂。
@@ -37,7 +37,9 @@
 | `UnderworldGodot-zhTW-版本-windows-x64.zip` | Windows 10／11（x64） |
 | `UnderworldGodot-zhTW-版本-macos.zip` | macOS 12 以上（Apple Silicon 與 Intel） |
 
-解壓縮後，先在 GOG 裝好遊戲，再執行一鍵安裝：
+解壓縮後打開程式，啟動畫面會**自動尋找遊戲**：程式旁的資料夾（例如把 `UW1`、`UW2` 放在程式旁邊）、一鍵安裝放遊戲的位置，以及 GOG 版的安裝。只找到 GOG 版的光碟映像（`game.gog`）時，會自動把兩代遊戲取出到程式旁的 `UW1`、`UW2`。找到就顯示綠色「已找到遊戲」；沒找到就顯示「沒有找到遊戲目錄」，這時按「瀏覽…」自己選。
+
+也可以用一鍵安裝（會順便處理系統的下載封鎖、Windows 的 Visual C++ 可轉散發套件）：
 
 - **Windows**：按兩下 `INSTALL.bat`。
 - **macOS**：打開「終端機」，輸入 `bash ` 再把資料夾裡的 `install.sh` 拖進視窗，按 Return。
@@ -99,7 +101,7 @@ export PATH="$(brew --prefix dotnet@9)/bin:$PATH"
 | `language` | `en` 或 `zh-TW` |
 | `i18npath` | 譯文與字型的資料夾，空白時用專案的 `i18n/` |
 | `hdartpath` | 使用中的 HD 素材組資料夾，空白時用原版美術；相對路徑（例如 `HD/rotsprite4x`）以程式所在的資料夾為準 |
-| `hdartroot` | 放各組 HD 素材的資料夾，空白時用 `hdartpath` 的上一層，再沒有就用程式旁邊的 `HD` |
+| `hdartroot` | 另外列出 HD 素材組的資料夾（選用）。「美術」一律列出程式旁 `HD`、使用者資料夾 `HD` 與這裡的素材組；「產生像素高清素材」一律產生在程式旁的 `HD` |
 | `resolution` | `寬x高` 或 `fullscreen`，預設 `1280x800` |
 | `synthpath` | `soundfont` 用的 `.sf2` 檔，空白時用內建的 |
 | `rompath` | MT-32／CM-32L ROM 資料夾，空白時用程式旁邊的 `ROMS` |
@@ -135,7 +137,7 @@ GODOT=/path/to/Godot sh packaging/package.sh 0.2.0
 ### 高清美術
 
 - 支援整數倍率（2×、4×…）的「索引色」HD 素材：牆面、地板、怪物、物件、介面、武器、全畫面圖、字型。素材保留調色盤索引。
-- 啟動畫面的「產生像素高清素材」（`src/loaders/hdartgenerator.cs`、`hdartfonts.cs`）用玩家的遊戲檔案產生 RotSprite 2× 或 4× 素材組：圖片部分與 upscale-lab 的 `export_hd.py rotsprite2x`／`rotsprite4x` 逐位元組相同（`HdArtGeneratorTests`）；三種小字型用 jf open 粉圓的英文字母重畫，過場字幕的 FONTBIG 保留原字形、以高斯加權平滑放大。其他自行產生的素材組（放在 `hdartroot` 底下）也照樣能選用。
+- 啟動畫面的「產生像素高清素材」（`src/loaders/hdartgenerator.cs`、`hdartfonts.cs`）用玩家的遊戲檔案產生 RotSprite 2×、4× 或 8× 素材組：圖片部分與 upscale-lab 的 `export_hd.py rotsprite2x`／`4x`／`8x` 逐位元組相同（`HdArtGeneratorTests`）；三種小字型用 jf open 粉圓的英文字母重畫，過場字幕的 FONTBIG 保留原字形、以高斯加權平滑放大。其他自行產生的素材組（放在 `hdartroot` 底下）也照樣能選用。
 - 過場動畫在顯示時用著色器放大。
 
 ### 音效與配樂
@@ -159,7 +161,7 @@ GODOT=/path/to/Godot sh packaging/package.sh 0.2.0
 
 ## English summary
 
-A Traditional Chinese (zh-TW) edition of [hankmorgan/UnderworldGodot](https://github.com/hankmorgan/UnderworldGodot), the Godot 4.3 .NET engine recreation of *Ultima Underworld I* and *II*. It adds full Chinese translations of both games, a Pixel HD (RotSprite 2x or 4x) art style the launcher makes from your own game files, MT-32/OPL/SoundFont music, UW2 saves that load in the original DOS UW2.EXE, and a new launcher. No game data is included: you need your own copy (for example from GOG). Builds run on Windows 10/11 x64 and macOS 12+ (Apple Silicon and Intel) without installing .NET. The upstream English README is kept in [README.upstream.md](README.upstream.md).
+A Traditional Chinese (zh-TW) edition of [hankmorgan/UnderworldGodot](https://github.com/hankmorgan/UnderworldGodot), the Godot 4.3 .NET engine recreation of *Ultima Underworld I* and *II*. It adds full Chinese translations of both games, a Pixel HD (RotSprite 2x, 4x or 8x) art style the launcher makes from your own game files, MT-32/OPL/SoundFont music, UW2 saves that load in the original DOS UW2.EXE, and a new launcher. No game data is included: you need your own copy (for example from GOG). Builds run on Windows 10/11 x64 and macOS 12+ (Apple Silicon and Intel) without installing .NET. The upstream English README is kept in [README.upstream.md](README.upstream.md).
 
 ## 致謝與授權
 

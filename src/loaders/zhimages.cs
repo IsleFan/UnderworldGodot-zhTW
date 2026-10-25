@@ -234,17 +234,21 @@ namespace Underworld
         /// Letters picture <paramref name="index"/> of <paramref name="file"/> (a .GR name without
         /// extension) in Chinese, if it has English in it. <paramref name="indices"/> are its palette
         /// indices at <paramref name="scale"/> times its <paramref name="width"/> by <paramref name="height"/>;
-        /// on return they are the lettered picture at Scale times. False leaves both as they were.
+        /// on return they are the lettered picture at Scale times (at the art's scale when that is a larger
+        /// multiple of Scale, as 8x). False leaves both as they were.
         /// </summary>
         public static bool Apply(string file, int index, ref byte[] indices, int width, int height, ref int scale)
         {
             var lettering = For(file, index);
-            if (lettering == null || Scale % scale != 0)
+            //lettered at Scale, or at the art's own scale when that is a larger multiple of it (8x)
+            int l = scale <= Scale ? (Scale % scale == 0 ? Scale : 0) : (scale % Scale == 0 ? scale : 0);
+            if (lettering == null || l == 0)
             {
                 return false;
             }
-            var px = Enlarge(indices, width * scale, height * scale, Scale / scale);
-            int w = width * Scale, h = height * Scale;
+            int k = l / Scale; //the lettering's sizes are in Scale pixels
+            var px = Enlarge(indices, width * scale, height * scale, l / scale);
+            int w = width * l, h = height * l;
             HashSet<byte> erase = null;
             if (lettering.Erase != null)
             {
@@ -260,7 +264,7 @@ namespace Underworld
             }
             foreach (var label in lettering.Labels)
             {
-                var area = new Rect2I(label.Area.Position * Scale, label.Area.Size * Scale);
+                var area = new Rect2I(label.Area.Position * l, label.Area.Size * l);
                 int ink = lettering.Ink;
                 if (erase != null)
                 {
@@ -270,18 +274,18 @@ namespace Underworld
                     }
                     if (lettering.Patch is Vector2I patch)
                     {
-                        Copy(px, w, area, patch * Scale);
+                        Copy(px, w, area, patch * l);
                     }
                     else
                     {
-                        Erase(px, w, h, area, erase, Scale);
+                        Erase(px, w, h, area, erase, l);
                     }
                 }
-                Letter(px, w, h, area, label.Text, Mathf.RoundToInt(lettering.Em * Scale), (byte)ink, lettering.Outline, lettering.OutlineWidth,
-                    lettering.Left ? lettering.Indent : -1, lettering.Bold);
+                Letter(px, w, h, area, label.Text, Mathf.RoundToInt(lettering.Em * l), (byte)ink, lettering.Outline, lettering.OutlineWidth * k,
+                    lettering.Left ? lettering.Indent * k : -1, lettering.Bold);
             }
             indices = px;
-            scale = Scale;
+            scale = l;
             return true;
         }
 

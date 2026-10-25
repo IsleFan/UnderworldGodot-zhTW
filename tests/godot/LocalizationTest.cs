@@ -158,7 +158,7 @@ public partial class LocalizationTest : Node
     }
 
     /// <summary>
-    /// The pictures with English painted in are lettered in Chinese: drawn at ZhImages.Scale
+    /// The pictures with English painted in are lettered in Chinese: drawn at ZhImages.Scale (or the HD art's larger multiple of it)
     /// times, reporting their original size so layouts are untouched, and different from the
     /// original. Pictures without English are left alone. With UW_ZHIMG_DUMP set to a folder,
     /// each lettered picture is saved there in palette 0 to look at.
@@ -193,9 +193,11 @@ public partial class LocalizationTest : Node
                         Fail($"{name} {i} reports {picture.GetSize()}, the original is {original.GetSize()}");
                     }
                     var img = picture.GetImage();
-                    if (img.GetWidth() != original.GetWidth() * ZhImages.Scale)
+                    //lettered at ZhImages.Scale, or at the HD art's scale when that is a larger multiple of it (8x)
+                    int ls = img.GetWidth() / original.GetWidth();
+                    if (ls < ZhImages.Scale || ls % ZhImages.Scale != 0 || img.GetWidth() != original.GetWidth() * ls)
                     {
-                        Fail($"{name} {i} is {img.GetWidth()} wide, not {ZhImages.Scale} times {original.GetWidth()}"); continue;
+                        Fail($"{name} {i} is {img.GetWidth()} wide, not {ZhImages.Scale} or a multiple of it times {original.GetWidth()}"); continue;
                     }
                     var orig = original.GetImage();
                     int os = orig.GetWidth() / original.GetWidth();//the original's own scale, 1 or the HD art's
@@ -204,7 +206,7 @@ public partial class LocalizationTest : Node
                     {
                         for (int x = 0; x < img.GetWidth() && !changed; x++)
                         {
-                            changed = img.GetPixel(x, y) != orig.GetPixel(x * os / ZhImages.Scale, y * os / ZhImages.Scale);
+                            changed = img.GetPixel(x, y) != orig.GetPixel(x * os / ls, y * os / ls);
                         }
                     }
                     if (!changed) { Fail($"{name} {i} was not lettered"); }

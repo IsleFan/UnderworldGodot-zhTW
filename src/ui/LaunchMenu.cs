@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using Godot;
 
@@ -61,6 +62,9 @@ public partial class LaunchMenu : Control
 
 	private bool _generating;
 
+	/// <summary>Where GenerateHdArt makes the set instead of beside the program; only the UW_TESTHDGEN testing aid sets it.</summary>
+	private string _hdRootOverride;
+
 	/// <summary>
 	/// "Original" followed by each HD art set found under hdartroot (see HdArt). Each set item's
 	/// metadata is its folder name; the text is its name in ArtNames, or the folder name.
@@ -73,6 +77,7 @@ public partial class LaunchMenu : Control
 	{
 		{ HdArtGenerator.SetName(2), ("Pixel HD", "像素高清", "RotSprite2x") },
 		{ HdArtGenerator.SetName(4), ("Pixel HD", "像素高清", "RotSprite4x") },
+		{ HdArtGenerator.SetName(8), ("Pixel HD", "像素高清", "RotSprite8x") },
 	};
 
 	/// <summary>
@@ -152,6 +157,7 @@ public partial class LaunchMenu : Control
 		PopulateLanguageOptions();
 		PopulateResolutionOptions();
 		ApplyResolution(_uwSettings.resolution);
+		FindGames();
 		ApplyTexts();
 		ShowSynthRows();
 #if DEBUG
@@ -160,7 +166,7 @@ public partial class LaunchMenu : Control
 		var testHdGen = OS.GetEnvironment("UW_TESTHDGEN");
 		if (!string.IsNullOrEmpty(testHdGen))
 		{
-			_uwSettings.hdartroot = testHdGen == "default" ? "" : testHdGen;
+			_hdRootOverride = testHdGen == "default" ? null : testHdGen;
 			_uwSettings.hdartpath = "";
 			if (int.TryParse(OS.GetEnvironment("UW_TESTHDGEN_SCALE"), out int testScale))
 			{
@@ -346,8 +352,7 @@ public partial class LaunchMenu : Control
 		}
 		if (!_generating)
 		{
-			HdStatus.Text = T("Made on this computer from your own game files, in about a minute.",
-				"用你自己的遊戲檔案在這台電腦產生，大約一分鐘。");
+			HdStatus.Text = HdHint();
 		}
 		StartUW1.Text = T("Start", "開始遊戲");
 		StartUW2.Text = StartUW1.Text;
@@ -360,8 +365,15 @@ public partial class LaunchMenu : Control
 	/// <summary>Checks each game folder the way launching does, and the ROM folder for a ROM pair.</summary>
 	private void ShowPathStatus()
 	{
-		ShowGameStatus(PathUW1Status, UWClass.GAME_UW1, _uwSettings.pathuw1);
-		ShowGameStatus(PathUW2Status, UWClass.GAME_UW2, _uwSettings.pathuw2);
+		bool uw1 = ShowGameStatus(PathUW1Status, UWClass.GAME_UW1, _uwSettings.pathuw1);
+		bool uw2 = ShowGameStatus(PathUW2Status, UWClass.GAME_UW2, _uwSettings.pathuw2);
+		//the Pixel HD art is made for the games found, so with neither there is nothing to make it from
+		HdGenerate.Disabled = _generating || _extracting > 0 || !(uw1 || uw2);
+		if (!_generating)
+		{
+			if (!uw1 && !uw2) { HdStatus.Text = HdNoGame(); }
+			else if (HdStatus.Text == HdNoGame()) { HdStatus.Text = HdHint(); }
+		}
 		bool roms = HasRoms(_uwSettings.RomDir());
 		ShowStatus(RomStatus, roms, roms
 			? T("MT-32 ROMs found", "已找到 MT-32 ROM")
@@ -389,13 +401,17 @@ public partial class LaunchMenu : Control
 		return control && pcm;
 	}
 
-	/// <summary>Shows whether game <paramref name="res"/> is at <paramref name="path"/>, and lets its Start button start it only if so.</summary>
-	private void ShowGameStatus(Label status, byte res, string path)
+	/// <summary>Shows whether game <paramref name="res"/> is at <paramref name="path"/>, lets its Start button start it only if so, and says which.</summary>
+	private bool ShowGameStatus(Label status, byte res, string path)
 	{
 		bool found = false;
-		if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+		if (_extracting > 0 && ExtractingGame(res))
 		{
-			ShowStatus(status, false, T("Folder not found: choose it with Browse", "找不到遊戲目錄，請按「瀏覽…」選擇"));
+			ShowStatus(status, true, T("Copying the game out of the GOG installation...", "正在從 GOG 版取出遊戲檔案…"));
+		}
+		else if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+		{
+			ShowStatus(status, false, T("No game folder found: install it from GOG, or choose it with Browse", "沒有找到遊戲目錄，請安裝 GOG 版或按「瀏覽…」選擇"));
 		}
 		else if (!InstallationValidator.TryValidate(res, path, out string reason))
 		{
@@ -406,7 +422,95 @@ public partial class LaunchMenu : Control
 			ShowStatus(status, true, T("Game found", "已找到遊戲"));
 			found = true;
 		}
-		(res == UWClass.GAME_UW2 ? StartUW2 : StartUW1).Disabled = !found || _generating;
+		(res == UWClass.GAME_UW2 ? StartUW2 : StartUW1).Disabled = !found || _generating || ExtractingGame(res);
+		return found;
+	}
+
+	private string HdHint() => T("Made on this computer from your own game files, in about a minute (8x takes about 1 GB).",
+		"用你自己的遊戲檔案在這台電腦產生，大約一分鐘（8 倍約佔 1 GB）。");
+	private string HdNoGame() => T("No game folder found, so there is nothing to make the art from.", "沒有找到遊戲目錄，無法產生高清素材。");
+
+	/// <summary>How many games are being copied out of a GOG image, and which.</summary>
+	private int _extracting;
+	private readonly HashSet<byte> _extractingGames = new();
+	private bool ExtractingGame(byte res) => _extractingGames.Contains(res);
+
+	/// <summary>
+	/// For each game whose folder in the settings is not usable, looks for one (GameFinder): beside
+	/// the program, where the one-click install puts it, or in a GOG installation. When only GOG's
+	/// CD image is there, the game is copied out of it beside the program (into the user's data
+	/// folder when that cannot be written), in the background, and the folder is set once done.
+	/// A usable folder in the settings is never replaced.
+	/// </summary>
+	private void FindGames()
+	{
+		var programDir = AppPaths.ProgramDir();
+		foreach (var (game, path) in new[] { (GameFinder.Uw1, _uwSettings.pathuw1), (GameFinder.Uw2, _uwSettings.pathuw2) })
+		{
+			if (GameFinder.Usable(game, path))
+			{
+				continue;
+			}
+			var found = GameFinder.FindFolder(game, programDir);
+			if (found != null)
+			{
+				SetGamePath(game, found);
+				continue;
+			}
+			var image = GameFinder.FindGogImage(game);
+			if (image == null)
+			{
+				continue;
+			}
+			var dest = Path.Combine(programDir, game.Folder);
+			if (!CanWriteGame(dest))
+			{
+				dest = Path.Combine(OS.GetUserDataDir(), game.Folder);
+			}
+			_extracting++;
+			_extractingGames.Add(game.Res);
+			Task.Run(() => GameFinder.Extract(image, game, dest))
+				.ContinueWith(task => Callable.From(() =>
+				{
+					_extracting--;
+					_extractingGames.Remove(game.Res);
+					if (task.Exception == null && GameFinder.Usable(game, dest))
+					{
+						SetGamePath(game, dest);
+					}
+					else
+					{
+						GD.PushError($"Copying {game.DiscFolder} out of {image} failed: {task.Exception?.InnerException?.Message}");
+					}
+					ShowPaths();
+					ShowPathStatus();
+				}).CallDeferred());
+		}
+	}
+
+	private void SetGamePath(GameFinder.Game game, string dir)
+	{
+		if (game.Res == UWClass.GAME_UW2) { _uwSettings.pathuw2 = dir; } else { _uwSettings.pathuw1 = dir; }
+		_uwSettings.Save();
+	}
+
+	/// <summary>Whether a game can be copied to <paramref name="dest"/>: its parent can be written and it is missing or empty (it may hold saves).</summary>
+	private static bool CanWriteGame(string dest)
+	{
+		if (Directory.Exists(dest) && Directory.EnumerateFileSystemEntries(dest).Any()) { return false; }
+		var parent = Path.GetDirectoryName(dest);
+		try
+		{
+			Directory.CreateDirectory(parent);
+			var probe = Path.Combine(parent, ".uw-write-test");
+			File.WriteAllText(probe, "");
+			File.Delete(probe);
+			return true;
+		}
+		catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)
+		{
+			return false;
+		}
 	}
 
 	private static void ShowStatus(Label status, bool good, string text)
@@ -541,10 +645,10 @@ public partial class LaunchMenu : Control
 			HdStatus.Text = T("Choose a game folder first.", "請先在遊戲卡片選好遊戲目錄。");
 			return;
 		}
-		string root = ArtRoot();
+		string root = _hdRootOverride ?? uwsettings.DefaultHdArtRoot();
 		if (!CanWrite(root))
 		{//beside the program is read only (an Applications or Program Files folder, a macOS app run from its download): the user's data folder
-			root = Path.Combine(OS.GetUserDataDir(), "HD");
+			root = UserHdArtRoot();
 		}
 		int scale = HdScale.GetItemMetadata(HdScale.Selected).AsInt32();
 		string work = Path.Combine(root, "." + HdArtGenerator.SetName(scale) + "-new");
@@ -599,10 +703,6 @@ public partial class LaunchMenu : Control
 				Directory.CreateDirectory(set);
 				Directory.Move(Path.Combine(work, game), dest);
 			}
-			if (string.IsNullOrWhiteSpace(_uwSettings.hdartroot) && root != uwsettings.DefaultHdArtRoot())
-			{
-				_uwSettings.hdartroot = uwsettings.ToProgramRelative(root);
-			}
 			_uwSettings.hdartpath = uwsettings.ToProgramRelative(set);
 			_uwSettings.Save();
 			PopulateArtOptions();
@@ -647,58 +747,77 @@ public partial class LaunchMenu : Control
 		ShowSynthRows();
 	}
 
+	/// <summary>Where the launcher makes the Pixel HD sets when beside the program cannot be written.</summary>
+	private static string UserHdArtRoot() => Path.Combine(OS.GetUserDataDir(), "HD");
+
 	/// <summary>
-	/// The folder the art sets are in: hdartroot, else the folder holding the current set, else HD
-	/// beside the program (uwsettings.DefaultHdArtRoot), where the launcher makes them.
+	/// The folders the art sets are looked for in, each once: HD beside the program (where the
+	/// launcher makes them), HD in the user's data folder (where it makes them when beside the
+	/// program is read only), hdartroot, and the folder holding the chosen set.
 	/// </summary>
-	private string ArtRoot()
+	private List<string> ArtRoots()
 	{
-		if (!string.IsNullOrWhiteSpace(_uwSettings.hdartroot))
+		var roots = new List<string>();
+		void Add(string dir)
 		{
-			return _uwSettings.HdArtRoot();
+			if (string.IsNullOrWhiteSpace(dir)) { return; }
+			dir = Path.GetFullPath(dir.TrimEnd('/', '\\'));
+			if (!roots.Exists(r => string.Equals(r, dir, StringComparison.OrdinalIgnoreCase))) { roots.Add(dir); }
 		}
+		Add(uwsettings.DefaultHdArtRoot());
+		Add(UserHdArtRoot());
+		Add(_uwSettings.HdArtRoot());
 		if (!string.IsNullOrWhiteSpace(_uwSettings.hdartpath))
 		{
-			return Path.GetDirectoryName(_uwSettings.HdArtPath().TrimEnd('/', '\\'));
+			Add(Path.GetDirectoryName(_uwSettings.HdArtPath().TrimEnd('/', '\\')));
 		}
-		return uwsettings.DefaultHdArtRoot();
+		return roots;
 	}
 
 	/// <summary>
-	/// Lists Original and every subfolder of the art root holding uw1/ or uw2/, and selects the
-	/// one hdartpath names. A set named in hdartpath but not found is kept as an entry, so
-	/// opening the launcher never silently changes the setting.
+	/// Lists Original and every art set (a subfolder holding uw1/ or uw2/) in the art roots, and
+	/// selects the one hdartpath names. Each item's metadata is the set's full path; a name found in
+	/// more than one root also shows the folder it is in. A set named in hdartpath but not found is
+	/// kept as an entry, so opening the launcher never silently changes the setting.
 	/// </summary>
 	private void PopulateArtOptions()
 	{
 		if (ArtOptionSelector == null) { return; }
 		ArtOptionSelector.Clear();
 		ArtOptionSelector.AddItem(T("Original (low-res pixels)", "原版(低像素風格)"));
-		string root = ArtRoot();
 		var sets = new List<string>();
-		if (root != null && Directory.Exists(root))
+		foreach (var root in ArtRoots())
 		{
+			if (!Directory.Exists(root)) { continue; }
 			foreach (var dir in Directory.GetDirectories(root))
 			{
 				if (Directory.Exists(Path.Combine(dir, "uw1")) || Directory.Exists(Path.Combine(dir, "uw2")))
 				{
-					sets.Add(Path.GetFileName(dir));
+					sets.Add(Path.GetFullPath(dir));
 				}
 			}
-			sets.Sort(StringComparer.OrdinalIgnoreCase);
 		}
 		string current = string.IsNullOrWhiteSpace(_uwSettings.hdartpath)
-			? null : Path.GetFileName(_uwSettings.hdartpath.TrimEnd('/', '\\'));
-		if (current != null && !sets.Contains(current))
+			? null : Path.GetFullPath(_uwSettings.HdArtPath().TrimEnd('/', '\\'));
+		if (current != null && !sets.Exists(p => string.Equals(p, current, StringComparison.OrdinalIgnoreCase)))
 		{
 			sets.Add(current);
 		}
+		sets.Sort((x, y) => string.Compare(Path.GetFileName(x), Path.GetFileName(y), StringComparison.OrdinalIgnoreCase));
+		int selected = 0;
 		foreach (var set in sets)
 		{
-			ArtOptionSelector.AddItem(ArtNames.TryGetValue(set, out var n) ? T($"{n.English} ({n.Label})", $"{n.Chinese}({n.Label})") : set);
+			var name = Path.GetFileName(set);
+			var label = ArtNames.TryGetValue(name, out var n) ? T($"{n.English} ({n.Label})", $"{n.Chinese}({n.Label})") : name;
+			if (sets.Count(other => string.Equals(Path.GetFileName(other), name, StringComparison.OrdinalIgnoreCase)) > 1)
+			{
+				label += $" [{Path.GetFileName(Path.GetDirectoryName(set))}]";
+			}
+			ArtOptionSelector.AddItem(label);
 			ArtOptionSelector.SetItemMetadata(ArtOptionSelector.ItemCount - 1, set);
+			if (current != null && string.Equals(set, current, StringComparison.OrdinalIgnoreCase)) { selected = ArtOptionSelector.ItemCount - 1; }
 		}
-		ArtOptionSelector.Selected = current == null ? 0 : sets.IndexOf(current) + 1;
+		ArtOptionSelector.Selected = selected;
 	}
 
 	/// <summary>
@@ -805,15 +924,20 @@ public partial class LaunchMenu : Control
 	{
 		if (index == 0)
 		{
-			if (string.IsNullOrWhiteSpace(_uwSettings.hdartroot) && ArtRoot() != uwsettings.DefaultHdArtRoot())
-			{//the sets were found beside hdartpath's: keep that folder, or the next launch lists none
-				_uwSettings.hdartroot = uwsettings.ToProgramRelative(ArtRoot());
+			if (string.IsNullOrWhiteSpace(_uwSettings.hdartroot) && !string.IsNullOrWhiteSpace(_uwSettings.hdartpath))
+			{//the sets beside hdartpath's are only listed through it: keep that folder, or the next launch lists none
+				var folder = Path.GetDirectoryName(_uwSettings.HdArtPath().TrimEnd('/', '\\'));
+				if (!string.Equals(Path.GetFullPath(folder), Path.GetFullPath(uwsettings.DefaultHdArtRoot()), StringComparison.OrdinalIgnoreCase)
+					&& !string.Equals(Path.GetFullPath(folder), Path.GetFullPath(UserHdArtRoot()), StringComparison.OrdinalIgnoreCase))
+				{
+					_uwSettings.hdartroot = uwsettings.ToProgramRelative(folder);
+				}
 			}
 			_uwSettings.hdartpath = "";
 		}
 		else
 		{
-			_uwSettings.hdartpath = uwsettings.ToProgramRelative(Path.Combine(ArtRoot(), ArtOptionSelector.GetItemMetadata(index).AsString()));
+			_uwSettings.hdartpath = uwsettings.ToProgramRelative(ArtOptionSelector.GetItemMetadata(index).AsString());
 		}
 		_uwSettings.Save();
 	}

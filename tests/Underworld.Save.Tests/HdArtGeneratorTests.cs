@@ -46,14 +46,15 @@ public class HdArtGeneratorTests
     }
 
     /// <summary>
-    /// Every file the generator writes is byte for byte the file export_hd.py rotsprite2x or
-    /// rotsprite4x wrote, fonts aside (made in Godot by a different method). Needs the game data
+    /// Every file the generator writes is byte for byte the file export_hd.py rotsprite2x,
+    /// rotsprite4x or rotsprite8x wrote, fonts aside (made in Godot by a different method). Needs the game data
     /// and the script's output, named by UW_HDGEN_GAMES (holding UW1 and UW2) and
-    /// UW_HDGEN_REFERENCE (holding rotsprite2x and rotsprite4x); skipped without them.
+    /// UW_HDGEN_REFERENCE (holding rotsprite2x, rotsprite4x and rotsprite8x); skipped without them.
     /// </summary>
     [HdGenReferenceTheory]
     [InlineData(2)]
     [InlineData(4)]
+    [InlineData(8)]
     public void Generate_MatchesTheScriptsRotSpriteSet(int scale)
     {
         string games = Environment.GetEnvironmentVariable("UW_HDGEN_GAMES");
@@ -94,7 +95,7 @@ public sealed class HdGenReferenceTheoryAttribute : TheoryAttribute
         var reference = Environment.GetEnvironmentVariable("UW_HDGEN_REFERENCE");
         if (!Directory.Exists(games ?? "") || !Directory.Exists(reference ?? ""))
         {
-            Skip = "set UW_HDGEN_GAMES (the folder holding UW1 and UW2) and UW_HDGEN_REFERENCE (holding export_hd.py's rotsprite2x and rotsprite4x) to run";
+            Skip = "set UW_HDGEN_GAMES (the folder holding UW1 and UW2) and UW_HDGEN_REFERENCE (holding export_hd.py's rotsprite2x, rotsprite4x and rotsprite8x) to run";
         }
     }
 }
