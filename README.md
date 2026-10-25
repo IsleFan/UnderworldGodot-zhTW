@@ -17,7 +17,7 @@
   - UW1：對話、書本、卷軸、訊息、物品、過場字幕，以及介面圖片上的英文，全部改成繁體中文；組句訊息（「你看到一把……」）改用中文語序。
   - UW2：125 位 NPC 的對話、書本、法術、牆上文字、過場字幕全數翻譯；用語沿用 UW1 譯文，人名、地名附上英文原名，例如「伊歐洛(Iolo)」。
   - 蜥蜴人的語言保留原文，後面附上中文意思（字義取自遊戲裡穆爾戈的手勢翻譯）。
-- **四種美術風格**：原版(低像素風格)、邊緣高清(Outline4x)、像素高清(RotSprite4x)、平滑高清(xbrz4x)。高清素材保留原版調色盤，光影與調色盤動畫照常運作。
+- **像素高清美術**：除了原版(低像素風格)，在啟動畫面按「產生像素高清素材」，就會用你自己的遊戲檔案在這台電腦產生 2 倍或 4 倍解析度的「像素高清(RotSprite2x／RotSprite4x)」（大約一分鐘）：牆面、怪物、物品、介面全部放大，斜線與輪廓補平但保留像素風格；文字與過場字幕用平滑的高清字。素材保留原版調色盤，光影與調色盤動畫照常運作，也不散布任何遊戲美術。
 - **原汁原味的音樂**：MT-32／CM-32L（需自備 ROM）、Sound Blaster／AdLib 的 OPL 配樂，或內建的 SoundFont；音效一律是 Sound Blaster 版。
 - **存檔與原版 DOS 版互通**：本專案存的 UW2 進度，可以用 GOG 原版 UW2.EXE 讀取（已實測開過的門、生命值、位置、裝備、背包與容器內容）；反過來也行。
 - **現代化的便利**：可調整視窗大小或全螢幕、滑鼠可移出視窗、有啟動畫面可以選遊戲、語言、美術與配樂。
@@ -49,7 +49,7 @@
 - **macOS 第一次打開會被擋下**：本程式沒有 Apple 公證（需要付費開發者帳號），macOS 會說「無法打開」或「已損毀」。這不是程式壞了：一鍵安裝會自動解除；手動解除方式見 `INSTALL.txt`「三、第一次執行」。
 - **Windows 可能出現「Windows 已保護您的電腦」**：程式沒有數位簽章，按「其他資訊」>「仍要執行」。
 - **Windows 的 MT-32 配樂**需要「Microsoft Visual C++ 可轉散發套件」：一鍵安裝會自動安裝。沒裝時選 MT-32 會自動改用 OPL 配樂，其他功能都不受影響。
-- **高清美術素材**要用自己的遊戲資料產生，不隨程式附上（產生工具整理中）。沒有素材時用「原版」美術即可。
+- **高清美術素材**不隨程式附上（那是原版美術的衍生物）：裝好遊戲後在啟動畫面按「產生像素高清素材」即可，約一分鐘，產生在使用者資料夾裡。
 
 ## 冒險小提示
 
@@ -135,6 +135,7 @@ GODOT=/path/to/Godot sh packaging/package.sh 0.2.0
 ### 高清美術
 
 - 支援整數倍率（2×、4×…）的「索引色」HD 素材：牆面、地板、怪物、物件、介面、武器、全畫面圖、字型。素材保留調色盤索引。
+- 啟動畫面的「產生像素高清素材」（`src/loaders/hdartgenerator.cs`、`hdartfonts.cs`）用玩家的遊戲檔案產生 RotSprite 2× 或 4× 素材組：圖片部分與 upscale-lab 的 `export_hd.py rotsprite2x`／`rotsprite4x` 逐位元組相同（`HdArtGeneratorTests`）；三種小字型用 jf open 粉圓的英文字母重畫，過場字幕的 FONTBIG 保留原字形、以高斯加權平滑放大。其他自行產生的素材組（放在 `hdartroot` 底下）也照樣能選用。
 - 過場動畫在顯示時用著色器放大。
 
 ### 音效與配樂
@@ -158,7 +159,7 @@ GODOT=/path/to/Godot sh packaging/package.sh 0.2.0
 
 ## English summary
 
-A Traditional Chinese (zh-TW) edition of [hankmorgan/UnderworldGodot](https://github.com/hankmorgan/UnderworldGodot), the Godot 4.3 .NET engine recreation of *Ultima Underworld I* and *II*. It adds full Chinese translations of both games, four art styles (original, outline, RotSprite and xBRZ HD), MT-32/OPL/SoundFont music, UW2 saves that load in the original DOS UW2.EXE, and a new launcher. No game data is included: you need your own copy (for example from GOG). Builds run on Windows 10/11 x64 and macOS 12+ (Apple Silicon and Intel) without installing .NET. The upstream English README is kept in [README.upstream.md](README.upstream.md).
+A Traditional Chinese (zh-TW) edition of [hankmorgan/UnderworldGodot](https://github.com/hankmorgan/UnderworldGodot), the Godot 4.3 .NET engine recreation of *Ultima Underworld I* and *II*. It adds full Chinese translations of both games, a Pixel HD (RotSprite 2x or 4x) art style the launcher makes from your own game files, MT-32/OPL/SoundFont music, UW2 saves that load in the original DOS UW2.EXE, and a new launcher. No game data is included: you need your own copy (for example from GOG). Builds run on Windows 10/11 x64 and macOS 12+ (Apple Silicon and Intel) without installing .NET. The upstream English README is kept in [README.upstream.md](README.upstream.md).
 
 ## 致謝與授權
 

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Threading.Tasks;
 using Godot;
 
 namespace Underworld;
@@ -47,6 +48,19 @@ public partial class LaunchMenu : Control
 	[Export]
 	public Label TitleLabel, SubtitleLabel, SettingsTitle, SoundHint, SynthLabel;
 
+	/// <summary>Makes the Pixel HD art set from the player's own game files (HdArtGenerator), and what it is doing.</summary>
+	[Export]
+	public Button HdGenerate;
+
+	/// <summary>The scale to make: each item's metadata is one of HdArtGenerator.Scales.</summary>
+	[Export]
+	public OptionButton HdScale;
+
+	[Export]
+	public Label HdStatus;
+
+	private bool _generating;
+
 	/// <summary>
 	/// "Original" followed by each HD art set found under hdartroot (see HdArt). Each set item's
 	/// metadata is its folder name; the text is its name in ArtNames, or the folder name.
@@ -57,9 +71,8 @@ public partial class LaunchMenu : Control
 	/// <summary>How the launcher names the art sets it knows, by folder: English, Chinese, and the set's own name.</summary>
 	private static readonly Dictionary<string, (string English, string Chinese, string Label)> ArtNames = new(StringComparer.OrdinalIgnoreCase)
 	{
-		{ "outline4x", ("Edge HD", "邊緣高清", "Outline4x") },
-		{ "rotsprite4x", ("Pixel HD", "像素高清", "RotSprite4x") },
-		{ "xbrz4x", ("Smooth HD", "平滑高清", "xbrz4x") },
+		{ HdArtGenerator.SetName(2), ("Pixel HD", "像素高清", "RotSprite2x") },
+		{ HdArtGenerator.SetName(4), ("Pixel HD", "像素高清", "RotSprite4x") },
 	};
 
 	/// <summary>
@@ -141,6 +154,23 @@ public partial class LaunchMenu : Control
 		ApplyResolution(_uwSettings.resolution);
 		ApplyTexts();
 		ShowSynthRows();
+#if DEBUG
+		//Testing aid: UW_TESTHDGEN=folder makes the Pixel HD set there as the button does, prints the outcome and quits.
+		var testHdGen = OS.GetEnvironment("UW_TESTHDGEN");
+		if (!string.IsNullOrEmpty(testHdGen))
+		{
+			_uwSettings.hdartroot = testHdGen;
+			_uwSettings.hdartpath = "";
+			if (int.TryParse(OS.GetEnvironment("UW_TESTHDGEN_SCALE"), out int testScale))
+			{
+				for (int i = 0; i < HdScale.ItemCount; i++)
+				{
+					if (HdScale.GetItemMetadata(i).AsInt32() == testScale) { HdScale.Selected = i; }
+				}
+			}
+			Callable.From(GenerateHdArt).CallDeferred();
+		}
+#endif
 
 		// Start loading the main scene as soon as practicable. This happens before the focus
 		// switch below, which returns early on an unrecognised selection: leaving the preload
@@ -304,6 +334,20 @@ public partial class LaunchMenu : Control
 		{
 			browse.Text = T("Browse…", "瀏覽…");
 		}
+		HdGenerate.Text = T("Make Pixel HD art", "產生像素高清素材");
+		int chosen = HdScale.ItemCount > 0 ? HdScale.GetItemMetadata(HdScale.Selected).AsInt32() : 4;
+		HdScale.Clear();
+		foreach (var scale in HdArtGenerator.Scales)
+		{
+			HdScale.AddItem(T($"{scale}x", $"{scale} 倍"));
+			HdScale.SetItemMetadata(HdScale.ItemCount - 1, scale);
+			if (scale == chosen) { HdScale.Selected = HdScale.ItemCount - 1; }
+		}
+		if (!_generating)
+		{
+			HdStatus.Text = T("Made on this computer from your own game files, in about a minute.",
+				"用你自己的遊戲檔案在這台電腦產生，大約一分鐘。");
+		}
 		StartUW1.Text = T("Start", "開始遊戲");
 		StartUW2.Text = StartUW1.Text;
 		GameFilesSelector.Title = T("Choose a SoundFont", "選擇 SoundFont");
@@ -361,7 +405,7 @@ public partial class LaunchMenu : Control
 			ShowStatus(status, true, T("Game found", "已找到遊戲"));
 			found = true;
 		}
-		(res == UWClass.GAME_UW2 ? StartUW2 : StartUW1).Disabled = !found;
+		(res == UWClass.GAME_UW2 ? StartUW2 : StartUW1).Disabled = !found || _generating;
 	}
 
 	private static void ShowStatus(Label status, bool good, string text)
@@ -474,6 +518,103 @@ public partial class LaunchMenu : Control
 		{
 			GD.PushError($"{Enum.GetName(rearm)} while rearming the preload, so a retry will not work.");
 		}
+	}
+
+	/// <summary>
+	/// Makes the Pixel HD set for every game whose folder checks out, in the art root (made under the
+	/// user data folder when there is none). The pictures are made off the main thread into a
+	/// hidden folder, the fonts then on the main thread (they need Godot), and only a finished
+	/// game replaces the one before it. Art then switches to the new set.
+	/// </summary>
+	public void GenerateHdArt()
+	{
+		if (_generating)
+		{
+			return;
+		}
+		var games = new List<(string Dir, string Game)>();
+		if (InstallationValidator.TryValidate(UWClass.GAME_UW1, _uwSettings.pathuw1, out _)) { games.Add((_uwSettings.pathuw1, "uw1")); }
+		if (InstallationValidator.TryValidate(UWClass.GAME_UW2, _uwSettings.pathuw2, out _)) { games.Add((_uwSettings.pathuw2, "uw2")); }
+		if (games.Count == 0)
+		{
+			HdStatus.Text = T("Choose a game folder first.", "請先在遊戲卡片選好遊戲目錄。");
+			return;
+		}
+		string root = ArtRoot() ?? Path.Combine(OS.GetUserDataDir(), "hd");
+		int scale = HdScale.GetItemMetadata(HdScale.Selected).AsInt32();
+		string work = Path.Combine(root, "." + HdArtGenerator.SetName(scale) + "-new");
+		SetGenerating(true);
+		Task.Run(() =>
+		{
+			if (Directory.Exists(work)) { Directory.Delete(work, true); }
+			foreach (var (dir, game) in games)
+			{
+				HdArtGenerator.Generate(dir, game, work, scale, (kind, done) =>
+				{
+					if (done % 100 == 0) { Callable.From(() => ShowHdProgress(game, done)).CallDeferred(); }
+				});
+			}
+		}).ContinueWith(task => Callable.From(() => FinishHdArt(task.Exception, games, root, work, scale)).CallDeferred());
+	}
+
+	private void ShowHdProgress(string game, int done)
+	{
+		HdStatus.Text = T($"Making {game.ToUpperInvariant()}: {done} pictures done...", $"正在產生 {game.ToUpperInvariant()}：已完成 {done} 張…");
+	}
+
+	private void FinishHdArt(AggregateException error, List<(string Dir, string Game)> games, string root, string work, int scale)
+	{
+		try
+		{
+			if (error != null)
+			{
+				throw error.InnerException ?? error;
+			}
+			string set = Path.Combine(root, HdArtGenerator.SetName(scale));
+			foreach (var (dir, game) in games)
+			{
+				HdArtFonts.Generate(dir, game, work, scale);
+				var dest = Path.Combine(set, game);
+				if (Directory.Exists(dest)) { Directory.Delete(dest, true); }
+				Directory.CreateDirectory(set);
+				Directory.Move(Path.Combine(work, game), dest);
+			}
+			if (string.IsNullOrWhiteSpace(_uwSettings.hdartroot)) { _uwSettings.hdartroot = root; }
+			_uwSettings.hdartpath = set;
+			_uwSettings.Save();
+			PopulateArtOptions();
+			HdStatus.Text = T($"Pixel HD art ({scale}x) is ready and chosen above.", $"像素高清素材（{scale} 倍）已產生完成，美術已切換過去。");
+		}
+		catch (Exception e)
+		{
+			GD.PushError($"Making the Pixel HD art failed: {e}");
+			HdStatus.Text = T("Making the art failed: ", "產生素材失敗：") + e.Message;
+		}
+		finally
+		{
+			try { if (Directory.Exists(work)) { Directory.Delete(work, true); } } catch (IOException) { }
+			SetGenerating(false);
+#if DEBUG
+			if (!string.IsNullOrEmpty(OS.GetEnvironment("UW_TESTHDGEN")))
+			{
+				GD.Print($"UW_TESTHDGEN {HdStatus.Text}");
+				GetTree().Quit();
+			}
+#endif
+		}
+	}
+
+	private void SetGenerating(bool on)
+	{
+		_generating = on;
+		HdGenerate.Disabled = on;
+		HdScale.Disabled = on;
+		ArtOptionSelector.Disabled = on;
+		if (on)
+		{
+			HdStatus.Text = T("Making the Pixel HD art...", "正在產生像素高清素材…");
+		}
+		ShowPathStatus(); //the Start buttons wait for it
 	}
 
 	public void _on_sound_options_item_selected(int index)

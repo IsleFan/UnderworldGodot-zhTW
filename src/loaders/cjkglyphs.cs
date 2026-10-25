@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
 using Godot;
@@ -202,10 +203,16 @@ namespace Underworld
         /// Used to letter the pictures that have English painted into them (ZhImages); <paramref name="bold"/>
         /// draws with the emboldened strokes of the game fonts.
         /// </summary>
-        public static float[,] Rasterize(string line, int size, out int ascent, bool bold = false)
+        public static float[,] Rasterize(string line, int size, out int ascent, bool bold = false) =>
+            Rasterize(Source(emboldened: bold), line, size, out ascent);
+
+        /// <summary>The CJK font file at <paramref name="path"/>, plain strokes, or null when it cannot be loaded.</summary>
+        internal static FontFile LoadPlain(string path) => File.Exists(path) ? Load(path, 0) : null;
+
+        /// <summary>As Rasterize above, with the font <paramref name="src"/> (null gives null).</summary>
+        internal static float[,] Rasterize(FontFile src, string line, int size, out int ascent)
         {
             ascent = 0;
-            var src = Source(emboldened: bold);
             if (src == null)
             {
                 return null;

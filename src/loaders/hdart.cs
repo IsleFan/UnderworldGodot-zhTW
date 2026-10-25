@@ -6,8 +6,8 @@ namespace Underworld
     /// <summary>
     /// Optional higher resolution replacements for wall/floor textures and critter frames.
     ///
-    /// The files are made outside the game from the player's own data (upscale-lab's
-    /// export_hd.py) and are never shipped. They stay indexed: every byte is still a palette
+    /// The files are made from the player's own data and are never shipped: by the launcher's
+    /// "Make Pixel HD art" (HdArtGenerator, HdArtFonts), or outside the game (upscale-lab's export_hd.py). They stay indexed: every byte is still a palette
     /// index (textures) or an auxiliary palette nibble (critters), so the existing red-channel
     /// shaders and lightmaps apply to them unchanged and the lighting stays the original's.
     ///

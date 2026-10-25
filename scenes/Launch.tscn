@@ -147,7 +147,7 @@ OptionButton/styles/hover = SubResource("StyleBoxFlat_button_hover")
 OptionButton/styles/normal = SubResource("StyleBoxFlat_button")
 OptionButton/styles/pressed = SubResource("StyleBoxFlat_button")
 
-[node name="LaunchMenu" type="Control" node_paths=PackedStringArray("SelectUW1", "PathUW1", "SelectUW2", "PathUW2", "GameFilesSelector", "SoundOptionSelector", "SynthPath", "ArtOptionSelector", "LanguageOptionSelector", "ResolutionOptionSelector", "LaunchError", "PathUW1Label", "PathUW1Status", "PathUW2Label", "PathUW2Status", "RomPath", "RomLabel", "RomStatus", "RomDirSelector", "SoundLabel", "ArtLabel", "LanguageLabel", "ResolutionLabel", "StartUW1", "StartUW2", "BrowseUW1", "BrowseUW2", "BrowseSynth", "BrowseRom", "GameDirSelector", "TitleLabel", "SubtitleLabel", "SettingsTitle", "SoundHint", "SynthLabel", "SoundFontBox", "RomBox")]
+[node name="LaunchMenu" type="Control" node_paths=PackedStringArray("SelectUW1", "PathUW1", "SelectUW2", "PathUW2", "GameFilesSelector", "SoundOptionSelector", "SynthPath", "ArtOptionSelector", "LanguageOptionSelector", "ResolutionOptionSelector", "LaunchError", "PathUW1Label", "PathUW1Status", "PathUW2Label", "PathUW2Status", "RomPath", "RomLabel", "RomStatus", "RomDirSelector", "SoundLabel", "ArtLabel", "LanguageLabel", "ResolutionLabel", "StartUW1", "StartUW2", "BrowseUW1", "BrowseUW2", "BrowseSynth", "BrowseRom", "GameDirSelector", "TitleLabel", "SubtitleLabel", "SettingsTitle", "SoundHint", "SynthLabel", "SoundFontBox", "RomBox", "HdGenerate", "HdStatus", "HdScale")]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -193,6 +193,9 @@ SoundHint = NodePath("Margins/Page/Body/SettingsCard/Settings/SoundHint")
 SynthLabel = NodePath("Margins/Page/Body/SettingsCard/Settings/SoundFontBox/SynthLabel")
 SoundFontBox = NodePath("Margins/Page/Body/SettingsCard/Settings/SoundFontBox")
 RomBox = NodePath("Margins/Page/Body/SettingsCard/Settings/RomBox")
+HdGenerate = NodePath("Margins/Page/Body/SettingsCard/Settings/HdBox/HdRow/HdGenerate")
+HdScale = NodePath("Margins/Page/Body/SettingsCard/Settings/HdBox/HdRow/HdScale")
+HdStatus = NodePath("Margins/Page/Body/SettingsCard/Settings/HdBox/HdStatus")
 
 [node name="Background" type="TextureRect" parent="."]
 layout_mode = 1
@@ -450,6 +453,29 @@ popup/item_2/id = 2
 popup/item_3/text = "mt32"
 popup/item_3/id = 3
 
+[node name="HdBox" type="VBoxContainer" parent="Margins/Page/Body/SettingsCard/Settings"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="HdRow" type="HBoxContainer" parent="Margins/Page/Body/SettingsCard/Settings/HdBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="HdScale" type="OptionButton" parent="Margins/Page/Body/SettingsCard/Settings/HdBox/HdRow"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+
+[node name="HdGenerate" type="Button" parent="Margins/Page/Body/SettingsCard/Settings/HdBox/HdRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 14
+
+[node name="HdStatus" type="Label" parent="Margins/Page/Body/SettingsCard/Settings/HdBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.66, 0.6, 0.5, 1)
+theme_override_font_sizes/font_size = 13
+autowrap_mode = 3
+
 [node name="SoundHint" type="Label" parent="Margins/Page/Body/SettingsCard/Settings"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.66, 0.6, 0.5, 1)
@@ -553,6 +579,7 @@ use_native_dialog = true
 [connection signal="pressed" from="Margins/Page/Body/UW2Card/UW2/UW2PathRow/UW2Browse" to="." method="BrowseGameFolder" binds= [2]]
 [connection signal="pressed" from="Margins/Page/Body/SettingsCard/Settings/SoundFontBox/SynthRow/SynthBrowse" to="." method="BrowseSoundFont"]
 [connection signal="pressed" from="Margins/Page/Body/SettingsCard/Settings/RomBox/RomRow/RomBrowse" to="." method="BrowseRomFolder"]
+[connection signal="pressed" from="Margins/Page/Body/SettingsCard/Settings/HdBox/HdRow/HdGenerate" to="." method="GenerateHdArt"]
 [connection signal="item_selected" from="Margins/Page/Body/SettingsCard/Settings/Grid/SoundOptions" to="." method="_on_sound_options_item_selected"]
 [connection signal="item_selected" from="Margins/Page/Body/SettingsCard/Settings/Grid/ArtOptions" to="." method="_on_art_options_item_selected"]
 [connection signal="item_selected" from="Margins/Page/Body/SettingsCard/Settings/Grid/LanguageOptions" to="." method="_on_language_options_item_selected"]
