@@ -1,0 +1,223 @@
+using System.Diagnostics;
+using System.Text.RegularExpressions;
+
+namespace Underworld
+{
+    /// <summary>
+    /// Code for Input and output relating to conversation VM.
+    /// </summary>
+    public partial class ConversationVM : UWClass
+    {
+        public static int PlayerNumericAnswer;
+        public static bool WaitingForInput;
+
+        /// <summary>
+        /// Gets the specified string for the currently referenced conversation.
+        /// </summary>
+        /// <param name="stringno"></param>
+        /// <returns></returns>
+        public static string getString(int stringno, bool replaceValues = false)
+        {
+            if (replaceValues)
+            {//only ever shown, so the template and what fills it are the translations when there are any
+                return TextSubstitute(GameStrings.GetDisplayString(currentConversation.StringBlock, stringno));
+            }
+            else
+            {
+                if (stringno >= 512)
+                {//get string by direct full reference
+                    return GameStrings.GetString(stringno);
+                }
+                else
+                {
+                    return GameStrings.GetString(currentConversation.StringBlock, stringno);
+                }
+            }
+        }
+
+
+        /// <summary>
+        /// getString for text that is only shown: the translation when one is loaded. Object
+        /// names and descriptions stay English, as the game composes those (see Localization).
+        /// </summary>
+        static string getDisplayString(int stringno)
+        {
+            if (stringno >= 512)
+            {
+                var block = stringno >> 9;
+                if (block == 4 || block == 5)
+                {
+                    return GameStrings.GetString(stringno);
+                }
+                return GameStrings.GetDisplayString(stringno);
+            }
+            return GameStrings.GetDisplayString(currentConversation.StringBlock, stringno);
+        }
+
+        /// <summary>
+        /// For substituting calculated values into strings
+        /// </summary>
+        /// <param name="input"></param>
+        /// <param name="doNestedSubstitute">Allows doing a recursive subsitution if the substituted value contains @. Should be only allowed once.</param>
+        /// <returns></returns>
+        public static string TextSubstitute(string input, bool doNestedSubstitute = true)
+        {
+            //X: source of variable to substitute, one of these: GSP
+            //G: game global variable
+            //S: stack variable
+            //P: pointer variable
+            //Y: type of variable, one of these: SI
+            //S: value is a string number into current string block
+            //I: value is an integer value
+            //<num>: decimal value
+            //<extension>: format: C<number>: use array index <number-1> offset from the initial source value.
+
+            //Remove \\1 and \\0 which wraps the reprinting of player typed input in conversations.
+            input = input.Replace("\\1", "").Replace("\\0", "");
+
+            if (!input.Contains("@"))
+            {
+                return input;
+            }
+            string RegExForFindingReplacements = "([@][GSP][SI])(-*[0-9]*)([S][I])?([0-9]*)?([C][0-9]*)?";
+
+            Debug.Print($"Doing string replacement on line {input}");
+            MatchCollection matches = Regex.Matches(input, RegExForFindingReplacements);
+
+            for (int sm = 0; sm < matches.Count; sm++)
+            {
+                string ReplacementString = matches[sm].Value;
+                if (matches[sm].Success)
+                {
+                    string ReplacementType = "";
+                    int ReplacementValue = 0;
+                    int OffsetValue = 0;
+                    string FoundString = "";
+                    int ArrayOffset = 0;
+                    bool SIOffset = false;
+                    for (int sg = 0; sg < matches[sm].Groups.Count; sg++)
+                    {
+                        if (matches[sm].Groups[sg].Success)
+                        {
+                            switch (sg)
+                            {
+                                case 1: //Replacement Type
+                                    ReplacementType = matches[sm].Groups[sg].Value; break;
+                                case 2: //Replacement value
+                                    {
+                                        if (int.TryParse(matches[sm].Groups[sg].Value, out int val))
+                                        {
+                                            ReplacementValue = val;
+                                        }
+                                        else
+                                        {
+                                            ReplacementValue = 0;
+                                        }
+                                        break;
+                                    }
+                                case 3: //Offset Type (should only be SI?)
+                                    string OffsetType = matches[sm].Groups[sg].Value;
+                                    SIOffset = true;
+                                    //Debug.Print($"Unimplemented SI Offset {OffsetType}");
+                                    break;
+                                case 4: //Offset value
+                                    {
+                                        if (int.TryParse(matches[sm].Groups[sg].Value, out int val))
+                                        {
+                                            if (SIOffset)
+                                            {
+                                                OffsetValue = at(stack + basep + val) - 1;
+                                            }
+                                            else
+                                            {
+                                                OffsetValue = val;
+                                            }
+
+                                        }
+                                        else
+                                        {
+                                            OffsetValue = 0;
+                                        }
+                                        break;
+                                    }
+                                case 5: //c2 array offset
+                                    {
+                                        string CModifier = matches[sm].Groups[sg].Value;
+                                        CModifier = CModifier.Replace("C", "");
+                                        if (int.TryParse(CModifier, out int val))
+                                        {
+                                            ArrayOffset = val - 1; // array is 1-based
+                                        }
+                                        break;
+                                    }
+                            }
+                        }
+                    }
+
+                    //Now replace
+                    switch (ReplacementType)
+                    {
+                        case "@GS": //Global string.
+                            {
+                                //FoundString = GameStrings.GetString(0x125, at(ReplacementValue)); //getString(at(ReplacementValue));
+                                FoundString = getDisplayString(at(ReplacementValue + OffsetValue));
+                                break;
+                            }
+                        case "@GI": //Global integer
+                            {
+                                //Debug.Print("@GI String replacement (" + ReplacementValue + ")");//Depending on the presense of the 'C' extension a offset may be applied.
+                                FoundString = at(ReplacementValue + ArrayOffset).ToString();
+                                break;
+                            }
+                        case "@SS": //Stack string
+                            {
+                                if (OffsetValue != 0)
+                                {
+                                    int actualptr = at(stack + basep + OffsetValue);
+                                    FoundString = getDisplayString(at(basep + actualptr));
+                                }
+                                else
+                                {
+                                    FoundString = getDisplayString(at(stack + basep + ReplacementValue));
+                                }
+                                break;
+                            }
+                        case "@SI": //Stack integer
+                            {
+                                FoundString = at(stack + basep + ReplacementValue + ArrayOffset).ToString();
+                                break;
+                            }
+
+                        case "@PS": //Pointer string
+                            {
+                                FoundString = getDisplayString(at(at(stack + basep + ReplacementValue)));
+                                break;
+                            }
+                        case "@PI": //Pointer integer
+                            {
+                                if (ReplacementValue < 0)
+                                {
+                                    FoundString = at(at(stack + basep + ReplacementValue)).ToString();//was basp+replacement-1. If I have to change again this may need deeper investigation of ConvoVM memory management
+                                }
+                                else
+                                {
+                                    FoundString = at(at(stack + basep + ReplacementValue)).ToString();
+                                }
+                                break;
+                            }
+                    }
+                    if (FoundString.Contains("@") && doNestedSubstitute)
+                    {
+                        //try one time to see if the @ in the found string can be replaced.
+                        FoundString = TextSubstitute(input: FoundString, doNestedSubstitute: false);
+                    }
+                    if (FoundString != "")
+                    {
+                        input = input.Replace(ReplacementString, FoundString);
+                    }
+                }
+            }
+            return input;
+        }
+    }//end class
+}//end namespace

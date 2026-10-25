@@ -1,0 +1,651 @@
+using System;
+using System.Diagnostics;
+using System.Runtime.Serialization;
+using Godot;
+
+namespace Underworld
+{
+    public partial class motion : Loader
+    {
+        static bool ObjectHasHalted = false;
+        static int iteration = 0;
+        public static bool MotionSingleStepEnabled = true;
+        //static int MaybeSpecialMotionObjectDatFlag_dseg_67d6_26D2;
+
+        static motion()
+        {
+            for (short i = 0; i <= collisionTable.GetUpperBound(0); i++)
+            {//initialise collision records
+                collisionTable[i] = new CollisionRecord(i);
+            }
+        }
+
+        /// <summary>
+        /// Calculate motion for a projectile.
+        /// </summary>
+        /// <param name="projectile"></param>
+        /// <returns></returns>
+        public static bool MotionProcessing(uwObject projectile, MotionHandler SpecialMotionHandler)
+        {
+            ObjectHasHalted = false;
+            if (!UWTileMap.ValidTile(projectile.tileX, projectile.tileY))
+            {
+                return false;//object is not on map
+            }
+
+            //Check if object is still "alive"
+            if (projectile.npc_hp == 0)
+            {
+                if (commonObjDat.qualityclass(projectile.item_id) < 3)
+                {
+                    if (ObjectRemover_OLD.DeleteObjectFromTile_DEPRECIATED(projectile.tileX, projectile.tileY, projectile.index))
+                    {
+                        return false;
+                    }
+                    else
+                    {
+                        projectile.npc_hp = 1;
+                    }
+                }
+            }
+
+            if (commonObjDat.maybeMagicObjectFlag(projectile.item_id))
+            {
+                //UWMotionParamArray.PtrTo267D2_dseg_67d6_26B8_table0 = 0x1000;  //MaybeSpecialMotionObjectDatFlag_dseg_67d6_26D2 = 0x1000;
+                SpecialMotionHandler.table01 = 0x1000;
+            }
+            else
+            {
+                //UWMotionParamArray.PtrTo267D2_dseg_67d6_26B8_table0 = 0;//MaybeSpecialMotionObjectDatFlag_dseg_67d6_26D2 = 0;
+                SpecialMotionHandler.table01 = 0;
+            }
+
+            UWMotionParamArray MotionParams = new();
+
+            // if (iteration == 0)
+            // {
+            //     Debug.Print($"Initial {projectile.a_name} Tile ({projectile.tileX},{projectile.tileY}), Position({projectile.xpos},{projectile.ypos},{projectile.zpos}) NPC_HP:{projectile.npc_hp} ProjectileHeading:{projectile.ProjectileHeading} UNKA_0123:{projectile.NextFrame_0XA_Bit0123} UNK_456:{projectile.TileState_0XA_Bit456} Coords ({projectile.CoordinateX},{projectile.CoordinateY},{projectile.CoordinateZ}) UNK13_0_6:{projectile.UnkBit_0X13_Bit0to6} UNK13_7:{projectile.UnkBit_0X13_Bit7} ProjectileSpeed:{projectile.Projectile_Speed}, ProjectilePitch:{projectile.Projectile_Pitch}");
+            // }
+
+            InitMotionParams(projectile: projectile, MotionParams: MotionParams);
+
+            CalculateMotion_TopLevel(projectile: projectile, MotionParams: MotionParams, SpecialMotionHandler: MotionHandler.ObjectMotionHandler);
+
+            //store current x/y homes in globals                        
+            var result = ApplyProjectileMotion(projectile, MotionParams);
+            if (result)
+            {
+                projectile.NextFrame_0XA_Bit0123 = (short)((projectile.NextFrame_0XA_Bit0123 + projectile.Projectile_Speed) & 0xF);
+                if (_RES == GAME_UW2)
+                {
+                    switch (projectile.item_id)
+                    {
+                        case 0x1B://homing dart
+                            HomingDart(projectile);
+                            break;
+                        case 0x1E://satellite
+                            Satellite(projectile);
+                            break;
+                    }
+                }
+            }
+
+            //Debug.Print($"After {iteration} {projectile.a_name} Tile ({projectile.tileX},{projectile.tileY}), Position({projectile.xpos},{projectile.ypos},{projectile.zpos}) NPC_HP:{projectile.npc_hp} ProjectileHeading:{projectile.ProjectileHeading} UNKA_0123:{projectile.NextFrame_0XA_Bit0123} UNK_456:{projectile.TileState_0XA_Bit456} Coords ({projectile.CoordinateX},{projectile.CoordinateY},{projectile.CoordinateZ}) UNK13_0_6:{projectile.UnkBit_0X13_Bit0to6} UNK13_7:{projectile.UnkBit_0X13_Bit7} ProjectileSpeed:{projectile.Projectile_Speed}, ProjectilePitch:{projectile.Projectile_Pitch}");    
+        
+            //iteration++;
+            if (!ObjectHasHalted)
+            {
+                objectInstance.Reposition(projectile);//finally move!            
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Applies the calculated motion values to the object in motion
+        /// </summary>
+        /// <param name="projectile"></param>
+        /// <param name="MotionParams"></param>
+        /// <returns></returns>
+        public static bool ApplyProjectileMotion(uwObject projectile, UWMotionParamArray MotionParams)
+        {//seg030_2BB7_689
+
+            var di_tileYHasChanged = false;
+            var var2_tilehaschanged = false;
+
+            if (projectile.tileX != MotionParams.x_0 >> 8)
+            {
+                var2_tilehaschanged = true;
+            }
+            if (projectile.tileY != MotionParams.y_2 >> 8)
+            {
+                di_tileYHasChanged = true;
+            }
+
+            if (var2_tilehaschanged || di_tileYHasChanged)
+            {
+                //seg030_2BB7_6C7:
+                //object has changed tiles
+                //Debug.Print($"{projectile.a_name} has changed tiles from {projectile.tileX},{projectile.tileY} to {MotionParams.x_0 >> 8},{MotionParams.y_2 >> 8}");
+                var tileVar6 = UWTileMap.current_tilemap.Tiles[projectile.tileX, projectile.tileY];//the current tile.
+                ObjectRemover_OLD.RemoveObjectFromLinkedList(tileVar6.indexObjectList, projectile.index, UWTileMap.current_tilemap.LevelObjects, tileVar6.Ptr + 2);
+
+                if (_RES == GAME_UW2)
+                {
+                    //seg030_2BB7_718:         
+                    trigger.RunPressureEnterExitTriggersInTile(
+                        triggeringObject: projectile,
+                        tile: tileVar6,
+                        ZParam: projectile.zpos,
+                        triggerType: (int)triggerObjectDat.triggertypes.EXIT);
+                }
+
+                projectile.tileX = MotionParams.x_0 >> 8;
+                projectile.tileY = MotionParams.y_2 >> 8;
+                tileVar6 = UWTileMap.current_tilemap.Tiles[projectile.tileX, projectile.tileY];//the new tile
+                projectile.next = tileVar6.indexObjectList;//TODO. Make sure .next does not already have a value!
+                tileVar6.indexObjectList = projectile.index;
+
+                //Set zpos now as pressure triggers need this info.
+                projectile.zpos = (short)(MotionParams.z_4 >> 3);
+
+                if (_RES == GAME_UW2)
+                {
+                    //seg030_2BB7_796:      
+                    //Run enter trigger for projectile");
+                    trigger.RunPressureEnterExitTriggersInTile(
+                        triggeringObject: projectile,
+                        tile: tileVar6,
+                        ZParam: projectile.zpos,
+                        triggerType: (int)triggerObjectDat.triggertypes.ENTER);
+                }
+            }
+            else
+            {
+                //in same tile but check if zpos has changed for the purposes of triggering pressure triggers.
+                //seg030_2BB7_7A3:
+                if (_RES == GAME_UW2)
+                {
+                    //seg030_2BB7_7B7:
+                    if (projectile.zpos != (MotionParams.z_4 >> 3))
+                    {
+                        trigger.PressureTriggerZChange(
+                            obj: projectile,
+                            tile: UWTileMap.current_tilemap.Tiles[projectile.tileX, projectile.tileY],
+                            zParam: MotionParams.z_4>>3);              
+                    }
+                }
+                else
+                {
+                    projectile.zpos = (short)(MotionParams.z_4 >> 3);
+                }
+            }
+
+
+            projectile.xpos = (short)((MotionParams.x_0 >> 5) & 0x7);
+            projectile.ypos = (short)((MotionParams.y_2 >> 5) & 0x7);
+
+            if (projectile.IsStatic)
+            {
+                projectile.quality = MotionParams.hp_1b;
+            }
+            else
+            {
+                projectile.npc_hp = MotionParams.hp_1b;
+            }
+
+            //seg030_2BB7_83E:
+            if (MotionParams.unk_26_falldamage > 0x180)
+            {//seg030_2BB7_848:
+                var var6FallDamage = MotionParams.unk_26_falldamage >> 8;
+                if (projectile.majorclass == 1)
+                {
+                    var6FallDamage = var6FallDamage >> 2;
+                }
+                else
+                {
+                    if (projectile.npc_hp < 0x20)
+                    {
+                        var6FallDamage = var6FallDamage << 2;
+                    }
+                }
+                var var4_mass = commonObjDat.mass(projectile.item_id);
+                if (projectile.majorclass != 1)
+                {
+                    //not an npc
+                    UWsoundeffects.PlaySoundEffectAtObject(effectNo: 0xF, obj: projectile, volDelta: (var4_mass - 600) / 0x32);
+                    //Debug.Print($"seg030_2BB7_8B9 playsound effect {(var4_mass - 600) / 0x32}");
+                }
+                //fall damage?
+                if (var6FallDamage != 0)
+                {
+                    damage.DamageObject(
+                        objToDamage: projectile,
+                        basedamage: var6FallDamage,
+                        damagetype: 0,
+                        objList: UWTileMap.current_tilemap.LevelObjects,
+                        WorldObject: true,
+                        damagesource: 0);
+                }
+
+            }
+            //seg030_2BB7_8E1:
+            if ((MotionParams.tilestate25 & 4) != 0)
+            {//on lava, apply fire damage.
+                //seg030_2BB7_90C:
+                damage.DamageObject(
+                    objToDamage: projectile,
+                    basedamage: 1,
+                    damagetype: 8,
+                    objList: UWTileMap.current_tilemap.LevelObjects,
+                    WorldObject: true,
+                    damagesource: 0);
+            }
+            //seg030_2BB7_914:
+            if (projectile.majorclass != 1)
+            {//seg030_2BB7_928:
+                if (projectile.IsStatic)
+                {//seg030_2BB7_937
+                    if ((MotionParams.momentum_14 | MotionParams.unk_a_pitch) != 0)
+                    {
+                        Debug.Print("Object should become mobile");
+                        projectile = MoveObjectToMobileObjectList_seg030_2BB7_B0C(projectile);
+                    }
+                }
+                else
+                {
+                    //seg030_2BB7_956:
+                    if ((MotionParams.momentum_14 | MotionParams.unk_a_pitch | (int)MotionParams.gravity_10_Z) == 0)
+                    {
+                        //object has likely stopped
+                        projectile.TileState_0XA_Bit456 = (short)(dseg_67d6_3E8[MotionParams.tilestate25]);
+                        projectile = ObjectHitsFloorTile_seg030_2BB7_DDF(projectile);
+                        if (projectile == null)
+                        {
+                            return false;
+                        }
+
+                        //seg030_2BB7_99F:
+                        projectile = PlacedObjectCollision_seg030_2BB7_10BC(
+                            projectile: projectile, 
+                            tileX: projectile.tileX, tileY: projectile.tileY, 
+                            arg8: 0);
+                        if (projectile == null)
+                        {
+                            return false;
+                        }
+                        //seg030_2BB7_9C4:
+                        if (!projectile.IsStatic)
+                        {
+                            seg030_2BB7_107A(MotionParams);
+                        }
+                    }
+                }
+            }
+
+            //seg030_2BB7_9D5:
+            if (projectile.IsStatic)
+            {
+                //seg030_2BB7_ADB: 
+                if (projectile.majorclass == 5)
+                {
+                    projectile.heading = (short)((MotionParams.heading_1E >> 0xD) & 0x7);
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                //seg030_2BB7_9E1:
+                projectile.ProjectileHeading = (ushort)(MotionParams.heading_1E >> 8);
+                projectile.npc_xhome = (short)projectile.tileX;
+                projectile.npc_yhome = (short)projectile.tileY;
+                if (MotionParams.gravity_10_Z == 0)
+                {
+                    projectile.UnkBit_0X13_Bit7 = 0;
+                }
+                else
+                {
+                    projectile.UnkBit_0X13_Bit7 = 1;
+                }
+                var cx = 0x10 + (MotionParams.unk_a_pitch / 0x40);
+                if (cx < 0)
+                {
+                    cx = 0;
+                }
+                else
+                {
+                    if (cx > 0x1F)
+                    {
+                        cx = 0x1F;
+                    }
+                }
+                //seg030_2BB7_A5F:
+                projectile.Projectile_Pitch = (short)cx;
+                projectile.UnkBit_0X13_Bit0to6 = (short)(MotionParams.momentum_14 / 0x2F);
+                //Hack added mask to tilestate
+                // if (projectile.item_id == 124 && _RES == GAME_UW1)
+                // {
+                    projectile.TileState_0XA_Bit456 = dseg_67d6_3E8[MotionParams.tilestate25 & 0xF];
+                // }
+                // else
+                // {
+                //     projectile.TileState_0XA_Bit456 = dseg_67d6_3E8[MotionParams.tilestate25];
+                // }
+                
+                if (projectile.majorclass != 1)
+                {
+                    projectile.CoordinateX = MotionParams.x_0;
+                    projectile.CoordinateY = MotionParams.y_2;
+                    projectile.CoordinateZ = MotionParams.z_4;
+                }
+            }
+            return true;
+        }
+
+
+
+        /// <summary>
+        /// Utililty function for mimicing the follwoing assembly
+        /// NEG AX 
+        /// SBB AX,AX
+        /// inc ax
+        /// </summary>
+        /// <param name="value"></param>
+        /// <returns>1 if value is 0, otherwise 0</returns>
+        public static int SBB(int value)
+        {
+            if (value == 0)
+            {
+                return 1;
+            }
+            else
+            {
+                return 0;
+            }
+        }
+
+
+        static uwObject MoveObjectToMobileObjectList_seg030_2BB7_B0C(uwObject toMove)
+        {
+            if (!UWTileMap.ValidTile(toMove.tileX, toMove.tileY))
+            {
+                return toMove;
+            }
+            //Debug.Print($"move {toMove.a_name} {toMove.index} from static to mobile");
+            var tile = UWTileMap.current_tilemap.Tiles[toMove.tileX, toMove.tileY];
+
+            var next = tile.indexObjectList;
+
+            var slot = ObjectFreeLists.GetAvailableObjectSlot(ObjectFreeLists.ObjectListType.MobileList);
+            if (slot != 0)
+            {
+                var newObj = UWTileMap.current_tilemap.LevelObjects[slot];    
+                for (int i = 0; i<8; i++)
+                {
+                    //copy props
+                    newObj.DataBuffer[newObj.PTR+i] = toMove.DataBuffer[toMove.PTR + i];
+                }
+                ObjectCreator.InitMobileObject(newObj, toMove.tileX, toMove.tileY);
+                newObj.npc_hp = (byte)toMove.quality;
+                if (toMove.majorclass != 5)
+                {
+                    if (commonObjDat.rendertype(toMove.item_id) != 2)
+                    {
+                        newObj.npc_whoami = toMove.heading; //to backup object identification status
+                    }
+                }
+                if (newObj.majorclass == 7)
+                {
+                    Debug.Print("moving an animation overaly. Change it's links");
+                }
+                ObjectRemover_OLD.DeleteObjectFromTile_DEPRECIATED(toMove.tileX, toMove.tileY, toMove.index, true);
+
+                //insert object to tile.
+                newObj.next = tile.indexObjectList;
+                tile.indexObjectList = newObj.index;
+                newObj.tileX = tile.tileX; newObj.tileY = tile.tileY;
+                ObjectCreator.RenderObject(newObj, UWTileMap.current_tilemap);                
+                //Debug.Print($"returning {newObj.index}");
+                return newObj;
+            }
+            else
+            {
+                Debug.Print("unable to move object to mobile list. Returning object itself on the static list.");
+                return toMove;    
+            }            
+            
+        }
+
+        public static uwObject ObjectHitsFloorTile_seg030_2BB7_DDF(uwObject projectile)
+        {
+            bool haltobject = true;
+            uwObject haltedObject;
+
+            var si_cull = commonObjDat.projectilecullingpriority(projectile.item_id);
+            if (projectile.TileState_0XA_Bit456 == 1)
+            {
+                //object has landed in water.
+                si_cull = 8;
+                animo.SpawnAnimoInTile(6, projectile.xpos, projectile.ypos, projectile.zpos, projectile.tileX, projectile.tileY);//spawn a splash
+                if (_RES == GAME_UW2)
+                {
+                    OilOnMud(projectile);
+                }
+            }
+            else
+            {
+                if (_RES != GAME_UW2)
+                {
+                    if (projectile.TileState_0XA_Bit456 == 2)
+                    {
+                        //on lava
+                        if (si_cull == 0xA)
+                        {
+                            if (playerdat.dungeon_level == 8)
+                            {
+                                if (Math.Abs(projectile.tileX - 32) + Math.Abs(projectile.tileY - 32) < 6)
+                                {
+                                    if (playerdat.playerObject.npc_hp != 0)
+                                    {
+                                        if (playerdat.CanTalismansBeDestroyed)//set when garamon has been buried and you have answered his questions re volcano and talismans
+                                        {
+                                            si_cull = 8;
+                                            haltobject = false;
+                                            playerdat.SetQuest(36, playerdat.GetQuest(36) - 1);  // reduce count of talismans to destroy. 
+                                            if (playerdat.GetQuest(36) == 0)//All talismans destroyed
+                                            {
+                                                playerdat.SetQuest(36,0xFF);
+                                                Etherealvoid.LaunchPlayerIntoTheVoid();                                                
+                                            }
+                                            else
+                                            {
+                                                projectile.item_id = 0x1C2;
+                                                var counter = 8;
+                                                while (playerdat.GetQuest(36) <= counter)
+                                                {
+                                                    animo.SpawnAnimoCopies(projectile, projectile.tileX, projectile.tileY);
+                                                    counter--;
+                                                }
+                                            }
+                                        }
+                                        else
+                                        {
+                                            playerdat.SetQuest(37, playerdat.GetQuest(37) | 8); //set dream bit 3
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if ((si_cull > 0) && (si_cull <= 8))
+            {
+                if ((Rng.r.Next(0x7FFF) & 0x7) < si_cull)
+                {
+                    if (ObjectRemover_OLD.ObjectCullingTest(projectile, 0xA))
+                    {
+                        haltobject = false;
+                    }
+                }
+            }
+
+            //seg_030_2bb7_e7c
+            var tile = UWTileMap.current_tilemap.Tiles[projectile.tileX, projectile.tileY];
+            if (haltobject)
+            {
+                var newSlot = ObjectFreeLists.GetAvailableObjectSlot(ObjectFreeLists.ObjectListType.StaticList);
+                haltedObject = UWTileMap.current_tilemap.LevelObjects[newSlot];
+                if (haltedObject != null)
+                {
+                    for (int i = 0; i < 8; i++)
+                    {//copy props
+                        haltedObject.DataBuffer[haltedObject.PTR + i] = projectile.DataBuffer[projectile.PTR + i];
+                    }
+                    haltedObject.tileX = projectile.tileX;
+                    haltedObject.tileY = projectile.tileY;
+                    if (haltedObject.majorclass != 7)
+                    {
+                        if (haltedObject.OneF0Class == 9)
+                        {   //light sources
+                            if ((haltedObject.classindex >= 4) && (haltedObject.classindex <= 7))
+                            {   //lit light sources
+                                haltedObject.item_id -= 4;//turn off the light.
+                            }
+                        }
+                    }
+                    else
+                    {
+                        Debug.Print("TODO Handle halted animo");
+                    }
+                }
+                //seg030_2BB7_F43:
+                haltedObject.quality = projectile.npc_hp;
+
+                if ((projectile.majorclass != 5) && (projectile.majorclass != 6))
+                {   //not a 3d model or not a trap/trigger
+                    if (commonObjDat.rendertype(haltedObject.item_id) != 2)
+                    {
+                        haltedObject.heading = projectile.npc_whoami;//yes. whoami is temp storage for heading.
+                    }
+                }
+            }
+            else
+            {
+                haltedObject = null;
+            }
+
+            int varE = 0;
+            if (si_cull == 9)
+            {
+                if (projectile.majorclass == 1)
+                {
+                    varE = 0;
+                }
+                else
+                {
+                    varE = projectile.ProjectileSourceID;
+                }
+            }
+            ObjectRemover_OLD.DeleteObjectFromTile_DEPRECIATED(projectile.tileX, projectile.tileY, projectile.index, true);
+            if (haltedObject != null)
+            {//is this a bit hairy under the circumstances?
+                haltedObject.next = tile.indexObjectList;
+                tile.indexObjectList = haltedObject.index;
+                objectInstance.RedrawFull(haltedObject);
+                ObjectHasHalted = true;
+                if (_RES == GAME_UW2)
+                {
+                    //Run Pressure triggers in tile for halted object
+                    trigger.RunPressureEnterExitTriggersInTile(
+                        triggeringObject: haltedObject,
+                        tile: tile,
+                        ZParam: 0,
+                        triggerType: (int)triggerObjectDat.triggertypes.PRESSURE);
+                }
+            }
+            if (si_cull == 9)
+            {
+                //detonate
+                if (DetonateProjectile(haltedObject, varE) == false)
+                {
+                    if (ObjectRemover_OLD.DeleteObjectFromTile_DEPRECIATED(haltedObject.tileX, haltedObject.tileY, haltedObject.index, true))
+                    {
+                        haltedObject = null;
+                    }
+                }
+            }
+            return haltedObject;
+        }
+
+        static void seg030_2BB7_107A(UWMotionParamArray MotionParams)
+        {
+            if (UWMotionParamArray.dseg_67d6_25C1 != 0)
+            {
+                MotionParams.heading_1E = (short)((Rng.r.Next(0x7FFF) & 0x3FFF) + MotionParams.heading_1E + 0xE000);
+                MotionParams.momentum_14 = 0xBC;
+            }
+            else
+            {
+                 MotionParams.momentum_14 = (short)(0x2F * ((Rng.r.Next(0x7FFF) + 1) & 0x3));
+                 MotionParams.gravity_10_Z = -4;
+            }
+        }
+
+
+
+        public static short InitMotionCalcForNPC(uwObject critter, byte[] MotionCalcData)
+        {//Init motion for NPCs
+            MotionCalcArray.PtrToMotionCalc = MotionCalcData;
+            MotionCalcArray.MotionArrayObjectIndexA = critter.index;
+            MotionCalcArray.Radius8 = (byte)commonObjDat.radius(critter.item_id);
+            MotionCalcArray.Height9 = (byte)commonObjDat.height(critter.item_id);
+            MotionCalcArray.x0 = (ushort)((critter.npc_xhome << 3) + critter.xpos);
+            MotionCalcArray.y2 = (ushort)((critter.npc_yhome << 3) + critter.ypos);
+            MotionCalcArray.z4 = (ushort)critter.zpos;
+            motion.ProcessMotionTileHeights_seg028_2941_385(8);
+            return (short)(MotionCalcArray.UnkC_terrain | MotionCalcArray.UnkE);
+        }
+
+
+
+        /// <summary>
+        /// Dumps out some memory values for the testing of motion.
+        /// </summary>
+        /// <param name="MotionParams"></param>
+        /// <param name="stage"></param>
+        private static void DumpMotionMemory(UWMotionParamArray MotionParams, string stage)
+        {
+            System.IO.File.WriteAllBytes($"c:\\temp\\{iteration}_{stage}_MotionParams", MotionParams.data);
+            System.IO.File.WriteAllBytes($"c:\\temp\\{iteration}_{stage}_CalcArray", MotionCalcArray.base_dseg_25c4);
+            System.IO.File.WriteAllBytes($"c:\\temp\\{iteration}_{stage}_3FC", UWMotionParamArray.data_3FC);
+            System.IO.File.WriteAllBytes($"c:\\temp\\{iteration}_{stage}_sub", UWMotionParamArray.SubArray.dseg_2562);
+        }
+
+        public static void DumpProjectile(uwObject projectile)
+        {
+            byte[] objbytes = new byte[0x1B];
+            for (int i = 0; i <= 0x1A; i++)
+            {
+                objbytes[i] = projectile.DataBuffer[projectile.PTR + i];
+            }
+            System.IO.File.WriteAllBytes("c:\\temp\\exportedobj.dat", objbytes);
+        }
+
+        public static void DumpCollisionTable()
+        {
+            byte[] collisiondata = new byte[CollisionRecord.Collisions_dseg_2520.GetUpperBound(0) + 1];
+            for (int i = 0; i <= CollisionRecord.Collisions_dseg_2520.GetUpperBound(0); i++)
+            {
+                collisiondata[i] = CollisionRecord.Collisions_dseg_2520[i];
+            }
+            System.IO.File.WriteAllBytes("c:\\temp\\collisions.dat", collisiondata);
+        }
+
+
+    }//end class
+}//end namespace

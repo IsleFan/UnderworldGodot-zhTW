@@ -1,0 +1,287 @@
+using System;
+using System.IO;
+using System.Text;
+
+namespace Underworld
+{
+    /// <summary>
+    /// Top-level save-game orchestrator. Writes all five save files to {BasePath}/SAVE{slot}/.
+    /// UW1 saves omit SCD.ARK (UW1 has no script compiler data file).
+    /// </summary>
+    public static class SaveGame
+    {
+        public static void Save(int slot, string description)
+        {
+            if (slot < 1 || slot > 4)
+                throw new ArgumentOutOfRangeException(nameof(slot), slot, "slot must be 1..4");
+
+            // Encode the description before anything else. Everything below this either
+            // creates the slot directory or mutates live game state, so a description we
+            // cannot store has to fail while that is all still untouched.
+            byte[] descriptionBytes = SaveDescription.Encode(description);
+
+            // Read the base path once and hand it to the transaction. SlotTransaction is kept
+            // free of UWClass so it can be tested against a temporary directory.
+            string basePath = UWClass.BasePath;
+
+            // The slot is replaced as a unit: everything is built in a staging directory and
+            // swapped in, so a failure part way leaves the previous save whole rather than a
+            // mixture of old and new files. See issue #74 and SlotTransaction.
+            SlotTransaction.Replace(basePath, slot, RequiredFiles(), staging =>
+            {
+                // Detach the player from its tile's object chain FIRST so the
+                // pdat stash (which copies LevelObjects[1] bytes into pdat) sees
+                // a clean .next = 0 player rather than the chain-inserted
+                // next = <previous head> that PlacePlayerInTile produced during
+                // play. DOS expects the player object to have next = 0.
+                //
+                // All of this lives inside the callback, and the restore finishes before it
+                // returns. Two reasons. The detach used to happen outside the try, so a throw
+                // in it or in the stash or the markers left the player detached and never put
+                // back. And restoring after the swap would mean a throw there reporting a
+                // failure over a save that had already landed.
+                bool detached = false;
+                try
+                {
+                    detached = DetachPlayerFromCurrentTile();
+                    StashLiveStateToPdat();
+                    ApplySlot1Markers();
+
+                    // DOS UW.EXE never writes the player (slot 1) into a tile's
+                    // indexObjectList — it tracks player position separately via the
+                    // mouse/motion path. The port's PlacePlayerInTile intentionally
+                    // inserts slot 1 at the chain head for in-game collision, and
+                    // without this detach step the serialised LEV.ARK contains a
+                    // tile whose first-object-in-chain points at slot 1, which DOS
+                    // treats as an invalid object list ("problems in object list"
+                    // error, render bails out with wall/floor/ceiling textures
+                    // missing).
+                    WriteAllSaveFiles(staging, descriptionBytes);
+                }
+                finally
+                {
+                    // Re-insert slot 1 so in-memory game state stays consistent
+                    // if the user keeps playing after saving. The post-detach
+                    // tile.indexObjectList already holds the previous chain
+                    // head (sans slot 1), so head-inserting slot 1 restores the
+                    // PlacePlayerInTile invariant — no saved-head value needed.
+                    if (detached) { ReattachPlayerToCurrentTile(); }
+                    //Set the player back to being an adventurer
+                    playerdat.playerObject.item_id = 127;
+                }
+            });
+        }
+
+        /// <summary>
+        /// What a complete slot has to contain before it may replace the one already there.
+        ///
+        /// DESC is allowed to be empty: DOS writes a zero length DESC for an empty description
+        /// and the slot still counts as occupied. The level archives are not, because a zero
+        /// byte archive is a write that failed. SCD.ARK is UW2 only, and matters most of all:
+        /// ScdArkWriter.Serialize returns an empty array when its source is missing, so without
+        /// this a UW2 save would commit a zero byte SCD.ARK as if it were finished.
+        /// </summary>
+        private static SlotRequirements RequiredFiles()
+        {
+            var content = UWClass._RES == UWClass.GAME_UW2
+                ? new[] { "PLAYER.DAT", "LEV.ARK", "SCD.ARK" }
+                : new[] { "PLAYER.DAT", "LEV.ARK" };
+            return new SlotRequirements
+            {
+                // BGLOBALS.DAT joins DESC in being allowed to be empty. BGlobalWriter writes
+                // one record per conversation global, so a game with none serialises to zero
+                // bytes, which is a correct file rather than a failed write.
+                MustExist = new[] { "DESC", "BGLOBALS.DAT" },
+                MustHaveContent = content,
+            };
+        }
+
+        private static void WriteAllSaveFiles(string saveDir, byte[] descriptionBytes)
+        {
+            // DESC holds the description the player typed, as raw ASCII with no terminator
+            // and no padding, exactly as long as the text. Measured from saves written by
+            // real DOS in both games. An empty description is a zero length file, which is
+            // still an occupied slot.
+            //
+            // This previously wrote a single byte, justified by a comment claiming DOS used
+            // DESC as an in-use marker and never showed the string. Both halves were wrong:
+            // a DOS save carries the typed name, and the port's own save and load lists
+            // display it, so every used slot showed one character.
+            File.WriteAllBytes(Path.Combine(saveDir, "DESC"), descriptionBytes);
+            File.WriteAllBytes(Path.Combine(saveDir, "PLAYER.DAT"), PatchPlayerLinkInSerialised(PlayerDatWriter.Serialize()));
+            File.WriteAllBytes(Path.Combine(saveDir, "BGLOBALS.DAT"), BGlobalWriter.Serialize(bglobal.bGlobals));
+            File.WriteAllBytes(Path.Combine(saveDir, "LEV.ARK"), LevArkWriter.Serialize());
+
+            if (UWClass._RES == UWClass.GAME_UW2)
+            {
+                string sourceFolder = playerdat.currentfolder;
+                File.WriteAllBytes(Path.Combine(saveDir, "SCD.ARK"), ScdArkWriter.Serialize(sourceFolder));
+            }
+        }
+
+        /// <summary>
+        /// Unlink slot 1 (player) from its current tile's object chain so
+        /// the serialised LEV.ARK slot looks like a DOS-format untethered
+        /// player slot. RemoveObjectFromLinkedList rewrites tile.indexObjectList
+        /// to slot 1's old .next (or leaves it alone if slot 1 was mid-chain
+        /// with the parent's .next rewritten). slot 1's .next is then cleared.
+        /// </summary>
+        /// <returns>
+        /// Whether the player was actually taken out of a chain. The caller only puts it back
+        /// if it was: the removal reports failure when slot 1 was not in this tile's list, and
+        /// head-inserting it regardless would add the player to a chain it had never been in,
+        /// or splice another tile's chain into this one through the cleared next pointer.
+        /// </returns>
+        private static bool DetachPlayerFromCurrentTile()
+        {
+            if (UWTileMap.current_tilemap == null ||
+                UWTileMap.current_tilemap.LevelObjects == null ||
+                UWTileMap.current_tilemap.LevelObjects[1] == null)
+            {
+                return false;
+            }
+            int tx = motion.playerMotionParams.x_0 >> 8;
+            int ty = motion.playerMotionParams.y_2 >> 8;
+            if (!UWTileMap.ValidTile(tx, ty)) { return false; }
+            var tile = UWTileMap.current_tilemap.Tiles[tx, ty];
+            bool removed = ObjectRemover_OLD.RemoveObjectFromLinkedList(
+                tile.indexObjectList, 1,
+                UWTileMap.current_tilemap.LevelObjects,
+                tile.Ptr + 2);
+            if (!removed) { return false; }
+            // Clear slot 1's next so a freshly loaded save has a clean player
+            // slot with no dangling chain pointer.
+            UWTileMap.current_tilemap.LevelObjects[1].next = 0;
+            return true;
+        }
+
+        /// <summary>
+        /// Apply the DOS-format slot-1 player markers AFTER the pdat stash so
+        /// the byte-0 mask doesn't propagate into pdat (DOS keeps
+        /// pdat[0xD5]=0x7F = avatar item_id while masking LEV.ARK slot1[0] to
+        /// 0x3F = invisible placeholder; cross-file mismatch on byte 0 is
+        /// expected, but bytes 1..26 must match between the two stores).
+        ///
+        /// Markers DOS writes for the player avatar:
+        ///   - LEV.ARK slot1 byte 0: item_id bit 6 cleared (127 → 63)
+        ///   - LEV.ARK slot1 byte 1: doordir flag set (bit 5 of high byte)
+        ///   - LEV.ARK slot1 byte 26 (npc_whoami): 0xFD sentinel
+        ///   - pdat 0xD5+1, 0xD5+26: same as LEV.ARK (markers go in both)
+        ///   - pdat 0xD5+0: untouched (stays 0x7F = avatar)
+        ///
+        /// Without these, DOS UW.EXE renders the Avatar NPC mesh at the
+        /// player's own world position — the camera ends up inside the mesh,
+        /// producing the "wall/floor/ceiling textures missing" symptom.
+        /// </summary>
+        private static void ApplySlot1Markers()
+        {
+            if (UWTileMap.current_tilemap == null ||
+                UWTileMap.current_tilemap.LevelObjects == null ||
+                UWTileMap.current_tilemap.LevelObjects[1] == null)
+            {
+                return;
+            }
+            var pobj = UWTileMap.current_tilemap.LevelObjects[1];
+            int p0 = pobj.PTR;
+            byte[] buf = pobj.DataBuffer;
+            buf[p0]      = (byte)(buf[p0] & 0x3F);
+            buf[p0 + 1]  = (byte)(buf[p0 + 1] | 0x20);
+            buf[p0 + 26] = 0xFD;
+
+            int pp = playerdat.PlayerObjectStoragePTR;
+            // pdat byte 0 (item_id) stays as the avatar (0x7F); only mirror
+            // the marker bits at byte 1 and the whoami sentinel at byte 26.
+            playerdat.pdat[pp + 1]  = (byte)(playerdat.pdat[pp + 1] | 0x20);
+            playerdat.pdat[pp + 26] = 0xFD;
+        }
+
+        /// <summary>
+        /// DOS UW.EXE stores the avatar's pdat `link` field = 1 — a self-
+        /// reference that DOS reads as "this character HAS inventory" when
+        /// populating paperdoll/backpack on Journey Onward. The port's load
+        /// code at uimanager_mainmenu.cs:283 forces LevelObjects[1].link = 0
+        /// to prevent in-memory chain cycles, and that 0 propagates back to
+        /// pdat[0xDB-0xDC] on save → DOS renders an empty inventory.
+        ///
+        /// We can't write link=1 to in-memory pdat permanently because the
+        /// port's own loader would re-read it and hit the cycle on the next
+        /// Journey Onward. So serialise PLAYER.DAT once, patch the link
+        /// bytes in the SERIALISED ciphertext only, write that to disk, and
+        /// leave in-memory pdat untouched.
+        ///
+        /// pdat post-encryption layout for UW1: bytes 0..0xD2 are XOR-
+        /// encrypted with a position-dependent key; pdat[0xD3+] is plain.
+        /// PlayerObjectStoragePTR = 0xD5, so bytes 6-7 of the player obj
+        /// copy live at file offsets 0xDB and 0xDC — both in the plaintext
+        /// region. We can write to them directly without touching the seed.
+        /// </summary>
+        private static byte[] PatchPlayerLinkInSerialised(byte[] serialised)
+        {
+            int linkOff = playerdat.PlayerObjectStoragePTR + 6;
+            if (linkOff + 1 >= serialised.Length) return serialised;
+
+            // The head must be 0 when no inventory records were emitted; writing 1
+            // unconditionally told DOS to walk a chain into a file that ends at
+            // InventoryPtr, which hung UW1 at "You reenter the Abyss..." (issue #43).
+            // DOS itself writes 0 for an empty inventory, in both games (measured on
+            // UW2 DOS saves). UW2's restore reads saved object 1 past the end of the
+            // data it read and allocates level objects for whatever it finds there.
+            int records = (serialised.Length - playerdat.InventoryPtr) / 8;
+            int head = records > 0 ? 1 : 0;
+
+            // link occupies bits 6-15 of the little-endian word; owner is bits 0-5.
+            serialised[linkOff]     = (byte)((serialised[linkOff] & 0x3F) | ((head << 6) & 0xC0));
+            serialised[linkOff + 1] = (byte)((head >> 2) & 0xFF);
+            return serialised;
+        }
+
+        private static void ReattachPlayerToCurrentTile()
+        {
+            if (UWTileMap.current_tilemap == null ||
+                UWTileMap.current_tilemap.LevelObjects == null ||
+                UWTileMap.current_tilemap.LevelObjects[1] == null)
+            {
+                return;
+            }
+            int tx = motion.playerMotionParams.x_0 >> 8;
+            int ty = motion.playerMotionParams.y_2 >> 8;
+            if (!UWTileMap.ValidTile(tx, ty)) return;
+            var tile = UWTileMap.current_tilemap.Tiles[tx, ty];
+            // PlacePlayerInTile's head-insert logic: obj.next = current head, head = 1.
+            UWTileMap.current_tilemap.LevelObjects[1].next = (short)tile.indexObjectList;
+            tile.indexObjectList = 1;
+        }
+
+        /// <summary>
+        /// Copies live runtime state back into pdat so the serialised player.dat reflects
+        /// the current game state. The port keeps player position in motion.playerMotionParams
+        /// and player-object fields in UWTileMap.current_tilemap.LevelObjects[1]; these are
+        /// never written back to pdat during play, so without this stash the serialised
+        /// player.dat preserves load-time values and restoring yields a stale/zero position.
+        /// </summary>
+        private static void StashLiveStateToPdat()
+        {
+            playerdat.XCoordinate = motion.playerMotionParams.x_0;
+            playerdat.YCoordinate = motion.playerMotionParams.y_2;
+            playerdat.Z = motion.playerMotionParams.z_4;
+            playerdat.SetAt16(0x5B, playerdat.PlayerCameraYaw_dseg_8294);
+
+            // RelatedToMotionState: high 5 bits = tilestate25, low 3 bits = swim state.
+            // Swim state is already written to pdat by motion updates; refresh tilestate only.
+            int swimBits = playerdat.RelatedToMotionState & 0x7;
+            playerdat.RelatedToMotionState = (motion.playerMotionParams.tilestate25 << 3) | swimBits;
+
+            // Copy the 27-byte player object (general + NPC extra) from the live LevelObjects[1]
+            // back into pdat[PlayerObjectStoragePTR..]. This is the inverse of the load-time
+            // copy at uimanager_mainmenu.cs:275-278.
+            if (UWTileMap.current_tilemap != null && UWTileMap.current_tilemap.LevelObjects[1] != null)
+            {
+                var playerObj = UWTileMap.current_tilemap.LevelObjects[1];
+                for (int i = 0; i <= 0x1A; i++)
+                {
+                    playerdat.pdat[playerdat.PlayerObjectStoragePTR + i] = playerObj.DataBuffer[playerObj.PTR + i];
+                }
+            }
+        }
+    }
+}

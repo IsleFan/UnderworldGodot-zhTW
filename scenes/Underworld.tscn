@@ -1,0 +1,3357 @@
+[gd_scene load_steps=32 format=3 uid="uid://xjvqmrbs28xs"]
+
+[ext_resource type="Script" path="res://src/ui/uimanager.cs" id="1_lw0yg"]
+[ext_resource type="FontFile" path="res://resources/fonts/FONT5X6I.tres" id="3_safdl"]
+[ext_resource type="Script" path="res://src/ui/mouseCursor.cs" id="4_gnu1s"]
+[ext_resource type="FontFile" path="res://resources/fonts/FONT5X6P.tres" id="4_pfbet"]
+[ext_resource type="FontFile" path="res://resources/fonts/FONT4X5P.tres" id="5_8iiwt"]
+[ext_resource type="FontFile" path="res://resources/fonts/FONTBIG.tres" id="5_kj12g"]
+[ext_resource type="Script" path="res://main.cs" id="6_3y8oy"]
+[ext_resource type="Shader" path="res://node_3d.gdshader" id="6_x6exc"]
+[ext_resource type="Texture2D" uid="uid://plikcry1ow6q" path="res://resources/placeholder_art/textbox_fill.jpg" id="7_qiq8a"]
+[ext_resource type="Texture2D" uid="uid://ug231pvqaq1v" path="res://resources/placeholder_art/panels/panelsBlack.png" id="8_mis7n"]
+[ext_resource type="Texture2D" uid="uid://cf536ckyprfbf" path="res://resources/placeholder_art/uw1placeholdermain.png" id="9_emry3"]
+[ext_resource type="Shader" path="res://resources/shaders/viewport_combination.gdshader" id="13_rsqj8"]
+[ext_resource type="Texture2D" uid="uid://b1y5rs02fgv6d" path="res://resources/cross.png" id="18_tfr7p"]
+[ext_resource type="Texture2D" uid="uid://b4hn75lfpnecd" path="res://resources/placeholder_art/grave.png" id="20_n8sfi"]
+[ext_resource type="Texture2D" uid="uid://b5mwiifn8jtb6" path="res://resources/placeholder_art/uw2placeholdermain.png" id="21_3ww2u"]
+[ext_resource type="Texture2D" uid="uid://dx526kvjk8jmj" path="res://resources/cross2.png" id="21_5p8p7"]
+[ext_resource type="Texture2D" uid="uid://6t8lhnhw347e" path="res://resources/placeholder_art/textbox_fill_uw2.png" id="22_vajvs"]
+[ext_resource type="Texture2D" uid="uid://51go53yqj8oq" path="res://resources/placeholder_art/panels/panelsstats.png" id="24_filpa"]
+[ext_resource type="Texture2D" uid="uid://1ecbe7htlqun" path="res://resources/placeholder_art/spellicon.png" id="28_uj0ag"]
+[ext_resource type="Texture2D" uid="uid://dlhf0nj7vj1o2" path="res://resources/placeholder_art/PanelBlack.jpg" id="29_aiei8"]
+[ext_resource type="Script" path="res://src/audio/MusicStreamPlayer.cs" id="N_music_stream"]
+[ext_resource type="Script" path="res://src/audio/sfx/godot/SfxStreamPlayer.cs" id="N_sfx_stream"]
+[ext_resource type="Script" path="res://src/ui/UnderworldRoot.cs" id="root_script"]
+
+[sub_resource type="AudioStreamWAV" id="AudioStreamWAV_tkk82"]
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_j0mn4"]
+viewport_path = NodePath("SubViewportWorld")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_wyrrx"]
+viewport_path = NodePath("SubViewportSprites")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_5fm7y"]
+viewport_path = NodePath("SubViewportObjectInfo")
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_j67en"]
+shader = ExtResource("13_rsqj8")
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_7v506"]
+render_priority = 0
+shader = ExtResource("6_x6exc")
+
+[sub_resource type="Theme" id="Theme_i11v8"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_pkxpy"]
+shader = ExtResource("13_rsqj8")
+
+[node name="Underworld" type="Node3D"]
+script = ExtResource("root_script")
+
+[node name="MusicStreamPlayer" type="Node" parent="."]
+script = ExtResource("N_music_stream")
+
+[node name="SfxStreamPlayer" type="Node" parent="."]
+script = ExtResource("N_sfx_stream")
+
+[node name="main" type="Node3D" parent="." node_paths=PackedStringArray("cam_world", "GimbalYaw_world", "GimbalRoll_world", "cam_sprites", "GimbalYaw_sprites", "GimbalRoll_sprites", "cam_objectinfo", "GimbalYaw_objectinfo", "GimbalRoll_objectinfo", "DigitalAudioPlayer", "lblPositionDebug", "secondarycameras")]
+script = ExtResource("6_3y8oy")
+cam_world = NodePath("../SubViewportWorld/GimbalYaw/GimbalRoll/GimbalPitchCamera_world")
+GimbalYaw_world = NodePath("../SubViewportWorld/GimbalYaw")
+GimbalRoll_world = NodePath("../SubViewportWorld/GimbalYaw/GimbalRoll")
+cam_sprites = NodePath("../SubViewportSprites/GimbalYaw/GimbalRoll/GimbalPitchCamera_sprites")
+GimbalYaw_sprites = NodePath("../SubViewportSprites/GimbalYaw")
+GimbalRoll_sprites = NodePath("../SubViewportSprites/GimbalYaw/GimbalRoll")
+cam_objectinfo = NodePath("../SubViewportObjectInfo/GimbalYaw/GimbalRoll/GimbalPitchCamera_objectinfo")
+GimbalYaw_objectinfo = NodePath("../SubViewportObjectInfo/GimbalYaw")
+GimbalRoll_objectinfo = NodePath("../SubViewportObjectInfo/GimbalYaw/GimbalRoll")
+DigitalAudioPlayer = NodePath("../UI/DigitalAudioPlayer")
+lblPositionDebug = NodePath("../UI/Common/PositionLabel")
+secondarycameras = NodePath("../SubViewportWorld")
+
+[node name="SubViewportSprites" type="SubViewport" parent="."]
+use_hdr_2d = true
+
+[node name="GimbalYaw" type="Node3D" parent="SubViewportSprites"]
+
+[node name="GimbalRoll" type="Node3D" parent="SubViewportSprites/GimbalYaw"]
+
+[node name="GimbalPitchCamera_sprites" type="Camera3D" parent="SubViewportSprites/GimbalYaw/GimbalRoll"]
+editor_description = "Render world with xferdata"
+cull_mask = 6
+current = true
+
+[node name="SubViewportWorld" type="SubViewport" parent="."]
+handle_input_locally = false
+use_hdr_2d = true
+render_target_update_mode = 4
+
+[node name="GimbalYaw" type="Node3D" parent="SubViewportWorld"]
+
+[node name="GimbalRoll" type="Node3D" parent="SubViewportWorld/GimbalYaw"]
+
+[node name="GimbalPitchCamera_world" type="Camera3D" parent="SubViewportWorld/GimbalYaw/GimbalRoll"]
+editor_description = "Renders world without xfer data. (xfer transparent)"
+cull_mask = 2
+current = true
+
+[node name="SubViewportObjectInfo" type="SubViewport" parent="."]
+use_hdr_2d = true
+
+[node name="GimbalYaw" type="Node3D" parent="SubViewportObjectInfo"]
+
+[node name="GimbalRoll" type="Node3D" parent="SubViewportObjectInfo/GimbalYaw"]
+
+[node name="GimbalPitchCamera_objectinfo" type="Camera3D" parent="SubViewportObjectInfo/GimbalYaw/GimbalRoll"]
+cull_mask = 8
+current = true
+
+[node name="WorldViewContainer" type="SubViewportContainer" parent="."]
+visible = false
+offset_left = 200.0
+offset_top = 72.0
+offset_right = 900.0
+offset_bottom = 528.0
+
+[node name="UI" type="CanvasLayer" parent="."]
+follow_viewport_enabled = true
+
+[node name="DigitalAudioPlayer" type="AudioStreamPlayer" parent="UI"]
+stream = SubResource("AudioStreamWAV_tkk82")
+
+[node name="3DWin" type="CanvasLayer" parent="UI"]
+
+[node name="OutputTextureWorld" type="TextureRect" parent="UI/3DWin"]
+visible = false
+offset_left = 272.0
+offset_top = 53.0
+offset_right = 784.0
+offset_bottom = 565.0
+texture = SubResource("ViewportTexture_j0mn4")
+
+[node name="OutputTextureSprites" type="TextureRect" parent="UI/3DWin"]
+visible = false
+offset_left = 279.0
+offset_top = 78.0
+offset_right = 791.0
+offset_bottom = 590.0
+texture = SubResource("ViewportTexture_wyrrx")
+
+[node name="OutputObjectInfo" type="TextureRect" parent="UI/3DWin"]
+offset_left = 279.0
+offset_top = 54.0
+offset_right = 791.0
+offset_bottom = 566.0
+texture = SubResource("ViewportTexture_5fm7y")
+
+[node name="ColorRect" type="ColorRect" parent="UI/3DWin"]
+offset_right = 1280.0
+offset_bottom = 800.0
+color = Color(0, 0, 0, 1)
+
+[node name="OutputTextureCombined" type="TextureRect" parent="UI/3DWin"]
+visible = false
+material = SubResource("ShaderMaterial_j67en")
+offset_left = 209.0
+offset_top = 79.0
+offset_right = 609.0
+offset_bottom = 479.0
+texture = ExtResource("18_tfr7p")
+
+[node name="UW1" type="CanvasLayer" parent="UI"]
+
+[node name="WeaponAnimationUW1" type="TextureRect" parent="UI/UW1"]
+anchors_preset = -1
+anchor_right = 0.03
+anchor_bottom = 0.087
+offset_left = 204.0
+offset_top = 72.0
+offset_right = 865.6
+offset_bottom = 462.4
+mouse_filter = 2
+
+[node name="placeholdermainuw1" type="TextureRect" parent="UI/UW1"]
+offset_right = 1280.0
+offset_bottom = 800.0
+mouse_filter = 2
+texture = ExtResource("9_emry3")
+
+[node name="3DWinUW1" type="TextureRect" parent="UI/UW1"]
+texture_filter = 1
+material = SubResource("ShaderMaterial_7v506")
+custom_minimum_size = Vector2(320, 200)
+offset_right = 1280.0
+offset_bottom = 800.0
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 2
+
+[node name="PanelBlack" type="TextureRect" parent="UI/UW1"]
+offset_left = 944.0
+offset_top = 28.0
+offset_right = 1276.0
+offset_bottom = 484.0
+mouse_filter = 0
+texture = ExtResource("8_mis7n")
+
+[node name="MessageScrollPanelUW1" type="Panel" parent="UI/UW1"]
+self_modulate = Color(1, 1, 1, 0)
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="MessageScrollBackgroundUW1" type="TextureRect" parent="UI/UW1/MessageScrollPanelUW1"]
+layout_mode = 0
+offset_left = 60.0
+offset_top = 676.0
+offset_right = 1224.0
+offset_bottom = 796.0
+texture = ExtResource("7_qiq8a")
+
+[node name="MessageScrollUW1" type="RichTextLabel" parent="UI/UW1/MessageScrollPanelUW1"]
+texture_filter = 1
+layout_mode = 0
+offset_left = 64.0
+offset_top = 656.0
+offset_right = 1224.0
+offset_bottom = 796.0
+mouse_filter = 1
+theme_override_colors/default_color = Color(0.2, 0.109804, 0.0745098, 1)
+theme_override_constants/line_separation = -25
+theme_override_fonts/normal_font = ExtResource("4_pfbet")
+theme_override_font_sizes/normal_font_size = 64
+bbcode_enabled = true
+text = "My dearest Alfred:
+Go into the Abyss knowing that I will not forget thee. As bitter 
+as the Baron's justice dost seem, tis better than a hangman's 
+noose. No matter the passing of years, I will await thy return. 
+Yours forever,
+                 Sandra
+"
+scroll_active = false
+autowrap_mode = 0
+
+[node name="MessageScrollEdgeLeftUW1" type="TextureRect" parent="UI/UW1/MessageScrollPanelUW1"]
+layout_mode = 0
+offset_left = 44.0
+offset_top = 676.0
+offset_right = 60.0
+offset_bottom = 792.0
+
+[node name="MessageScrollEdgeRightUW1" type="TextureRect" parent="UI/UW1/MessageScrollPanelUW1"]
+layout_mode = 0
+offset_left = 1224.0
+offset_top = 676.0
+offset_right = 1240.0
+offset_bottom = 792.0
+
+[node name="CompassUW1" type="Panel" parent="UI/UW1"]
+self_modulate = Color(1, 1, 1, 0)
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="CompassBg0" type="TextureRect" parent="UI/UW1/CompassUW1"]
+layout_mode = 0
+offset_left = 448.0
+offset_top = 524.0
+offset_right = 656.0
+offset_bottom = 628.0
+
+[node name="CompassBg1" type="TextureRect" parent="UI/UW1/CompassUW1"]
+layout_mode = 0
+offset_left = 448.0
+offset_top = 524.0
+offset_right = 656.0
+offset_bottom = 628.0
+
+[node name="CompassBg2" type="TextureRect" parent="UI/UW1/CompassUW1"]
+layout_mode = 0
+offset_left = 448.0
+offset_top = 524.0
+offset_right = 656.0
+offset_bottom = 628.0
+
+[node name="CompassBg3" type="TextureRect" parent="UI/UW1/CompassUW1"]
+layout_mode = 0
+offset_left = 448.0
+offset_top = 524.0
+offset_right = 656.0
+offset_bottom = 628.0
+
+[node name="CompassPoint0" type="TextureRect" parent="UI/UW1/CompassUW1"]
+layout_mode = 0
+offset_left = 544.0
+offset_top = 524.0
+offset_right = 560.0
+offset_bottom = 532.0
+
+[node name="CompassPoint1" type="TextureRect" parent="UI/UW1/CompassUW1"]
+layout_mode = 0
+offset_left = 512.0
+offset_top = 532.0
+offset_right = 528.0
+offset_bottom = 540.0
+
+[node name="CompassPoint2" type="TextureRect" parent="UI/UW1/CompassUW1"]
+layout_mode = 0
+offset_left = 480.0
+offset_top = 536.0
+offset_right = 500.0
+offset_bottom = 548.0
+
+[node name="CompassPoint3" type="TextureRect" parent="UI/UW1/CompassUW1"]
+layout_mode = 0
+offset_left = 464.0
+offset_top = 548.0
+offset_right = 480.0
+offset_bottom = 560.0
+
+[node name="CompassPoint4" type="TextureRect" parent="UI/UW1/CompassUW1"]
+layout_mode = 0
+offset_left = 448.0
+offset_top = 564.0
+offset_right = 468.0
+offset_bottom = 576.0
+
+[node name="CompassPoint5" type="TextureRect" parent="UI/UW1/CompassUW1"]
+layout_mode = 0
+offset_left = 448.0
+offset_top = 584.0
+offset_right = 472.0
+offset_bottom = 596.0
+
+[node name="CompassPoint6" type="TextureRect" parent="UI/UW1/CompassUW1"]
+layout_mode = 0
+offset_left = 464.0
+offset_top = 588.0
+offset_right = 488.0
+offset_bottom = 608.0
+
+[node name="CompassPoint7" type="TextureRect" parent="UI/UW1/CompassUW1"]
+layout_mode = 0
+offset_left = 496.0
+offset_top = 600.0
+offset_right = 520.0
+offset_bottom = 620.0
+
+[node name="CompassPoint8" type="TextureRect" parent="UI/UW1/CompassUW1"]
+layout_mode = 0
+offset_left = 544.0
+offset_top = 608.0
+offset_right = 560.0
+offset_bottom = 624.0
+
+[node name="CompassPoint9" type="TextureRect" parent="UI/UW1/CompassUW1"]
+layout_mode = 0
+offset_left = 576.0
+offset_top = 600.0
+offset_right = 600.0
+offset_bottom = 620.0
+
+[node name="CompassPoint10" type="TextureRect" parent="UI/UW1/CompassUW1"]
+layout_mode = 0
+offset_left = 624.0
+offset_top = 588.0
+offset_right = 632.0
+offset_bottom = 608.0
+
+[node name="CompassPoint11" type="TextureRect" parent="UI/UW1/CompassUW1"]
+layout_mode = 0
+offset_left = 640.0
+offset_top = 584.0
+offset_right = 656.0
+offset_bottom = 596.0
+
+[node name="CompassPoint12" type="TextureRect" parent="UI/UW1/CompassUW1"]
+layout_mode = 0
+offset_left = 640.0
+offset_top = 564.0
+offset_right = 656.0
+offset_bottom = 576.0
+
+[node name="CompassPoint13" type="TextureRect" parent="UI/UW1/CompassUW1"]
+layout_mode = 0
+offset_left = 624.0
+offset_top = 548.0
+offset_right = 644.0
+offset_bottom = 560.0
+
+[node name="CompassPoint14" type="TextureRect" parent="UI/UW1/CompassUW1"]
+layout_mode = 0
+offset_left = 608.0
+offset_top = 536.0
+offset_right = 624.0
+offset_bottom = 548.0
+
+[node name="CompassPoint15" type="TextureRect" parent="UI/UW1/CompassUW1"]
+layout_mode = 0
+offset_left = 576.0
+offset_top = 532.0
+offset_right = 592.0
+offset_bottom = 540.0
+
+[node name="CompassClickArea" type="TextureRect" parent="UI/UW1/CompassUW1"]
+layout_mode = 0
+offset_left = 457.0
+offset_top = 538.0
+offset_right = 657.0
+offset_bottom = 618.0
+
+[node name="ConversationUW1" type="Panel" parent="UI/UW1"]
+visible = false
+self_modulate = Color(1, 1, 1, 0)
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="PlayerPortraitFrameUW1" type="TextureRect" parent="UI/UW1/ConversationUW1"]
+layout_mode = 0
+offset_left = 780.0
+offset_top = 36.0
+offset_right = 932.0
+offset_bottom = 188.0
+
+[node name="PlayerPortraitUW1" type="TextureRect" parent="UI/UW1/ConversationUW1"]
+layout_mode = 0
+offset_left = 788.0
+offset_top = 44.0
+offset_right = 924.0
+offset_bottom = 180.0
+
+[node name="PlayerNameFrameUW1" type="TextureRect" parent="UI/UW1/ConversationUW1"]
+layout_mode = 0
+offset_left = 556.0
+offset_right = 932.0
+offset_bottom = 36.0
+
+[node name="PlayerNameLabelUW1" type="RichTextLabel" parent="UI/UW1/ConversationUW1"]
+layout_mode = 0
+offset_left = 572.0
+offset_top = -16.0
+offset_right = 844.0
+offset_bottom = 34.0
+theme_override_fonts/normal_font = ExtResource("4_pfbet")
+theme_override_font_sizes/normal_font_size = 64
+bbcode_enabled = true
+text = "Character Name"
+
+[node name="PlayerTradeAreaUW1" type="TextureRect" parent="UI/UW1/ConversationUW1"]
+layout_mode = 0
+offset_left = 557.0
+offset_top = 36.0
+offset_right = 777.0
+offset_bottom = 188.0
+
+[node name="NPCPortraitFrameUW1" type="TextureRect" parent="UI/UW1/ConversationUW1"]
+layout_mode = 0
+offset_left = 173.0
+offset_top = 36.0
+offset_right = 325.0
+offset_bottom = 188.0
+
+[node name="NPCPortraitUW1" type="TextureRect" parent="UI/UW1/ConversationUW1"]
+layout_mode = 0
+offset_left = 181.0
+offset_top = 44.0
+offset_right = 317.0
+offset_bottom = 180.0
+
+[node name="NPCNameFrameUW1" type="TextureRect" parent="UI/UW1/ConversationUW1"]
+layout_mode = 0
+offset_left = 172.0
+offset_right = 548.0
+offset_bottom = 36.0
+
+[node name="NPCNameLabelUW1" type="RichTextLabel" parent="UI/UW1/ConversationUW1"]
+layout_mode = 0
+offset_left = 188.0
+offset_top = -16.0
+offset_right = 516.0
+offset_bottom = 34.0
+theme_override_fonts/normal_font = ExtResource("4_pfbet")
+theme_override_font_sizes/normal_font_size = 64
+bbcode_enabled = true
+text = "Character Name"
+
+[node name="NPCTradeAreaUW1" type="TextureRect" parent="UI/UW1/ConversationUW1"]
+layout_mode = 0
+offset_left = 330.0
+offset_top = 36.0
+offset_right = 550.0
+offset_bottom = 188.0
+
+[node name="ConversationTopBorderUW1" type="TextureRect" parent="UI/UW1/ConversationUW1"]
+layout_mode = 0
+offset_left = 168.0
+offset_top = 188.0
+offset_right = 936.0
+offset_bottom = 228.0
+
+[node name="ConversationBottomBorderUW1" type="TextureRect" parent="UI/UW1/ConversationUW1"]
+layout_mode = 0
+offset_left = 168.0
+offset_top = 508.0
+offset_right = 936.0
+offset_bottom = 548.0
+
+[node name="ConversationBackgroundUW1" type="TextureRect" parent="UI/UW1/ConversationUW1"]
+layout_mode = 0
+offset_left = 220.0
+offset_top = 200.0
+offset_right = 888.0
+offset_bottom = 532.0
+texture = ExtResource("7_qiq8a")
+
+[node name="ConversationTextUW1" type="RichTextLabel" parent="UI/UW1/ConversationUW1"]
+texture_filter = 1
+layout_mode = 0
+offset_left = 220.0
+offset_top = 187.0
+offset_right = 892.0
+offset_bottom = 519.0
+theme_override_colors/default_color = Color(0.2, 0.109804, 0.0745098, 1)
+theme_override_constants/line_separation = -25
+theme_override_fonts/normal_font = ExtResource("4_pfbet")
+theme_override_font_sizes/normal_font_size = 64
+bbcode_enabled = true
+text = "Hail, stranger!  What be thy
+business?  I have not seen thee in
+this place before.
+Hail, stranger!  What be thy
+business?  I have not seen thee in
+this place before.
+Hail, stranger!  What be thy
+business?  I have not seen thee in
+this place before.
+Hail, stranger!  What be thy
+business?  I have not seen thee in
+this place before.
+Hail, stranger!  What be thy
+"
+scroll_active = false
+autowrap_mode = 0
+
+[node name="PlayerTradeSelectedUW1_0" type="TextureRect" parent="UI/UW1/ConversationUW1"]
+layout_mode = 0
+offset_left = 572.0
+offset_top = 64.0
+offset_right = 592.0
+offset_bottom = 84.0
+
+[node name="PlayerTradeSelectedUW1_1" type="TextureRect" parent="UI/UW1/ConversationUW1"]
+layout_mode = 0
+offset_left = 740.0
+offset_top = 64.0
+offset_right = 760.0
+offset_bottom = 84.0
+
+[node name="PlayerTradeSelectedUW1_2" type="TextureRect" parent="UI/UW1/ConversationUW1"]
+layout_mode = 0
+offset_left = 572.0
+offset_top = 136.0
+offset_right = 592.0
+offset_bottom = 156.0
+
+[node name="PlayerTradeSelectedUW1_3" type="TextureRect" parent="UI/UW1/ConversationUW1"]
+layout_mode = 0
+offset_left = 740.0
+offset_top = 136.0
+offset_right = 760.0
+offset_bottom = 156.0
+
+[node name="PlayerTradeUW1_0" type="TextureRect" parent="UI/UW1/ConversationUW1"]
+layout_mode = 0
+offset_left = 591.0
+offset_top = 43.0
+offset_right = 655.0
+offset_bottom = 107.0
+
+[node name="PlayerTradeUW1_1" type="TextureRect" parent="UI/UW1/ConversationUW1"]
+layout_mode = 0
+offset_left = 676.0
+offset_top = 44.0
+offset_right = 740.0
+offset_bottom = 108.0
+
+[node name="PlayerTradeUW1_2" type="TextureRect" parent="UI/UW1/ConversationUW1"]
+layout_mode = 0
+offset_left = 592.0
+offset_top = 115.0
+offset_right = 656.0
+offset_bottom = 179.0
+
+[node name="PlayerTradeUW1_3" type="TextureRect" parent="UI/UW1/ConversationUW1"]
+layout_mode = 0
+offset_left = 676.0
+offset_top = 115.0
+offset_right = 740.0
+offset_bottom = 179.0
+
+[node name="NPCTradeUW1_0" type="TextureRect" parent="UI/UW1/ConversationUW1"]
+layout_mode = 0
+offset_left = 363.0
+offset_top = 42.0
+offset_right = 427.0
+offset_bottom = 106.0
+
+[node name="NPCTradeUW1_1" type="TextureRect" parent="UI/UW1/ConversationUW1"]
+layout_mode = 0
+offset_left = 448.0
+offset_top = 43.0
+offset_right = 512.0
+offset_bottom = 107.0
+
+[node name="NPCTradeUW1_2" type="TextureRect" parent="UI/UW1/ConversationUW1"]
+layout_mode = 0
+offset_left = 364.0
+offset_top = 114.0
+offset_right = 428.0
+offset_bottom = 178.0
+
+[node name="NPCTradeUW1_3" type="TextureRect" parent="UI/UW1/ConversationUW1"]
+layout_mode = 0
+offset_left = 448.0
+offset_top = 114.0
+offset_right = 512.0
+offset_bottom = 178.0
+
+[node name="NPCTradeSelectedUW1_0" type="TextureRect" parent="UI/UW1/ConversationUW1"]
+layout_mode = 0
+offset_left = 344.0
+offset_top = 64.0
+offset_right = 364.0
+offset_bottom = 84.0
+
+[node name="NPCTradeSelectedUW1_1" type="TextureRect" parent="UI/UW1/ConversationUW1"]
+layout_mode = 0
+offset_left = 512.0
+offset_top = 64.0
+offset_right = 532.0
+offset_bottom = 84.0
+
+[node name="NPCTradeSelectedUW1_2" type="TextureRect" parent="UI/UW1/ConversationUW1"]
+layout_mode = 0
+offset_left = 344.0
+offset_top = 136.0
+offset_right = 364.0
+offset_bottom = 156.0
+
+[node name="NPCTradeSelectedUW1_3" type="TextureRect" parent="UI/UW1/ConversationUW1"]
+layout_mode = 0
+offset_left = 512.0
+offset_top = 136.0
+offset_right = 532.0
+offset_bottom = 156.0
+
+[node name="ConversationScrollEdgeLeftUW1_1" type="TextureRect" parent="UI/UW1/ConversationUW1"]
+layout_mode = 0
+offset_left = 204.0
+offset_top = 204.0
+offset_right = 220.0
+offset_bottom = 312.0
+
+[node name="ConversationScrollEdgeLeftUW1_2" type="TextureRect" parent="UI/UW1/ConversationUW1"]
+layout_mode = 0
+offset_left = 204.0
+offset_top = 312.0
+offset_right = 220.0
+offset_bottom = 420.0
+
+[node name="ConversationScrollEdgeLeftUW1_3" type="TextureRect" parent="UI/UW1/ConversationUW1"]
+layout_mode = 0
+offset_left = 204.0
+offset_top = 420.0
+offset_right = 220.0
+offset_bottom = 528.0
+
+[node name="ConversationScrollEdgeRightUW1_1" type="TextureRect" parent="UI/UW1/ConversationUW1"]
+layout_mode = 0
+offset_left = 888.0
+offset_top = 204.0
+offset_right = 904.0
+offset_bottom = 312.0
+
+[node name="ConversationScrollEdgeRightUW1_2" type="TextureRect" parent="UI/UW1/ConversationUW1"]
+layout_mode = 0
+offset_left = 888.0
+offset_top = 312.0
+offset_right = 904.0
+offset_bottom = 420.0
+
+[node name="ConversationScrollEdgeRightUW1_3" type="TextureRect" parent="UI/UW1/ConversationUW1"]
+layout_mode = 0
+offset_left = 888.0
+offset_top = 420.0
+offset_right = 904.0
+offset_bottom = 528.0
+
+[node name="CutsceneSmallUW1" type="TextureRect" parent="UI/UW1"]
+visible = false
+offset_left = -384.0
+offset_top = -268.0
+offset_right = 896.0
+offset_bottom = 532.0
+mouse_filter = 2
+texture = ExtResource("20_n8sfi")
+
+[node name="Cuts3DWinUW1" type="TextureRect" parent="UI/UW1"]
+visible = false
+offset_left = 204.0
+offset_top = 72.0
+offset_right = 900.0
+offset_bottom = 532.0
+mouse_filter = 2
+
+[node name="OptionsButtonUW1" type="TextureRect" parent="UI/UW1"]
+offset_left = 32.0
+offset_top = 40.0
+offset_right = 144.0
+offset_bottom = 108.0
+
+[node name="TalkButtonUW1" type="TextureRect" parent="UI/UW1"]
+offset_left = 28.0
+offset_top = 108.0
+offset_right = 156.0
+offset_bottom = 184.0
+
+[node name="PickupButtonUW1" type="TextureRect" parent="UI/UW1"]
+offset_left = 24.0
+offset_top = 188.0
+offset_right = 152.0
+offset_bottom = 252.0
+
+[node name="LookButtonUW1" type="TextureRect" parent="UI/UW1"]
+offset_left = 24.0
+offset_top = 260.0
+offset_right = 132.0
+offset_bottom = 316.0
+
+[node name="AttackButtonUW1" type="TextureRect" parent="UI/UW1"]
+offset_left = 32.0
+offset_top = 320.0
+offset_right = 156.0
+offset_bottom = 396.0
+
+[node name="UseButtonUW1" type="TextureRect" parent="UI/UW1"]
+offset_left = 32.0
+offset_top = 396.0
+offset_right = 152.0
+offset_bottom = 472.0
+
+[node name="OptionsBackgroundUW1" type="TextureRect" parent="UI/UW1"]
+offset_left = 16.0
+offset_top = 40.0
+offset_right = 156.0
+offset_bottom = 472.0
+
+[node name="GameOptionsUW1_0" type="TextureRect" parent="UI/UW1"]
+offset_left = 20.0
+offset_top = 48.0
+offset_right = 144.0
+offset_bottom = 104.0
+
+[node name="GameOptionsUW1_1" type="TextureRect" parent="UI/UW1"]
+offset_left = 20.0
+offset_top = 108.0
+offset_right = 144.0
+offset_bottom = 164.0
+
+[node name="GameOptionsUW1_2" type="TextureRect" parent="UI/UW1"]
+offset_left = 20.0
+offset_top = 168.0
+offset_right = 144.0
+offset_bottom = 224.0
+
+[node name="GameOptionsUW1_3" type="TextureRect" parent="UI/UW1"]
+offset_left = 20.0
+offset_top = 228.0
+offset_right = 144.0
+offset_bottom = 284.0
+
+[node name="GameOptionsUW1_4" type="TextureRect" parent="UI/UW1"]
+offset_left = 20.0
+offset_top = 288.0
+offset_right = 144.0
+offset_bottom = 344.0
+
+[node name="GameOptionsUW1_5" type="TextureRect" parent="UI/UW1"]
+offset_left = 20.0
+offset_top = 348.0
+offset_right = 144.0
+offset_bottom = 404.0
+
+[node name="GameOptionsUW1_6" type="TextureRect" parent="UI/UW1"]
+offset_left = 20.0
+offset_top = 408.0
+offset_right = 144.0
+offset_bottom = 464.0
+
+[node name="PowerGemUW1" type="TextureRect" parent="UI/UW1"]
+offset_left = 16.0
+offset_top = 556.0
+offset_right = 140.0
+offset_bottom = 604.0
+
+[node name="UW2" type="CanvasLayer" parent="UI"]
+visible = false
+
+[node name="WeaponAnimUW2" type="TextureRect" parent="UI/UW2"]
+offset_left = 60.0
+offset_top = 64.0
+offset_right = 900.0
+offset_bottom = 574.0
+mouse_filter = 2
+
+[node name="placeholdermainuw2" type="TextureRect" parent="UI/UW2"]
+offset_right = 1280.0
+offset_bottom = 800.0
+mouse_filter = 2
+texture = ExtResource("21_3ww2u")
+
+[node name="3DWinUW2" type="TextureRect" parent="UI/UW2"]
+texture_filter = 1
+material = SubResource("ShaderMaterial_7v506")
+custom_minimum_size = Vector2(320, 200)
+offset_right = 1280.0
+offset_bottom = 800.0
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 2
+
+[node name="PanelBlack2" type="TextureRect" parent="UI/UW2"]
+offset_left = 946.0
+offset_top = 28.0
+offset_right = 1262.0
+offset_bottom = 476.0
+mouse_filter = 0
+texture = ExtResource("8_mis7n")
+
+[node name="MessageScrollPanelUW2" type="Panel" parent="UI/UW2"]
+self_modulate = Color(1, 1, 1, 0)
+
+[node name="messageScrollBackgroundUW2" type="TextureRect" parent="UI/UW2/MessageScrollPanelUW2"]
+layout_mode = 0
+offset_left = 64.0
+offset_top = 676.0
+offset_right = 896.0
+offset_bottom = 792.0
+texture = ExtResource("22_vajvs")
+
+[node name="messageScrollUW2" type="RichTextLabel" parent="UI/UW2/MessageScrollPanelUW2"]
+texture_filter = 1
+layout_mode = 0
+offset_left = 73.0
+offset_top = 656.0
+offset_right = 913.0
+offset_bottom = 796.0
+mouse_filter = 1
+theme_override_colors/default_color = Color(0, 0, 0, 1)
+theme_override_constants/line_separation = -25
+theme_override_fonts/normal_font = ExtResource("4_pfbet")
+theme_override_font_sizes/normal_font_size = 64
+bbcode_enabled = true
+text = "Line 1
+line 2
+line 3
+line 4
+aaaaaaaaaaaaaaaaaaa"
+scroll_active = false
+autowrap_mode = 0
+
+[node name="MessageScrollEdgeLeftUW2" type="TextureRect" parent="UI/UW2/MessageScrollPanelUW2"]
+layout_mode = 0
+offset_left = 48.0
+offset_top = 676.0
+offset_right = 64.0
+offset_bottom = 792.0
+
+[node name="MessageScrollEdgeRightUW2" type="TextureRect" parent="UI/UW2/MessageScrollPanelUW2"]
+layout_mode = 0
+offset_left = 896.0
+offset_top = 676.0
+offset_right = 912.0
+offset_bottom = 792.0
+
+[node name="OptionsButtonUW2" type="TextureRect" parent="UI/UW2"]
+offset_left = 1179.0
+offset_top = 742.0
+offset_right = 1279.0
+offset_bottom = 798.0
+
+[node name="TalkButtonUW2" type="TextureRect" parent="UI/UW2"]
+offset_left = 971.0
+offset_top = 742.0
+offset_right = 1071.0
+offset_bottom = 798.0
+
+[node name="PickupButtonUW2" type="TextureRect" parent="UI/UW2"]
+offset_left = 1179.0
+offset_top = 682.0
+offset_right = 1279.0
+offset_bottom = 738.0
+
+[node name="LookButtonUW2" type="TextureRect" parent="UI/UW2"]
+offset_left = 1075.0
+offset_top = 742.0
+offset_right = 1175.0
+offset_bottom = 798.0
+
+[node name="AttackButtonUW2" type="TextureRect" parent="UI/UW2"]
+offset_left = 971.0
+offset_top = 682.0
+offset_right = 1071.0
+offset_bottom = 738.0
+
+[node name="UseButtonUW2" type="TextureRect" parent="UI/UW2"]
+offset_left = 1075.0
+offset_top = 682.0
+offset_right = 1175.0
+offset_bottom = 738.0
+
+[node name="CompassUW2" type="Panel" parent="UI/UW2"]
+self_modulate = Color(1, 1, 1, 0)
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="CompassBG0" type="TextureRect" parent="UI/UW2/CompassUW2"]
+visible = false
+layout_mode = 0
+offset_left = 376.0
+offset_top = 592.0
+offset_right = 584.0
+offset_bottom = 656.0
+
+[node name="CompassBG1" type="TextureRect" parent="UI/UW2/CompassUW2"]
+visible = false
+layout_mode = 0
+offset_left = 376.0
+offset_top = 592.0
+offset_right = 584.0
+offset_bottom = 656.0
+
+[node name="CompassBG2" type="TextureRect" parent="UI/UW2/CompassUW2"]
+visible = false
+layout_mode = 0
+offset_left = 376.0
+offset_top = 592.0
+offset_right = 584.0
+offset_bottom = 656.0
+
+[node name="CompassBG3" type="TextureRect" parent="UI/UW2/CompassUW2"]
+visible = false
+layout_mode = 0
+offset_left = 376.0
+offset_top = 592.0
+offset_right = 584.0
+offset_bottom = 656.0
+
+[node name="CompassPoint0" type="TextureRect" parent="UI/UW2/CompassUW2"]
+visible = false
+layout_mode = 0
+offset_left = 460.0
+offset_top = 592.0
+offset_right = 500.0
+offset_bottom = 608.0
+
+[node name="CompassPoint1" type="TextureRect" parent="UI/UW2/CompassUW2"]
+visible = false
+layout_mode = 0
+offset_left = 432.0
+offset_top = 592.0
+offset_right = 472.0
+offset_bottom = 612.0
+
+[node name="CompassPoint2" type="TextureRect" parent="UI/UW2/CompassUW2"]
+visible = false
+layout_mode = 0
+offset_left = 408.0
+offset_top = 600.0
+offset_right = 440.0
+offset_bottom = 616.0
+
+[node name="CompassPoint3" type="TextureRect" parent="UI/UW2/CompassUW2"]
+visible = false
+layout_mode = 0
+offset_left = 384.0
+offset_top = 604.0
+offset_right = 416.0
+offset_bottom = 624.0
+
+[node name="CompassPoint4" type="TextureRect" parent="UI/UW2/CompassUW2"]
+visible = false
+layout_mode = 0
+offset_left = 376.0
+offset_top = 612.0
+offset_right = 404.0
+offset_bottom = 632.0
+
+[node name="CompassPoint5" type="TextureRect" parent="UI/UW2/CompassUW2"]
+visible = false
+layout_mode = 0
+offset_left = 376.0
+offset_top = 616.0
+offset_right = 416.0
+offset_bottom = 640.0
+
+[node name="CompassPoint6" type="TextureRect" parent="UI/UW2/CompassUW2"]
+visible = false
+layout_mode = 0
+offset_left = 400.0
+offset_top = 628.0
+offset_right = 432.0
+offset_bottom = 648.0
+
+[node name="CompassPoint7" type="TextureRect" parent="UI/UW2/CompassUW2"]
+visible = false
+layout_mode = 0
+offset_left = 428.0
+offset_top = 632.0
+offset_right = 472.0
+offset_bottom = 652.0
+
+[node name="CompassPoint8" type="TextureRect" parent="UI/UW2/CompassUW2"]
+visible = false
+layout_mode = 0
+offset_left = 456.0
+offset_top = 636.0
+offset_right = 504.0
+offset_bottom = 656.0
+
+[node name="CompassPoint9" type="TextureRect" parent="UI/UW2/CompassUW2"]
+visible = false
+layout_mode = 0
+offset_left = 488.0
+offset_top = 632.0
+offset_right = 532.0
+offset_bottom = 652.0
+
+[node name="CompassPoint10" type="TextureRect" parent="UI/UW2/CompassUW2"]
+visible = false
+layout_mode = 0
+offset_left = 528.0
+offset_top = 628.0
+offset_right = 560.0
+offset_bottom = 648.0
+
+[node name="CompassPoint11" type="TextureRect" parent="UI/UW2/CompassUW2"]
+visible = false
+layout_mode = 0
+offset_left = 544.0
+offset_top = 616.0
+offset_right = 580.0
+offset_bottom = 640.0
+
+[node name="CompassPoint12" type="TextureRect" parent="UI/UW2/CompassUW2"]
+visible = false
+layout_mode = 0
+offset_left = 556.0
+offset_top = 612.0
+offset_right = 584.0
+offset_bottom = 632.0
+
+[node name="CompassPoint13" type="TextureRect" parent="UI/UW2/CompassUW2"]
+visible = false
+layout_mode = 0
+offset_left = 544.0
+offset_top = 604.0
+offset_right = 576.0
+offset_bottom = 624.0
+
+[node name="CompassPoint14" type="TextureRect" parent="UI/UW2/CompassUW2"]
+visible = false
+layout_mode = 0
+offset_left = 520.0
+offset_top = 596.0
+offset_right = 548.0
+offset_bottom = 616.0
+
+[node name="CompassPoint15" type="TextureRect" parent="UI/UW2/CompassUW2"]
+visible = false
+layout_mode = 0
+offset_left = 488.0
+offset_top = 592.0
+offset_right = 528.0
+offset_bottom = 608.0
+
+[node name="CompassClickArea" type="TextureRect" parent="UI/UW2/CompassUW2"]
+layout_mode = 0
+offset_left = 380.0
+offset_top = 588.0
+offset_right = 580.0
+offset_bottom = 648.0
+
+[node name="CutsceneSmallUW2" type="TextureRect" parent="UI/UW2"]
+offset_left = -384.0
+offset_top = -268.0
+offset_right = 896.0
+offset_bottom = 532.0
+mouse_filter = 2
+
+[node name="Cuts3DWinUW2" type="TextureRect" parent="UI/UW2"]
+offset_left = 60.0
+offset_top = 60.0
+offset_right = 900.0
+offset_bottom = 580.0
+mouse_filter = 2
+
+[node name="GameOptionsBackgroundUW2" type="TextureRect" parent="UI/UW2"]
+offset_left = 944.0
+offset_top = 20.0
+offset_right = 1264.0
+offset_bottom = 484.0
+
+[node name="GameOptionsUW2_0" type="TextureRect" parent="UI/UW2"]
+offset_left = 948.0
+offset_top = 32.0
+offset_right = 1252.0
+offset_bottom = 92.0
+
+[node name="GameOptionsUW2_1" type="TextureRect" parent="UI/UW2"]
+offset_left = 948.0
+offset_top = 96.0
+offset_right = 1252.0
+offset_bottom = 156.0
+
+[node name="GameOptionsUW2_2" type="TextureRect" parent="UI/UW2"]
+offset_left = 948.0
+offset_top = 160.0
+offset_right = 1252.0
+offset_bottom = 220.0
+
+[node name="GameOptionsUW2_3" type="TextureRect" parent="UI/UW2"]
+offset_left = 948.0
+offset_top = 224.0
+offset_right = 1252.0
+offset_bottom = 284.0
+
+[node name="GameOptionsUW2_4" type="TextureRect" parent="UI/UW2"]
+offset_left = 948.0
+offset_top = 288.0
+offset_right = 1252.0
+offset_bottom = 348.0
+
+[node name="GameOptionsUW2_5" type="TextureRect" parent="UI/UW2"]
+offset_left = 948.0
+offset_top = 353.0
+offset_right = 1252.0
+offset_bottom = 413.0
+
+[node name="GameOptionsUW2_6" type="TextureRect" parent="UI/UW2"]
+offset_left = 948.0
+offset_top = 416.0
+offset_right = 1252.0
+offset_bottom = 476.0
+
+[node name="PowerGemUW2" type="TextureRect" parent="UI/UW2"]
+offset_left = 452.0
+offset_top = 604.0
+offset_right = 508.0
+offset_bottom = 624.0
+
+[node name="ConversationUW2" type="Panel" parent="UI/UW2"]
+self_modulate = Color(1, 1, 1, 0)
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="PlayerPortraitUW2" type="TextureRect" parent="UI/UW2/ConversationUW2"]
+layout_mode = 0
+offset_left = 672.0
+offset_top = 11.0
+offset_right = 928.0
+offset_bottom = 291.0
+
+[node name="NPCPortraitUW2" type="TextureRect" parent="UI/UW2/ConversationUW2"]
+layout_mode = 0
+offset_left = 8.0
+offset_top = 13.0
+offset_right = 264.0
+offset_bottom = 293.0
+
+[node name="PlayerNameLabelUW1" type="RichTextLabel" parent="UI/UW2/ConversationUW2"]
+layout_mode = 0
+offset_left = 282.0
+offset_top = -16.0
+offset_right = 662.0
+offset_bottom = 34.0
+theme_override_fonts/normal_font = ExtResource("4_pfbet")
+theme_override_font_sizes/normal_font_size = 64
+bbcode_enabled = true
+text = "Character Name"
+
+[node name="NPCNameLabelUW2" type="RichTextLabel" parent="UI/UW2/ConversationUW2"]
+layout_mode = 0
+offset_left = 273.0
+offset_top = 258.0
+offset_right = 653.0
+offset_bottom = 308.0
+theme_override_fonts/normal_font = ExtResource("4_pfbet")
+theme_override_font_sizes/normal_font_size = 64
+bbcode_enabled = true
+text = "Character Name"
+
+[node name="ConversationTextUW2" type="RichTextLabel" parent="UI/UW2/ConversationUW2"]
+texture_filter = 1
+layout_mode = 0
+offset_left = 96.0
+offset_top = 320.0
+offset_right = 880.0
+offset_bottom = 652.0
+theme_override_colors/default_color = Color(0.647059, 0.164706, 0.164706, 1)
+theme_override_constants/line_separation = -25
+theme_override_fonts/normal_font = ExtResource("4_pfbet")
+theme_override_font_sizes/normal_font_size = 64
+bbcode_enabled = true
+text = "Hail, stranger!  What be thy business?  I have not seen thee in this place before.
+business?  I have not seen thee in"
+scroll_active = false
+autowrap_mode = 0
+
+[node name="PlayerTradeUW2_0" type="TextureRect" parent="UI/UW2/ConversationUW2"]
+layout_mode = 0
+offset_left = 496.0
+offset_top = 52.0
+offset_right = 560.0
+offset_bottom = 116.0
+
+[node name="PlayerTradeUW2_1" type="TextureRect" parent="UI/UW2/ConversationUW2"]
+layout_mode = 0
+offset_left = 571.0
+offset_top = 52.0
+offset_right = 635.0
+offset_bottom = 116.0
+
+[node name="PlayerTradeUW2_2" type="TextureRect" parent="UI/UW2/ConversationUW2"]
+layout_mode = 0
+offset_left = 497.0
+offset_top = 123.0
+offset_right = 561.0
+offset_bottom = 187.0
+
+[node name="PlayerTradeUW2_3" type="TextureRect" parent="UI/UW2/ConversationUW2"]
+layout_mode = 0
+offset_left = 572.0
+offset_top = 123.0
+offset_right = 636.0
+offset_bottom = 187.0
+
+[node name="PlayerTradeUW2_4" type="TextureRect" parent="UI/UW2/ConversationUW2"]
+layout_mode = 0
+offset_left = 496.0
+offset_top = 196.0
+offset_right = 560.0
+offset_bottom = 260.0
+
+[node name="PlayerTradeUW2_5" type="TextureRect" parent="UI/UW2/ConversationUW2"]
+layout_mode = 0
+offset_left = 571.0
+offset_top = 196.0
+offset_right = 635.0
+offset_bottom = 260.0
+
+[node name="NPCTradeUW2_0" type="TextureRect" parent="UI/UW2/ConversationUW2"]
+layout_mode = 0
+offset_left = 300.0
+offset_top = 50.0
+offset_right = 364.0
+offset_bottom = 114.0
+
+[node name="NPCTradeUW2_1" type="TextureRect" parent="UI/UW2/ConversationUW2"]
+layout_mode = 0
+offset_left = 375.0
+offset_top = 50.0
+offset_right = 439.0
+offset_bottom = 114.0
+
+[node name="NPCTradeUW2_2" type="TextureRect" parent="UI/UW2/ConversationUW2"]
+layout_mode = 0
+offset_left = 301.0
+offset_top = 121.0
+offset_right = 365.0
+offset_bottom = 185.0
+
+[node name="NPCTradeUW2_3" type="TextureRect" parent="UI/UW2/ConversationUW2"]
+layout_mode = 0
+offset_left = 376.0
+offset_top = 121.0
+offset_right = 440.0
+offset_bottom = 185.0
+
+[node name="NPCTradeUW2_4" type="TextureRect" parent="UI/UW2/ConversationUW2"]
+layout_mode = 0
+offset_left = 300.0
+offset_top = 194.0
+offset_right = 364.0
+offset_bottom = 258.0
+
+[node name="NPCTradeUW2_5" type="TextureRect" parent="UI/UW2/ConversationUW2"]
+layout_mode = 0
+offset_left = 375.0
+offset_top = 194.0
+offset_right = 439.0
+offset_bottom = 258.0
+
+[node name="PlayerTradeSelectedUW2_0" type="TextureRect" parent="UI/UW2/ConversationUW2"]
+layout_mode = 0
+offset_left = 472.0
+offset_top = 72.0
+offset_right = 492.0
+offset_bottom = 96.0
+
+[node name="PlayerTradeSelectedUW2_1" type="TextureRect" parent="UI/UW2/ConversationUW2"]
+layout_mode = 0
+offset_left = 640.0
+offset_top = 72.0
+offset_right = 660.0
+offset_bottom = 96.0
+
+[node name="PlayerTradeSelectedUW2_2" type="TextureRect" parent="UI/UW2/ConversationUW2"]
+layout_mode = 0
+offset_left = 472.0
+offset_top = 144.0
+offset_right = 492.0
+offset_bottom = 168.0
+
+[node name="PlayerTradeSelectedUW2_3" type="TextureRect" parent="UI/UW2/ConversationUW2"]
+layout_mode = 0
+offset_left = 640.0
+offset_top = 144.0
+offset_right = 660.0
+offset_bottom = 168.0
+
+[node name="PlayerTradeSelectedUW2_4" type="TextureRect" parent="UI/UW2/ConversationUW2"]
+layout_mode = 0
+offset_left = 472.0
+offset_top = 216.0
+offset_right = 492.0
+offset_bottom = 240.0
+
+[node name="PlayerTradeSelectedUW2_5" type="TextureRect" parent="UI/UW2/ConversationUW2"]
+layout_mode = 0
+offset_left = 640.0
+offset_top = 216.0
+offset_right = 660.0
+offset_bottom = 240.0
+
+[node name="NPCTradeSelectedUW2_0" type="TextureRect" parent="UI/UW2/ConversationUW2"]
+layout_mode = 0
+offset_left = 276.0
+offset_top = 72.0
+offset_right = 296.0
+offset_bottom = 96.0
+
+[node name="NPCTradeSelectedUW2_1" type="TextureRect" parent="UI/UW2/ConversationUW2"]
+layout_mode = 0
+offset_left = 444.0
+offset_top = 72.0
+offset_right = 464.0
+offset_bottom = 96.0
+
+[node name="NPCTradeSelectedUW2_2" type="TextureRect" parent="UI/UW2/ConversationUW2"]
+layout_mode = 0
+offset_left = 276.0
+offset_top = 144.0
+offset_right = 296.0
+offset_bottom = 168.0
+
+[node name="NPCTradeSelectedUW2_3" type="TextureRect" parent="UI/UW2/ConversationUW2"]
+layout_mode = 0
+offset_left = 444.0
+offset_top = 144.0
+offset_right = 464.0
+offset_bottom = 168.0
+
+[node name="NPCTradeSelectedUW2_4" type="TextureRect" parent="UI/UW2/ConversationUW2"]
+layout_mode = 0
+offset_left = 276.0
+offset_top = 216.0
+offset_right = 296.0
+offset_bottom = 240.0
+
+[node name="NPCTradeSelectedUW2_5" type="TextureRect" parent="UI/UW2/ConversationUW2"]
+layout_mode = 0
+offset_left = 444.0
+offset_top = 216.0
+offset_right = 464.0
+offset_bottom = 240.0
+
+[node name="ConversationScrollEdgeLeftUW2_1" type="TextureRect" parent="UI/UW2/ConversationUW2"]
+layout_mode = 0
+offset_left = 68.0
+offset_top = 320.0
+offset_right = 84.0
+offset_bottom = 428.0
+
+[node name="ConversationScrollEdgeLeftUW2_2" type="TextureRect" parent="UI/UW2/ConversationUW2"]
+layout_mode = 0
+offset_left = 68.0
+offset_top = 428.0
+offset_right = 84.0
+offset_bottom = 536.0
+
+[node name="ConversationScrollEdgeLeftUW2_3" type="TextureRect" parent="UI/UW2/ConversationUW2"]
+layout_mode = 0
+offset_left = 68.0
+offset_top = 536.0
+offset_right = 84.0
+offset_bottom = 644.0
+
+[node name="ConversationScrollEdgeRightUW2_1" type="TextureRect" parent="UI/UW2/ConversationUW2"]
+layout_mode = 0
+offset_left = 876.0
+offset_top = 320.0
+offset_right = 892.0
+offset_bottom = 428.0
+
+[node name="ConversationScrollEdgeRightUW2_2" type="TextureRect" parent="UI/UW2/ConversationUW2"]
+layout_mode = 0
+offset_left = 876.0
+offset_top = 428.0
+offset_right = 892.0
+offset_bottom = 536.0
+
+[node name="ConversationScrollEdgeRightUW2_3" type="TextureRect" parent="UI/UW2/ConversationUW2"]
+layout_mode = 0
+offset_left = 876.0
+offset_top = 536.0
+offset_right = 892.0
+offset_bottom = 644.0
+
+[node name="Common" type="CanvasLayer" parent="UI"]
+
+[node name="PaperDoll" type="Panel" parent="UI/Common"]
+self_modulate = Color(1, 1, 1, 0)
+offset_left = 1110.0
+offset_right = 1150.0
+offset_bottom = 40.0
+
+[node name="PaperDollPanel" type="TextureRect" parent="UI/Common/PaperDoll"]
+layout_mode = 0
+offset_left = -166.0
+offset_top = 28.0
+offset_right = 166.0
+offset_bottom = 484.0
+mouse_filter = 0
+
+[node name="Body" type="TextureRect" parent="UI/Common/PaperDoll"]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -90.0
+offset_top = 44.0
+offset_right = 54.0
+offset_bottom = 320.0
+grow_horizontal = 2
+mouse_filter = 2
+
+[node name="Leggings" type="TextureRect" parent="UI/Common/PaperDoll"]
+layout_mode = 0
+offset_left = -38.0
+offset_top = 96.0
+offset_right = 38.0
+offset_bottom = 300.0
+mouse_filter = 2
+
+[node name="Armour" type="TextureRect" parent="UI/Common/PaperDoll"]
+layout_mode = 0
+offset_left = -61.0
+offset_top = 92.0
+offset_right = 71.0
+offset_bottom = 268.0
+mouse_filter = 2
+
+[node name="Helm" type="TextureRect" parent="UI/Common/PaperDoll"]
+layout_mode = 0
+offset_left = -41.0
+offset_top = 44.0
+offset_right = 39.0
+offset_bottom = 124.0
+
+[node name="Boots" type="TextureRect" parent="UI/Common/PaperDoll"]
+layout_mode = 0
+offset_left = -46.0
+offset_top = 264.0
+offset_right = 38.0
+offset_bottom = 320.0
+
+[node name="Gloves" type="TextureRect" parent="UI/Common/PaperDoll"]
+layout_mode = 0
+offset_left = -66.0
+offset_top = 176.0
+offset_right = 66.0
+offset_bottom = 236.0
+mouse_filter = 2
+
+[node name="RightRing" type="TextureRect" parent="UI/Common/PaperDoll"]
+layout_mode = 0
+offset_left = -93.0
+offset_top = 204.0
+offset_right = -29.0
+offset_bottom = 269.0
+mouse_filter = 2
+
+[node name="LeftRing" type="TextureRect" parent="UI/Common/PaperDoll"]
+layout_mode = 0
+offset_left = 31.0
+offset_top = 204.0
+offset_right = 95.0
+offset_bottom = 269.0
+mouse_filter = 2
+
+[node name="ArmourInput" type="TextureRect" parent="UI/Common/PaperDoll"]
+layout_mode = 0
+offset_left = -36.0
+offset_top = 113.0
+offset_right = 34.0
+offset_bottom = 193.0
+
+[node name="LeggingsInput" type="TextureRect" parent="UI/Common/PaperDoll"]
+layout_mode = 0
+offset_left = -23.0
+offset_top = 196.0
+offset_right = 27.0
+offset_bottom = 286.0
+
+[node name="GlovesInput1" type="TextureRect" parent="UI/Common/PaperDoll"]
+layout_mode = 0
+offset_left = -58.0
+offset_top = 195.0
+offset_right = -26.0
+offset_bottom = 227.0
+
+[node name="GlovesInput2" type="TextureRect" parent="UI/Common/PaperDoll"]
+layout_mode = 0
+offset_left = 30.0
+offset_top = 195.0
+offset_right = 62.0
+offset_bottom = 227.0
+
+[node name="LeftShoulder" type="TextureRect" parent="UI/Common/PaperDoll"]
+layout_mode = 0
+offset_left = 67.0
+offset_top = 50.0
+offset_right = 131.0
+offset_bottom = 115.0
+
+[node name="lblLeftShoulder" type="Label" parent="UI/Common/PaperDoll/LeftShoulder"]
+texture_filter = 1
+layout_mode = 0
+offset_left = 12.0
+offset_top = -28.0
+offset_right = 60.0
+offset_bottom = 20.0
+theme = SubResource("Theme_i11v8")
+theme_override_fonts/font = ExtResource("5_8iiwt")
+theme_override_font_sizes/font_size = 64
+text = "255"
+max_lines_visible = 1
+visible_characters = 3
+
+[node name="RightShoulder" type="TextureRect" parent="UI/Common/PaperDoll"]
+layout_mode = 0
+offset_left = -130.0
+offset_top = 50.0
+offset_right = -66.0
+offset_bottom = 115.0
+
+[node name="lblRightShoulder" type="Label" parent="UI/Common/PaperDoll/RightShoulder"]
+texture_filter = 1
+layout_mode = 0
+offset_left = 12.0
+offset_top = -28.0
+offset_right = 60.0
+offset_bottom = 20.0
+theme = SubResource("Theme_i11v8")
+theme_override_fonts/font = ExtResource("5_8iiwt")
+theme_override_font_sizes/font_size = 64
+text = "255"
+max_lines_visible = 1
+visible_characters = 3
+
+[node name="LeftHand" type="TextureRect" parent="UI/Common/PaperDoll"]
+layout_mode = 0
+offset_left = 74.0
+offset_top = 138.0
+offset_right = 138.0
+offset_bottom = 202.0
+
+[node name="lblLeftHand" type="Label" parent="UI/Common/PaperDoll/LeftHand"]
+texture_filter = 1
+layout_mode = 0
+offset_left = 12.0
+offset_top = -28.0
+offset_right = 60.0
+offset_bottom = 20.0
+theme = SubResource("Theme_i11v8")
+theme_override_fonts/font = ExtResource("5_8iiwt")
+theme_override_font_sizes/font_size = 64
+text = "255"
+max_lines_visible = 1
+visible_characters = 3
+
+[node name="RightHand" type="TextureRect" parent="UI/Common/PaperDoll"]
+layout_mode = 0
+offset_left = -141.0
+offset_top = 138.0
+offset_right = -77.0
+offset_bottom = 202.0
+
+[node name="lblRightHand" type="Label" parent="UI/Common/PaperDoll/RightHand"]
+texture_filter = 1
+layout_mode = 0
+offset_left = 12.0
+offset_top = -28.0
+offset_right = 60.0
+offset_bottom = 20.0
+theme = SubResource("Theme_i11v8")
+theme_override_fonts/font = ExtResource("5_8iiwt")
+theme_override_font_sizes/font_size = 64
+text = "255"
+max_lines_visible = 1
+visible_characters = 3
+
+[node name="RightRingInput" type="TextureRect" parent="UI/Common/PaperDoll"]
+layout_mode = 0
+offset_left = -78.0
+offset_top = 222.0
+offset_right = -46.0
+offset_bottom = 254.0
+
+[node name="LeftRingInput" type="TextureRect" parent="UI/Common/PaperDoll"]
+layout_mode = 0
+offset_left = 47.0
+offset_top = 222.0
+offset_right = 79.0
+offset_bottom = 254.0
+
+[node name="BackPackBG" type="TextureRect" parent="UI/Common/PaperDoll"]
+layout_mode = 0
+offset_left = -166.0
+offset_top = 320.0
+offset_right = 174.0
+offset_bottom = 484.0
+
+[node name="Back0" type="TextureRect" parent="UI/Common/PaperDoll"]
+layout_mode = 0
+offset_left = -144.0
+offset_top = 328.0
+offset_right = -80.0
+offset_bottom = 392.0
+
+[node name="lblBack0" type="Label" parent="UI/Common/PaperDoll/Back0"]
+texture_filter = 1
+layout_mode = 0
+offset_left = 12.0
+offset_top = -28.0
+offset_right = 60.0
+offset_bottom = 20.0
+theme = SubResource("Theme_i11v8")
+theme_override_fonts/font = ExtResource("5_8iiwt")
+theme_override_font_sizes/font_size = 64
+text = "255"
+max_lines_visible = 1
+visible_characters = 3
+
+[node name="Back1" type="TextureRect" parent="UI/Common/PaperDoll"]
+layout_mode = 0
+offset_left = -70.0
+offset_top = 328.0
+offset_right = -6.0
+offset_bottom = 392.0
+
+[node name="lblBack1" type="Label" parent="UI/Common/PaperDoll/Back1"]
+texture_filter = 1
+layout_mode = 0
+offset_left = 12.0
+offset_top = -28.0
+offset_right = 60.0
+offset_bottom = 20.0
+theme = SubResource("Theme_i11v8")
+theme_override_fonts/font = ExtResource("5_8iiwt")
+theme_override_font_sizes/font_size = 64
+text = "255"
+max_lines_visible = 1
+visible_characters = 3
+
+[node name="Back2" type="TextureRect" parent="UI/Common/PaperDoll"]
+layout_mode = 0
+offset_left = 6.0
+offset_top = 328.0
+offset_right = 70.0
+offset_bottom = 392.0
+
+[node name="lblBack2" type="Label" parent="UI/Common/PaperDoll/Back2"]
+texture_filter = 1
+layout_mode = 0
+offset_left = 12.0
+offset_top = -28.0
+offset_right = 60.0
+offset_bottom = 20.0
+theme = SubResource("Theme_i11v8")
+theme_override_fonts/font = ExtResource("5_8iiwt")
+theme_override_font_sizes/font_size = 64
+text = "255"
+max_lines_visible = 1
+visible_characters = 3
+
+[node name="Back3" type="TextureRect" parent="UI/Common/PaperDoll"]
+layout_mode = 0
+offset_left = 82.0
+offset_top = 327.0
+offset_right = 146.0
+offset_bottom = 391.0
+
+[node name="lblBack3" type="Label" parent="UI/Common/PaperDoll/Back3"]
+texture_filter = 1
+layout_mode = 0
+offset_left = 12.0
+offset_top = -28.0
+offset_right = 60.0
+offset_bottom = 20.0
+theme = SubResource("Theme_i11v8")
+theme_override_fonts/font = ExtResource("5_8iiwt")
+theme_override_font_sizes/font_size = 64
+text = "255"
+max_lines_visible = 1
+visible_characters = 3
+
+[node name="Back4" type="TextureRect" parent="UI/Common/PaperDoll"]
+layout_mode = 0
+offset_left = -144.0
+offset_top = 399.0
+offset_right = -80.0
+offset_bottom = 463.0
+
+[node name="lblBack4" type="Label" parent="UI/Common/PaperDoll/Back4"]
+texture_filter = 1
+layout_mode = 0
+offset_left = 12.0
+offset_top = -28.0
+offset_right = 60.0
+offset_bottom = 20.0
+theme = SubResource("Theme_i11v8")
+theme_override_fonts/font = ExtResource("5_8iiwt")
+theme_override_font_sizes/font_size = 64
+text = "255"
+max_lines_visible = 1
+visible_characters = 3
+
+[node name="Back5" type="TextureRect" parent="UI/Common/PaperDoll"]
+layout_mode = 0
+offset_left = -70.0
+offset_top = 399.0
+offset_right = -6.0
+offset_bottom = 463.0
+
+[node name="lblBack5" type="Label" parent="UI/Common/PaperDoll/Back5"]
+texture_filter = 1
+layout_mode = 0
+offset_left = 12.0
+offset_top = -28.0
+offset_right = 60.0
+offset_bottom = 20.0
+theme = SubResource("Theme_i11v8")
+theme_override_fonts/font = ExtResource("5_8iiwt")
+theme_override_font_sizes/font_size = 64
+text = "255"
+max_lines_visible = 1
+visible_characters = 3
+
+[node name="Back6" type="TextureRect" parent="UI/Common/PaperDoll"]
+layout_mode = 0
+offset_left = 5.0
+offset_top = 399.0
+offset_right = 69.0
+offset_bottom = 463.0
+
+[node name="lblBack6" type="Label" parent="UI/Common/PaperDoll/Back6"]
+texture_filter = 1
+layout_mode = 0
+offset_left = 12.0
+offset_top = -28.0
+offset_right = 60.0
+offset_bottom = 20.0
+theme = SubResource("Theme_i11v8")
+theme_override_fonts/font = ExtResource("5_8iiwt")
+theme_override_font_sizes/font_size = 64
+text = "255"
+max_lines_visible = 1
+visible_characters = 3
+
+[node name="Back7" type="TextureRect" parent="UI/Common/PaperDoll"]
+layout_mode = 0
+offset_left = 81.0
+offset_top = 400.0
+offset_right = 145.0
+offset_bottom = 464.0
+
+[node name="lblBack7" type="Label" parent="UI/Common/PaperDoll/Back7"]
+texture_filter = 1
+layout_mode = 0
+offset_left = 12.0
+offset_top = -28.0
+offset_right = 60.0
+offset_bottom = 20.0
+theme = SubResource("Theme_i11v8")
+theme_override_fonts/font = ExtResource("5_8iiwt")
+theme_override_font_sizes/font_size = 64
+text = "255"
+max_lines_visible = 1
+visible_characters = 3
+
+[node name="OpenedContainer" type="TextureRect" parent="UI/Common/PaperDoll"]
+layout_mode = 0
+offset_left = -143.0
+offset_top = 257.0
+offset_right = -79.0
+offset_bottom = 321.0
+
+[node name="UpArrow" type="TextureRect" parent="UI/Common/PaperDoll"]
+layout_mode = 0
+offset_left = 58.0
+offset_top = 280.0
+offset_right = 90.0
+offset_bottom = 320.0
+
+[node name="DownArrow" type="TextureRect" parent="UI/Common/PaperDoll"]
+layout_mode = 0
+offset_left = 98.0
+offset_top = 280.0
+offset_right = 130.0
+offset_bottom = 320.0
+
+[node name="WeightCapacity" type="Label" parent="UI/Common/PaperDoll"]
+texture_filter = 1
+layout_mode = 0
+offset_left = 86.0
+offset_top = 213.0
+offset_right = 134.0
+offset_bottom = 260.0
+theme = SubResource("Theme_i11v8")
+theme_override_fonts/font = ExtResource("4_pfbet")
+theme_override_font_sizes/font_size = 64
+text = "255"
+horizontal_alignment = 1
+vertical_alignment = 1
+max_lines_visible = 1
+visible_characters = 3
+
+[node name="RuneBag" type="Panel" parent="UI/Common"]
+visible = false
+self_modulate = Color(1, 1, 1, 0)
+offset_left = 1110.0
+offset_right = 1150.0
+offset_bottom = 40.0
+
+[node name="RuneBagPanel" type="TextureRect" parent="UI/Common/RuneBag"]
+layout_mode = 0
+offset_left = -166.0
+offset_top = 28.0
+offset_right = 166.0
+offset_bottom = 484.0
+
+[node name="Rune0" type="TextureRect" parent="UI/Common/RuneBag"]
+layout_mode = 0
+offset_left = -133.0
+offset_top = 48.0
+offset_right = -69.0
+offset_bottom = 112.0
+
+[node name="Rune1" type="TextureRect" parent="UI/Common/RuneBag"]
+layout_mode = 0
+offset_left = -63.0
+offset_top = 48.0
+offset_right = 1.0
+offset_bottom = 112.0
+
+[node name="Rune2" type="TextureRect" parent="UI/Common/RuneBag"]
+layout_mode = 0
+offset_left = 9.0
+offset_top = 48.0
+offset_right = 73.0
+offset_bottom = 112.0
+
+[node name="Rune3" type="TextureRect" parent="UI/Common/RuneBag"]
+layout_mode = 0
+offset_left = 78.0
+offset_top = 48.0
+offset_right = 142.0
+offset_bottom = 112.0
+
+[node name="Rune4" type="TextureRect" parent="UI/Common/RuneBag"]
+layout_mode = 0
+offset_left = -133.0
+offset_top = 108.0
+offset_right = -69.0
+offset_bottom = 172.0
+
+[node name="Rune5" type="TextureRect" parent="UI/Common/RuneBag"]
+layout_mode = 0
+offset_left = -63.0
+offset_top = 108.0
+offset_right = 1.0
+offset_bottom = 172.0
+
+[node name="Rune6" type="TextureRect" parent="UI/Common/RuneBag"]
+layout_mode = 0
+offset_left = 9.0
+offset_top = 108.0
+offset_right = 73.0
+offset_bottom = 172.0
+
+[node name="Rune7" type="TextureRect" parent="UI/Common/RuneBag"]
+layout_mode = 0
+offset_left = 78.0
+offset_top = 108.0
+offset_right = 142.0
+offset_bottom = 172.0
+
+[node name="Rune8" type="TextureRect" parent="UI/Common/RuneBag"]
+layout_mode = 0
+offset_left = -133.0
+offset_top = 167.0
+offset_right = -69.0
+offset_bottom = 231.0
+
+[node name="Rune9" type="TextureRect" parent="UI/Common/RuneBag"]
+layout_mode = 0
+offset_left = -63.0
+offset_top = 167.0
+offset_right = 1.0
+offset_bottom = 231.0
+
+[node name="Rune10" type="TextureRect" parent="UI/Common/RuneBag"]
+layout_mode = 0
+offset_left = 9.0
+offset_top = 167.0
+offset_right = 73.0
+offset_bottom = 231.0
+
+[node name="Rune11" type="TextureRect" parent="UI/Common/RuneBag"]
+layout_mode = 0
+offset_left = 78.0
+offset_top = 167.0
+offset_right = 142.0
+offset_bottom = 231.0
+
+[node name="Rune12" type="TextureRect" parent="UI/Common/RuneBag"]
+layout_mode = 0
+offset_left = -133.0
+offset_top = 227.0
+offset_right = -69.0
+offset_bottom = 291.0
+
+[node name="Rune13" type="TextureRect" parent="UI/Common/RuneBag"]
+layout_mode = 0
+offset_left = -63.0
+offset_top = 227.0
+offset_right = 1.0
+offset_bottom = 291.0
+
+[node name="Rune14" type="TextureRect" parent="UI/Common/RuneBag"]
+layout_mode = 0
+offset_left = 9.0
+offset_top = 227.0
+offset_right = 73.0
+offset_bottom = 291.0
+
+[node name="Rune15" type="TextureRect" parent="UI/Common/RuneBag"]
+layout_mode = 0
+offset_left = 78.0
+offset_top = 227.0
+offset_right = 142.0
+offset_bottom = 291.0
+
+[node name="Rune16" type="TextureRect" parent="UI/Common/RuneBag"]
+layout_mode = 0
+offset_left = -133.0
+offset_top = 287.0
+offset_right = -69.0
+offset_bottom = 351.0
+
+[node name="Rune17" type="TextureRect" parent="UI/Common/RuneBag"]
+layout_mode = 0
+offset_left = -62.0
+offset_top = 287.0
+offset_right = 2.0
+offset_bottom = 351.0
+
+[node name="Rune18" type="TextureRect" parent="UI/Common/RuneBag"]
+layout_mode = 0
+offset_left = 10.0
+offset_top = 287.0
+offset_right = 74.0
+offset_bottom = 351.0
+
+[node name="Rune19" type="TextureRect" parent="UI/Common/RuneBag"]
+layout_mode = 0
+offset_left = 79.0
+offset_top = 287.0
+offset_right = 143.0
+offset_bottom = 351.0
+
+[node name="Rune20" type="TextureRect" parent="UI/Common/RuneBag"]
+layout_mode = 0
+offset_left = -133.0
+offset_top = 348.0
+offset_right = -69.0
+offset_bottom = 412.0
+
+[node name="Rune21" type="TextureRect" parent="UI/Common/RuneBag"]
+layout_mode = 0
+offset_left = -61.0
+offset_top = 348.0
+offset_right = 3.0
+offset_bottom = 412.0
+
+[node name="Rune22" type="TextureRect" parent="UI/Common/RuneBag"]
+layout_mode = 0
+offset_left = 11.0
+offset_top = 348.0
+offset_right = 75.0
+offset_bottom = 412.0
+
+[node name="Rune23" type="TextureRect" parent="UI/Common/RuneBag"]
+layout_mode = 0
+offset_left = 80.0
+offset_top = 348.0
+offset_right = 144.0
+offset_bottom = 412.0
+
+[node name="PutRunesAway" type="TextureRect" parent="UI/Common/RuneBag"]
+self_modulate = Color(1, 1, 1, 0)
+layout_mode = 0
+offset_left = -82.0
+offset_top = 404.0
+offset_right = 88.0
+offset_bottom = 468.0
+
+[node name="StatsDisplay" type="Panel" parent="UI/Common"]
+visible = false
+self_modulate = Color(1, 1, 1, 0)
+offset_left = 1110.0
+offset_right = 1150.0
+offset_bottom = 40.0
+
+[node name="StatsPanel" type="TextureRect" parent="UI/Common/StatsDisplay"]
+layout_mode = 0
+offset_left = -166.0
+offset_top = 28.0
+offset_right = 166.0
+offset_bottom = 484.0
+texture = ExtResource("24_filpa")
+
+[node name="Charname" type="RichTextLabel" parent="UI/Common/StatsDisplay"]
+layout_mode = 0
+offset_left = -150.0
+offset_top = 31.0
+offset_right = 150.0
+offset_bottom = 96.0
+theme_override_fonts/normal_font = ExtResource("3_safdl")
+theme_override_font_sizes/normal_font_size = 64
+bbcode_enabled = true
+text = "Gronk"
+scroll_active = false
+
+[node name="CharClass" type="RichTextLabel" parent="UI/Common/StatsDisplay"]
+layout_mode = 0
+offset_left = -136.0
+offset_top = 64.0
+offset_right = 164.0
+offset_bottom = 129.0
+theme_override_fonts/normal_font = ExtResource("3_safdl")
+theme_override_font_sizes/normal_font_size = 64
+bbcode_enabled = true
+text = "Avatar"
+scroll_active = false
+
+[node name="CharLevel" type="RichTextLabel" parent="UI/Common/StatsDisplay"]
+layout_mode = 0
+offset_left = 50.0
+offset_top = 66.0
+offset_right = 134.0
+offset_bottom = 131.0
+theme_override_fonts/normal_font = ExtResource("3_safdl")
+theme_override_font_sizes/normal_font_size = 64
+bbcode_enabled = true
+text = "00th"
+scroll_active = false
+
+[node name="STR" type="RichTextLabel" parent="UI/Common/StatsDisplay"]
+layout_mode = 0
+offset_left = 84.0
+offset_top = 94.0
+offset_right = 136.0
+offset_bottom = 159.0
+theme_override_fonts/normal_font = ExtResource("3_safdl")
+theme_override_font_sizes/normal_font_size = 64
+bbcode_enabled = true
+text = "00"
+scroll_active = false
+
+[node name="DEX" type="RichTextLabel" parent="UI/Common/StatsDisplay"]
+layout_mode = 0
+offset_left = 84.0
+offset_top = 122.0
+offset_right = 136.0
+offset_bottom = 187.0
+theme_override_fonts/normal_font = ExtResource("3_safdl")
+theme_override_font_sizes/normal_font_size = 64
+bbcode_enabled = true
+text = "00"
+scroll_active = false
+
+[node name="INT" type="RichTextLabel" parent="UI/Common/StatsDisplay"]
+layout_mode = 0
+offset_left = 84.0
+offset_top = 150.0
+offset_right = 136.0
+offset_bottom = 215.0
+theme_override_fonts/normal_font = ExtResource("3_safdl")
+theme_override_font_sizes/normal_font_size = 64
+bbcode_enabled = true
+text = "00"
+scroll_active = false
+
+[node name="VIT" type="RichTextLabel" parent="UI/Common/StatsDisplay"]
+layout_mode = 0
+offset_left = -4.0
+offset_top = 177.0
+offset_right = 136.0
+offset_bottom = 242.0
+theme_override_fonts/normal_font = ExtResource("3_safdl")
+theme_override_font_sizes/normal_font_size = 64
+bbcode_enabled = true
+text = "00/00"
+scroll_active = false
+
+[node name="MANA" type="RichTextLabel" parent="UI/Common/StatsDisplay"]
+layout_mode = 0
+offset_left = -4.0
+offset_top = 204.0
+offset_right = 136.0
+offset_bottom = 269.0
+theme_override_fonts/normal_font = ExtResource("3_safdl")
+theme_override_font_sizes/normal_font_size = 64
+bbcode_enabled = true
+text = "00/00"
+scroll_active = false
+
+[node name="EXP" type="RichTextLabel" parent="UI/Common/StatsDisplay"]
+layout_mode = 0
+offset_left = -4.0
+offset_top = 232.0
+offset_right = 136.0
+offset_bottom = 297.0
+theme_override_fonts/normal_font = ExtResource("3_safdl")
+theme_override_font_sizes/normal_font_size = 64
+bbcode_enabled = true
+text = "00000"
+scroll_active = false
+
+[node name="StatNames" type="RichTextLabel" parent="UI/Common/StatsDisplay"]
+layout_mode = 0
+offset_left = -137.0
+offset_top = 272.0
+offset_right = 63.0
+offset_bottom = 452.0
+theme_override_constants/line_separation = -21
+theme_override_fonts/normal_font = ExtResource("3_safdl")
+theme_override_font_sizes/normal_font_size = 64
+bbcode_enabled = true
+text = "00000
+00001
+00002
+00003
+00004
+00005"
+scroll_active = false
+
+[node name="StatValues" type="RichTextLabel" parent="UI/Common/StatsDisplay"]
+layout_mode = 0
+offset_left = 52.0
+offset_top = 272.0
+offset_right = 132.0
+offset_bottom = 452.0
+theme_override_constants/line_separation = -21
+theme_override_fonts/normal_font = ExtResource("3_safdl")
+theme_override_font_sizes/normal_font_size = 64
+bbcode_enabled = true
+text = "00
+01
+02
+03
+04
+05"
+scroll_active = false
+
+[node name="StatsUp" type="TextureRect" parent="UI/Common/StatsDisplay"]
+layout_mode = 0
+offset_left = -51.0
+offset_top = 444.0
+offset_right = -11.0
+offset_bottom = 484.0
+
+[node name="StatsDown" type="TextureRect" parent="UI/Common/StatsDisplay"]
+layout_mode = 0
+offset_left = 10.0
+offset_top = 444.0
+offset_right = 50.0
+offset_bottom = 484.0
+
+[node name="OtherControls" type="Panel" parent="UI/Common"]
+self_modulate = Color(1, 1, 1, 0)
+offset_right = 40.0
+offset_bottom = 80.0
+
+[node name="Chain" type="TextureRect" parent="UI/Common/OtherControls"]
+visible = false
+self_modulate = Color(1, 1, 1, 0)
+layout_mode = 0
+offset_left = 1091.0
+offset_top = 486.0
+offset_right = 1131.0
+offset_bottom = 566.0
+
+[node name="SelectedRune0" type="TextureRect" parent="UI/Common/OtherControls"]
+visible = false
+layout_mode = 0
+offset_left = 704.0
+offset_top = 552.0
+offset_right = 768.0
+offset_bottom = 616.0
+
+[node name="SelectedRune1" type="TextureRect" parent="UI/Common/OtherControls"]
+visible = false
+layout_mode = 0
+offset_left = 760.0
+offset_top = 552.0
+offset_right = 824.0
+offset_bottom = 616.0
+
+[node name="SelectedRune2" type="TextureRect" parent="UI/Common/OtherControls"]
+visible = false
+layout_mode = 0
+offset_left = 816.0
+offset_top = 552.0
+offset_right = 880.0
+offset_bottom = 616.0
+
+[node name="SpellIcon0" type="TextureRect" parent="UI/Common/OtherControls"]
+visible = false
+layout_mode = 0
+offset_left = 340.0
+offset_top = 552.0
+offset_right = 404.0
+offset_bottom = 624.0
+texture = ExtResource("28_uj0ag")
+
+[node name="SpellIcon1" type="TextureRect" parent="UI/Common/OtherControls"]
+visible = false
+layout_mode = 0
+offset_left = 276.0
+offset_top = 552.0
+offset_right = 340.0
+offset_bottom = 624.0
+texture = ExtResource("28_uj0ag")
+
+[node name="SpellIcon2" type="TextureRect" parent="UI/Common/OtherControls"]
+visible = false
+layout_mode = 0
+offset_left = 212.0
+offset_top = 552.0
+offset_right = 276.0
+offset_bottom = 624.0
+texture = ExtResource("28_uj0ag")
+
+[node name="Eyes" type="TextureRect" parent="UI/Common/OtherControls"]
+layout_mode = 0
+offset_left = 512.0
+offset_top = 16.0
+offset_right = 592.0
+offset_bottom = 28.0
+
+[node name="HealthFlask" type="Panel" parent="UI/Common"]
+self_modulate = Color(1, 1, 1, 0)
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="FlaskLevel0" type="TextureRect" parent="UI/Common/HealthFlask"]
+layout_mode = 0
+offset_left = 992.0
+offset_top = 604.0
+offset_right = 1088.0
+offset_bottom = 620.0
+mouse_filter = 2
+
+[node name="FlaskLevel1" type="TextureRect" parent="UI/Common/HealthFlask"]
+layout_mode = 0
+offset_left = 992.0
+offset_top = 596.0
+offset_right = 1088.0
+offset_bottom = 616.0
+mouse_filter = 2
+
+[node name="FlaskLevel2" type="TextureRect" parent="UI/Common/HealthFlask"]
+layout_mode = 0
+offset_left = 992.0
+offset_top = 588.0
+offset_right = 1088.0
+offset_bottom = 612.0
+mouse_filter = 2
+
+[node name="FlaskLevel3" type="TextureRect" parent="UI/Common/HealthFlask"]
+layout_mode = 0
+offset_left = 992.0
+offset_top = 580.0
+offset_right = 1088.0
+offset_bottom = 608.0
+mouse_filter = 2
+
+[node name="FlaskLevel4" type="TextureRect" parent="UI/Common/HealthFlask"]
+layout_mode = 0
+offset_left = 992.0
+offset_top = 572.0
+offset_right = 1088.0
+offset_bottom = 600.0
+mouse_filter = 2
+
+[node name="FlaskLevel5" type="TextureRect" parent="UI/Common/HealthFlask"]
+layout_mode = 0
+offset_left = 992.0
+offset_top = 564.0
+offset_right = 1088.0
+offset_bottom = 592.0
+mouse_filter = 2
+
+[node name="FlaskLevel6" type="TextureRect" parent="UI/Common/HealthFlask"]
+layout_mode = 0
+offset_left = 992.0
+offset_top = 560.0
+offset_right = 1088.0
+offset_bottom = 588.0
+mouse_filter = 2
+
+[node name="FlaskLevel7" type="TextureRect" parent="UI/Common/HealthFlask"]
+layout_mode = 0
+offset_left = 992.0
+offset_top = 556.0
+offset_right = 1088.0
+offset_bottom = 580.0
+mouse_filter = 2
+
+[node name="FlaskLevel8" type="TextureRect" parent="UI/Common/HealthFlask"]
+layout_mode = 0
+offset_left = 992.0
+offset_top = 552.0
+offset_right = 1088.0
+offset_bottom = 572.0
+mouse_filter = 2
+
+[node name="FlaskLevel9" type="TextureRect" parent="UI/Common/HealthFlask"]
+layout_mode = 0
+offset_left = 992.0
+offset_top = 544.0
+offset_right = 1088.0
+offset_bottom = 560.0
+mouse_filter = 2
+
+[node name="FlaskLevel10" type="TextureRect" parent="UI/Common/HealthFlask"]
+layout_mode = 0
+offset_left = 992.0
+offset_top = 536.0
+offset_right = 1088.0
+offset_bottom = 552.0
+mouse_filter = 2
+
+[node name="FlaskLevel11" type="TextureRect" parent="UI/Common/HealthFlask"]
+layout_mode = 0
+offset_left = 992.0
+offset_top = 528.0
+offset_right = 1088.0
+offset_bottom = 544.0
+mouse_filter = 2
+
+[node name="FlaskLevel12" type="TextureRect" parent="UI/Common/HealthFlask"]
+layout_mode = 0
+offset_left = 992.0
+offset_top = 516.0
+offset_right = 1088.0
+offset_bottom = 532.0
+mouse_filter = 2
+
+[node name="FlaskHealthBubble" type="TextureRect" parent="UI/Common/HealthFlask"]
+layout_mode = 0
+offset_left = 992.0
+offset_top = 592.0
+offset_right = 1088.0
+offset_bottom = 608.0
+mouse_filter = 2
+
+[node name="FlaskBorder" type="TextureRect" parent="UI/Common/HealthFlask"]
+layout_mode = 0
+offset_left = 992.0
+offset_top = 500.0
+offset_right = 1088.0
+offset_bottom = 632.0
+
+[node name="ManaFlask" type="Panel" parent="UI/Common"]
+self_modulate = Color(1, 1, 1, 0)
+offset_left = 144.0
+offset_right = 184.0
+offset_bottom = 40.0
+
+[node name="FlaskLevel0" type="TextureRect" parent="UI/Common/ManaFlask"]
+layout_mode = 0
+offset_left = 992.0
+offset_top = 604.0
+offset_right = 1088.0
+offset_bottom = 620.0
+mouse_filter = 2
+
+[node name="FlaskLevel1" type="TextureRect" parent="UI/Common/ManaFlask"]
+layout_mode = 0
+offset_left = 992.0
+offset_top = 596.0
+offset_right = 1088.0
+offset_bottom = 616.0
+mouse_filter = 2
+
+[node name="FlaskLevel2" type="TextureRect" parent="UI/Common/ManaFlask"]
+layout_mode = 0
+offset_left = 992.0
+offset_top = 588.0
+offset_right = 1088.0
+offset_bottom = 612.0
+mouse_filter = 2
+
+[node name="FlaskLevel3" type="TextureRect" parent="UI/Common/ManaFlask"]
+layout_mode = 0
+offset_left = 992.0
+offset_top = 580.0
+offset_right = 1088.0
+offset_bottom = 608.0
+mouse_filter = 2
+
+[node name="FlaskLevel4" type="TextureRect" parent="UI/Common/ManaFlask"]
+layout_mode = 0
+offset_left = 992.0
+offset_top = 572.0
+offset_right = 1088.0
+offset_bottom = 600.0
+mouse_filter = 2
+
+[node name="FlaskLevel5" type="TextureRect" parent="UI/Common/ManaFlask"]
+layout_mode = 0
+offset_left = 992.0
+offset_top = 564.0
+offset_right = 1088.0
+offset_bottom = 592.0
+mouse_filter = 2
+
+[node name="FlaskLevel6" type="TextureRect" parent="UI/Common/ManaFlask"]
+layout_mode = 0
+offset_left = 992.0
+offset_top = 560.0
+offset_right = 1088.0
+offset_bottom = 588.0
+mouse_filter = 2
+
+[node name="FlaskLevel7" type="TextureRect" parent="UI/Common/ManaFlask"]
+layout_mode = 0
+offset_left = 992.0
+offset_top = 556.0
+offset_right = 1088.0
+offset_bottom = 580.0
+mouse_filter = 2
+
+[node name="FlaskLevel8" type="TextureRect" parent="UI/Common/ManaFlask"]
+layout_mode = 0
+offset_left = 992.0
+offset_top = 552.0
+offset_right = 1088.0
+offset_bottom = 572.0
+mouse_filter = 2
+
+[node name="FlaskLevel9" type="TextureRect" parent="UI/Common/ManaFlask"]
+layout_mode = 0
+offset_left = 992.0
+offset_top = 544.0
+offset_right = 1088.0
+offset_bottom = 560.0
+mouse_filter = 2
+
+[node name="FlaskLevel10" type="TextureRect" parent="UI/Common/ManaFlask"]
+layout_mode = 0
+offset_left = 992.0
+offset_top = 536.0
+offset_right = 1088.0
+offset_bottom = 552.0
+mouse_filter = 2
+
+[node name="FlaskLevel11" type="TextureRect" parent="UI/Common/ManaFlask"]
+layout_mode = 0
+offset_left = 992.0
+offset_top = 528.0
+offset_right = 1088.0
+offset_bottom = 544.0
+mouse_filter = 2
+
+[node name="FlaskLevel12" type="TextureRect" parent="UI/Common/ManaFlask"]
+layout_mode = 0
+offset_left = 992.0
+offset_top = 516.0
+offset_right = 1088.0
+offset_bottom = 532.0
+mouse_filter = 2
+
+[node name="FlaskManaBubble" type="TextureRect" parent="UI/Common/ManaFlask"]
+layout_mode = 0
+offset_left = 992.0
+offset_top = 592.0
+offset_right = 1088.0
+offset_bottom = 608.0
+mouse_filter = 2
+
+[node name="FlaskBorder" type="TextureRect" parent="UI/Common/ManaFlask"]
+layout_mode = 0
+offset_left = 992.0
+offset_top = 500.0
+offset_right = 1088.0
+offset_bottom = 632.0
+
+[node name="Dragons" type="Panel" parent="UI/Common"]
+self_modulate = Color(0, 0, 0, 0)
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="LeftSideDragonHead" type="TextureRect" parent="UI/Common/Dragons"]
+layout_mode = 0
+offset_left = 144.0
+offset_top = 579.0
+offset_right = 292.0
+offset_bottom = 671.0
+
+[node name="LeftSideDragonTorso" type="TextureRect" parent="UI/Common/Dragons"]
+layout_mode = 0
+offset_left = 144.0
+offset_top = 535.0
+offset_right = 196.0
+offset_bottom = 579.0
+
+[node name="LeftSideDragonTail" type="TextureRect" parent="UI/Common/Dragons"]
+layout_mode = 0
+offset_left = 160.0
+offset_top = 260.0
+offset_right = 208.0
+offset_bottom = 388.0
+
+[node name="RightSideDragonHead" type="TextureRect" parent="UI/Common/Dragons"]
+layout_mode = 0
+offset_left = 792.0
+offset_top = 580.0
+offset_right = 952.0
+offset_bottom = 680.0
+
+[node name="RightSideDragonTorso" type="TextureRect" parent="UI/Common/Dragons"]
+layout_mode = 0
+offset_left = 908.0
+offset_top = 540.0
+offset_right = 948.0
+offset_bottom = 584.0
+
+[node name="RightSideDragonTail" type="TextureRect" parent="UI/Common/Dragons"]
+layout_mode = 0
+offset_left = 896.0
+offset_top = 260.0
+offset_right = 944.0
+offset_bottom = 388.0
+
+[node name="Automap" type="Panel" parent="UI/Common"]
+visible = false
+self_modulate = Color(1, 1, 1, 0)
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="MapBackground" type="TextureRect" parent="UI/Common/Automap"]
+layout_mode = 0
+offset_right = 1280.0
+offset_bottom = 800.0
+
+[node name="MapImage" type="TextureRect" parent="UI/Common/Automap"]
+layout_mode = 0
+offset_left = 14.0
+offset_top = 16.0
+offset_right = 794.0
+offset_bottom = 796.0
+flip_v = true
+
+[node name="Close" type="TextureRect" parent="UI/Common/Automap"]
+layout_mode = 0
+offset_left = 1060.0
+offset_top = 604.0
+offset_right = 1240.0
+offset_bottom = 704.0
+
+[node name="Eraser" type="TextureRect" parent="UI/Common/Automap"]
+layout_mode = 0
+offset_left = 1072.0
+offset_top = 480.0
+offset_right = 1252.0
+offset_bottom = 580.0
+scale = Vector2(0.839995, 1)
+
+[node name="MapNo" type="RichTextLabel" parent="UI/Common/Automap"]
+clip_contents = false
+layout_mode = 0
+offset_left = 1131.0
+offset_top = 31.0
+offset_right = 1195.0
+offset_bottom = 84.0
+theme_override_colors/default_color = Color(0.2, 0.109804, 0.0745098, 1)
+theme_override_fonts/normal_font = ExtResource("5_kj12g")
+theme_override_font_sizes/normal_font_size = 48
+text = "52"
+scroll_active = false
+autowrap_mode = 0
+
+[node name="MapNotes" type="Panel" parent="UI/Common/Automap"]
+self_modulate = Color(1, 1, 1, 0)
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="MapUp" type="TextureRect" parent="UI/Common/Automap"]
+layout_mode = 0
+offset_left = 1191.0
+offset_top = 3.0
+offset_right = 1255.0
+offset_bottom = 67.0
+scale = Vector2(1.32622, 1.00128)
+
+[node name="MapDown" type="TextureRect" parent="UI/Common/Automap"]
+layout_mode = 0
+offset_left = 1194.0
+offset_top = 731.0
+offset_right = 1258.0
+offset_bottom = 795.0
+scale = Vector2(1.2, 1)
+
+[node name="Gem" type="Panel" parent="UI/Common/Automap"]
+self_modulate = Color(1, 1, 1, 0)
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="World0" type="TextureRect" parent="UI/Common/Automap/Gem"]
+layout_mode = 0
+offset_left = 1056.0
+offset_top = 264.0
+offset_right = 1172.0
+offset_bottom = 380.0
+
+[node name="World1" type="TextureRect" parent="UI/Common/Automap/Gem"]
+layout_mode = 0
+offset_left = 1072.0
+offset_top = 232.0
+offset_right = 1156.0
+offset_bottom = 268.0
+
+[node name="World2" type="TextureRect" parent="UI/Common/Automap/Gem"]
+layout_mode = 0
+offset_left = 1140.0
+offset_top = 232.0
+offset_right = 1200.0
+offset_bottom = 300.0
+
+[node name="World3" type="TextureRect" parent="UI/Common/Automap/Gem"]
+layout_mode = 0
+offset_left = 1168.0
+offset_top = 272.0
+offset_right = 1200.0
+offset_bottom = 372.0
+
+[node name="World4" type="TextureRect" parent="UI/Common/Automap/Gem"]
+layout_mode = 0
+offset_left = 1140.0
+offset_top = 344.0
+offset_right = 1200.0
+offset_bottom = 412.0
+
+[node name="World5" type="TextureRect" parent="UI/Common/Automap/Gem"]
+layout_mode = 0
+offset_left = 1072.0
+offset_top = 376.0
+offset_right = 1156.0
+offset_bottom = 412.0
+
+[node name="World6" type="TextureRect" parent="UI/Common/Automap/Gem"]
+layout_mode = 0
+offset_left = 1032.0
+offset_top = 344.0
+offset_right = 1092.0
+offset_bottom = 412.0
+
+[node name="World7" type="TextureRect" parent="UI/Common/Automap/Gem"]
+layout_mode = 0
+offset_left = 1028.0
+offset_top = 272.0
+offset_right = 1060.0
+offset_bottom = 372.0
+
+[node name="World8" type="TextureRect" parent="UI/Common/Automap/Gem"]
+layout_mode = 0
+offset_left = 1032.0
+offset_top = 232.0
+offset_right = 1092.0
+offset_bottom = 300.0
+
+[node name="CutsFullscreen" type="TextureRect" parent="UI/Common"]
+visible = false
+offset_right = 1280.0
+offset_bottom = 800.0
+mouse_filter = 0
+
+[node name="CutsSubtitle" type="RichTextLabel" parent="UI/Common"]
+visible = false
+offset_top = 636.0
+offset_right = 1280.0
+offset_bottom = 796.0
+theme_override_fonts/normal_font = ExtResource("5_kj12g")
+theme_override_font_sizes/normal_font_size = 48
+bbcode_enabled = true
+text = "Cutscene Subtitle"
+
+[node name="MainMenu" type="Panel" parent="UI/Common"]
+visible = false
+self_modulate = Color(1, 1, 1, 0)
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="MainMenuBlackground" type="TextureRect" parent="UI/Common/MainMenu"]
+layout_mode = 0
+offset_right = 1280.0
+offset_bottom = 800.0
+mouse_filter = 0
+texture = ExtResource("29_aiei8")
+
+[node name="MainMenuBG" type="TextureRect" parent="UI/Common/MainMenu"]
+layout_mode = 0
+offset_right = 1280.0
+offset_bottom = 800.0
+mouse_filter = 0
+
+[node name="Introduction" type="TextureRect" parent="UI/Common/MainMenu"]
+layout_mode = 0
+offset_left = 392.0
+offset_top = 325.0
+offset_right = 844.0
+offset_bottom = 397.0
+
+[node name="CreateCharacter" type="TextureRect" parent="UI/Common/MainMenu"]
+layout_mode = 0
+offset_left = 324.0
+offset_top = 418.0
+offset_right = 960.0
+offset_bottom = 502.0
+
+[node name="Acknowledgements" type="TextureRect" parent="UI/Common/MainMenu"]
+layout_mode = 0
+offset_left = 288.0
+offset_top = 512.0
+offset_right = 960.0
+offset_bottom = 604.0
+
+[node name="JourneyOnwards" type="TextureRect" parent="UI/Common/MainMenu"]
+layout_mode = 0
+offset_left = 340.0
+offset_top = 612.0
+offset_right = 924.0
+offset_bottom = 704.0
+
+[node name="LoadingLabel" type="Label" parent="UI/Common/MainMenu"]
+visible = false
+layout_mode = 0
+offset_left = 324.0
+offset_top = 75.0
+offset_right = 980.0
+offset_bottom = 138.0
+theme_override_colors/font_color = Color(0.619608, 1, 0, 1)
+theme_override_fonts/font = ExtResource("5_kj12g")
+theme_override_font_sizes/font_size = 64
+text = "You reenter the abyss..."
+
+[node name="Save1" type="Label" parent="UI/Common/MainMenu"]
+layout_mode = 0
+offset_top = 365.0
+offset_right = 1280.0
+offset_bottom = 430.0
+mouse_filter = 1
+theme_override_fonts/font = ExtResource("5_kj12g")
+theme_override_font_sizes/font_size = 65
+text = "SAVE1"
+horizontal_alignment = 1
+
+[node name="Save2" type="Label" parent="UI/Common/MainMenu"]
+layout_mode = 0
+offset_top = 459.0
+offset_right = 1280.0
+offset_bottom = 524.0
+mouse_filter = 1
+theme_override_fonts/font = ExtResource("5_kj12g")
+theme_override_font_sizes/font_size = 65
+text = "SAVE1"
+horizontal_alignment = 1
+
+[node name="Save3" type="Label" parent="UI/Common/MainMenu"]
+layout_mode = 0
+offset_top = 558.0
+offset_right = 1280.0
+offset_bottom = 623.0
+mouse_filter = 1
+theme_override_fonts/font = ExtResource("5_kj12g")
+theme_override_font_sizes/font_size = 65
+text = "SAVE1"
+horizontal_alignment = 1
+
+[node name="Save4" type="Label" parent="UI/Common/MainMenu"]
+layout_mode = 0
+offset_top = 648.0
+offset_right = 1280.0
+offset_bottom = 713.0
+mouse_filter = 1
+theme_override_fonts/font = ExtResource("5_kj12g")
+theme_override_font_sizes/font_size = 65
+text = "SAVE1"
+horizontal_alignment = 1
+
+[node name="TypedInput" type="LineEdit" parent="UI/Common"]
+offset_left = 81.0
+offset_top = 813.0
+offset_right = 148.063
+offset_bottom = 844.0
+context_menu_enabled = false
+virtual_keyboard_enabled = false
+shortcut_keys_enabled = false
+middle_mouse_paste_enabled = false
+selecting_enabled = false
+
+[node name="PositionLabel" type="RichTextLabel" parent="UI/Common"]
+texture_filter = 1
+offset_left = 28.0
+offset_top = -9.0
+offset_right = 628.0
+offset_bottom = 151.0
+mouse_filter = 2
+theme_override_fonts/normal_font = ExtResource("5_8iiwt")
+theme_override_font_sizes/normal_font_size = 48
+text = "The Label is here. Can you see it
+Line 2
+line 3
+line 4"
+
+[node name="Endgame" type="Panel" parent="UI/Common"]
+visible = false
+self_modulate = Color(0, 0, 0, 0)
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="EndgameBackground" type="TextureRect" parent="UI/Common/Endgame"]
+layout_mode = 0
+offset_right = 1280.0
+offset_bottom = 800.0
+
+[node name="EndGameStats" type="RichTextLabel" parent="UI/Common/Endgame"]
+layout_mode = 0
+offset_left = 160.0
+offset_top = 120.0
+offset_right = 1120.0
+offset_bottom = 720.0
+mouse_filter = 2
+theme_override_fonts/normal_font = ExtResource("5_kj12g")
+theme_override_font_sizes/normal_font_size = 40
+bbcode_enabled = true
+text = "End Game Stats"
+scroll_active = false
+
+[node name="Chargen" type="CanvasLayer" parent="UI"]
+visible = false
+
+[node name="ChargenBG" type="TextureRect" parent="UI/Chargen"]
+offset_right = 1280.0
+offset_bottom = 800.0
+
+[node name="ChargenQuestion" type="RichTextLabel" parent="UI/Chargen"]
+offset_left = 761.0
+offset_top = 20.0
+offset_right = 1261.0
+offset_bottom = 60.0
+theme_override_fonts/normal_font = ExtResource("5_kj12g")
+theme_override_font_sizes/normal_font_size = 32
+bbcode_enabled = true
+text = "[center]Your question here[/center]"
+
+[node name="ChargenSkills" type="RichTextLabel" parent="UI/Chargen"]
+offset_left = 72.0
+offset_top = 521.0
+offset_right = 472.0
+offset_bottom = 741.0
+theme_override_fonts/normal_font = ExtResource("5_kj12g")
+theme_override_font_sizes/normal_font_size = 32
+bbcode_enabled = true
+text = "[center]Your skilss here[/center]"
+
+[node name="ChargenSkills_Values" type="RichTextLabel" parent="UI/Chargen"]
+offset_left = 501.0
+offset_top = 521.0
+offset_right = 561.0
+offset_bottom = 741.0
+theme_override_fonts/normal_font = ExtResource("5_kj12g")
+theme_override_font_sizes/normal_font_size = 32
+bbcode_enabled = true
+text = "[center]Your skilss here[/center]"
+
+[node name="ChargenStats" type="RichTextLabel" parent="UI/Chargen"]
+offset_left = 349.0
+offset_top = 197.0
+offset_right = 509.0
+offset_bottom = 537.0
+theme_override_fonts/normal_font = ExtResource("5_kj12g")
+theme_override_font_sizes/normal_font_size = 32
+bbcode_enabled = true
+text = "[center]Your stats here[/center]"
+
+[node name="ChargenStats_Values" type="RichTextLabel" parent="UI/Chargen"]
+offset_left = 521.0
+offset_top = 197.0
+offset_right = 581.0
+offset_bottom = 537.0
+theme_override_fonts/normal_font = ExtResource("5_kj12g")
+theme_override_font_sizes/normal_font_size = 32
+bbcode_enabled = true
+text = "[center]Your stats here[/center]"
+
+[node name="ChargenGender" type="RichTextLabel" parent="UI/Chargen"]
+offset_left = 74.0
+offset_top = 96.0
+offset_right = 294.0
+offset_bottom = 136.0
+theme_override_fonts/normal_font = ExtResource("5_kj12g")
+theme_override_font_sizes/normal_font_size = 32
+bbcode_enabled = true
+text = "Female"
+
+[node name="ChargenClass" type="RichTextLabel" parent="UI/Chargen"]
+offset_left = 353.0
+offset_top = 96.0
+offset_right = 573.0
+offset_bottom = 136.0
+theme_override_fonts/normal_font = ExtResource("5_kj12g")
+theme_override_font_sizes/normal_font_size = 32
+bbcode_enabled = true
+text = "[right]Fighter[/right]"
+
+[node name="ChargenName" type="RichTextLabel" parent="UI/Chargen"]
+offset_left = 94.0
+offset_top = 41.0
+offset_right = 554.0
+offset_bottom = 81.0
+theme_override_fonts/normal_font = ExtResource("5_kj12g")
+theme_override_font_sizes/normal_font_size = 32
+bbcode_enabled = true
+text = "[center]Your name goes here[/center]"
+
+[node name="ChargenBody" type="TextureRect" parent="UI/Chargen"]
+offset_left = 131.0
+offset_top = 175.0
+offset_right = 255.0
+offset_bottom = 447.0
+
+[node name="ChargenNameBG" type="TextureRect" parent="UI/Chargen"]
+visible = false
+offset_left = 670.0
+offset_top = 99.0
+offset_right = 1250.0
+offset_bottom = 163.0
+
+[node name="ChargenNameQuestion" type="RichTextLabel" parent="UI/Chargen/ChargenNameBG"]
+layout_mode = 0
+offset_left = 21.0
+offset_top = 18.0
+offset_right = 161.0
+offset_bottom = 58.0
+theme_override_fonts/normal_font = ExtResource("5_kj12g")
+theme_override_font_sizes/normal_font_size = 32
+text = "Name:"
+scroll_active = false
+
+[node name="ChargenNameInput" type="RichTextLabel" parent="UI/Chargen/ChargenNameBG"]
+layout_mode = 0
+offset_left = 166.0
+offset_top = 18.0
+offset_right = 666.0
+offset_bottom = 58.0
+theme_override_fonts/normal_font = ExtResource("5_kj12g")
+theme_override_font_sizes/normal_font_size = 32
+text = "01234567890123456"
+scroll_active = false
+visible_characters = 17
+
+[node name="mouse" type="CanvasLayer" parent="UI"]
+
+[node name="mouseCursor" type="TextureRect" parent="UI/mouse" node_paths=PackedStringArray("cross")]
+offset_right = 40.0
+offset_bottom = 40.0
+mouse_filter = 2
+texture = ExtResource("18_tfr7p")
+script = ExtResource("4_gnu1s")
+cross = NodePath("../Cross")
+
+[node name="Cross" type="TextureRect" parent="UI/mouse"]
+offset_right = 5.0
+offset_bottom = 5.0
+mouse_filter = 2
+texture = ExtResource("18_tfr7p")
+
+[node name="uiManager" type="Node2D" parent="UI" node_paths=PackedStringArray("PanelChargen", "ChargenBG", "ChargenQuestion", "ChargenSkills", "ChargenSkills_values", "ChargenStats", "ChargenStats_values", "ChargenGender", "ChargenClass", "ChargenName", "ChargenNameBG", "ChargenNameInput", "ChargenNameQuestion", "ChargenBody", "CompassBgUW1", "CompassBgUW2", "CompassPointsUW1", "CompassPointsUW2", "CompassPanelUW2", "ConversationPanelUW1", "PlayerPortraitUW1", "NPCPortraitUW1", "PlayerNameLabelUW1", "NPCNameLabelUW1", "PlayerPortraitFrameUW1", "NPCPortraitFrameUW1", "PlayerNameLabelFrameUW1", "NPCNameLabelFrameUW1", "PlayerTradeAreaUW1", "NPCTradeAreaUW1", "ConversationScrollTopUW1", "ConversationScrollBottomUW1", "ConversationTextUW1", "ConversationPanelUW2", "PlayerPortraitUW2", "NPCPortraitUW2", "PlayerNameLabelUW2", "NPCNameLabelUW2", "ConversationTextUW2", "CutsFull", "CutsSmallUW1", "CutsSmallUW2", "Cuts3DWinUW1", "Cuts3DWinUW2", "CutsSubtitle", "DragonPanel", "DragonHeads", "DragonTails", "DragonTorsos", "PanelEndGame", "EndGameBackground", "EndGameStats", "Eyes", "HealthFlaskPanel", "HealthFlask", "HealthFlaskBG", "ManaFlaskPanel", "ManaFlask", "ManaFlaskBG", "HealthBubbles", "ManaBubbles", "InteractionButtonsUW1", "InteractionButtonsUW2", "PanelMainMenu", "MainMenuBG", "MainMenuButtons", "LoadingLabel", "SaveGamesNames", "AutomapPanel", "AutomapBG", "AutomapImage", "NotesPanel", "AutomapNumberLabel", "AutomapWorldGem", "messageScrollUW1", "messageScrollUW2", "scrollEdgeUW1Left", "scrollEdgeUW1Right", "scrollEdgeUW2Left", "scrollEdgeUW2Right", "ConvoscrollEdgeUW1Left", "ConvoscrollEdgeUW1Right", "ConvoscrollEdgeUW2Left", "ConvoscrollEdgeUW2Right", "TypedInput", "GameOptionButtonsUW1", "GameOptionButtonsUW2", "GameOptionsBackgroundUW1", "GameOptionsBackgroundUW2", "PanelInventory", "PanelInventoryArt", "PanelRuneBag", "PanelRuneBagArt", "PanelStats", "PanelStatsArt", "Body", "Helm", "Armour", "ArmourInput", "Leggings", "LeggingsInput", "Boots", "Gloves", "GlovesInput1", "GlovesInput2", "RightShoulder", "RightShoulderQTY", "LeftShoulder", "LeftShoulderQTY", "RightHand", "RightHandQTY", "LeftHand", "LeftHandQTY", "RightRing", "RightRingInput", "LeftRing", "LeftRingInput", "Backpack", "BackpackQTY", "ArrowUp", "ArrowDown", "OpenedContainer", "Chains", "BackpackBG", "WeightCapacity", "RuneTiles", "SelectedRunes", "ActiveSpellIcons", "Charname", "CharLevel", "CharClass", "STR", "DEX", "INT", "VIT", "MANA", "EXP", "StatsName", "StatsValue", "PlayerTradeSlotUW1", "NPCTradeSlotUW1", "PlayerTradeSelectedUW1", "NPCTradeSelectedUW1", "PlayerTradeSlotUW2", "NPCTradeSlotUW2", "PlayerTradeSelectedUW2", "NPCTradeSelectedUW2", "cam", "uwviewport", "uwsubviewport", "uwsubviewport_world", "uwsubviewport_sprites", "uwsubviewport_objectinfo", "textureobjectinfo", "mousecursor", "uw1UI", "uw2UI", "mainwindowUW1", "mainwindowUW2", "weaponanimuw1", "weaponanimuw2", "placeholderuw1", "placeholderuw2", "PowerGemUW1", "PowerGemUW2")]
+material = SubResource("ShaderMaterial_pkxpy")
+script = ExtResource("1_lw0yg")
+PanelChargen = NodePath("../Chargen")
+ChargenBG = NodePath("../Chargen/ChargenBG")
+ChargenQuestion = NodePath("../Chargen/ChargenQuestion")
+ChargenSkills = NodePath("../Chargen/ChargenSkills")
+ChargenSkills_values = NodePath("../Chargen/ChargenSkills_Values")
+ChargenStats = NodePath("../Chargen/ChargenStats")
+ChargenStats_values = NodePath("../Chargen/ChargenStats_Values")
+ChargenGender = NodePath("../Chargen/ChargenGender")
+ChargenClass = NodePath("../Chargen/ChargenClass")
+ChargenName = NodePath("../Chargen/ChargenName")
+ChargenNameBG = NodePath("../Chargen/ChargenNameBG")
+ChargenNameInput = NodePath("../Chargen/ChargenNameBG/ChargenNameInput")
+ChargenNameQuestion = NodePath("../Chargen/ChargenNameBG/ChargenNameQuestion")
+ChargenBody = NodePath("../Chargen/ChargenBody")
+CompassBgUW1 = [NodePath("../UW1/CompassUW1/CompassBg0"), NodePath("../UW1/CompassUW1/CompassBg1"), NodePath("../UW1/CompassUW1/CompassBg2"), NodePath("../UW1/CompassUW1/CompassBg3")]
+CompassBgUW2 = [NodePath("../UW2/CompassUW2/CompassBG0"), NodePath("../UW2/CompassUW2/CompassBG1"), NodePath("../UW2/CompassUW2/CompassBG2"), NodePath("../UW2/CompassUW2/CompassBG3")]
+CompassPointsUW1 = [NodePath("../UW1/CompassUW1/CompassPoint0"), NodePath("../UW1/CompassUW1/CompassPoint1"), NodePath("../UW1/CompassUW1/CompassPoint2"), NodePath("../UW1/CompassUW1/CompassPoint3"), NodePath("../UW1/CompassUW1/CompassPoint4"), NodePath("../UW1/CompassUW1/CompassPoint5"), NodePath("../UW1/CompassUW1/CompassPoint6"), NodePath("../UW1/CompassUW1/CompassPoint7"), NodePath("../UW1/CompassUW1/CompassPoint8"), NodePath("../UW1/CompassUW1/CompassPoint9"), NodePath("../UW1/CompassUW1/CompassPoint10"), NodePath("../UW1/CompassUW1/CompassPoint11"), NodePath("../UW1/CompassUW1/CompassPoint12"), NodePath("../UW1/CompassUW1/CompassPoint13"), NodePath("../UW1/CompassUW1/CompassPoint14"), NodePath("../UW1/CompassUW1/CompassPoint15")]
+CompassPointsUW2 = [NodePath("../UW2/CompassUW2/CompassPoint0"), NodePath("../UW2/CompassUW2/CompassPoint1"), NodePath("../UW2/CompassUW2/CompassPoint2"), NodePath("../UW2/CompassUW2/CompassPoint3"), NodePath("../UW2/CompassUW2/CompassPoint4"), NodePath("../UW2/CompassUW2/CompassPoint5"), NodePath("../UW2/CompassUW2/CompassPoint6"), NodePath("../UW2/CompassUW2/CompassPoint7"), NodePath("../UW2/CompassUW2/CompassPoint8"), NodePath("../UW2/CompassUW2/CompassPoint9"), NodePath("../UW2/CompassUW2/CompassPoint10"), NodePath("../UW2/CompassUW2/CompassPoint11"), NodePath("../UW2/CompassUW2/CompassPoint12"), NodePath("../UW2/CompassUW2/CompassPoint13"), NodePath("../UW2/CompassUW2/CompassPoint14"), NodePath("../UW2/CompassUW2/CompassPoint15")]
+CompassPanelUW2 = NodePath("../UW2/CompassUW2")
+ConversationPanelUW1 = NodePath("../UW1/ConversationUW1")
+PlayerPortraitUW1 = NodePath("../UW1/ConversationUW1/PlayerPortraitUW1")
+NPCPortraitUW1 = NodePath("../UW1/ConversationUW1/NPCPortraitUW1")
+PlayerNameLabelUW1 = NodePath("../UW1/ConversationUW1/PlayerNameLabelUW1")
+NPCNameLabelUW1 = NodePath("../UW1/ConversationUW1/NPCNameLabelUW1")
+PlayerPortraitFrameUW1 = NodePath("../UW1/ConversationUW1/PlayerPortraitFrameUW1")
+NPCPortraitFrameUW1 = NodePath("../UW1/ConversationUW1/NPCPortraitFrameUW1")
+PlayerNameLabelFrameUW1 = NodePath("../UW1/ConversationUW1/PlayerNameFrameUW1")
+NPCNameLabelFrameUW1 = NodePath("../UW1/ConversationUW1/NPCNameFrameUW1")
+PlayerTradeAreaUW1 = NodePath("../UW1/ConversationUW1/PlayerTradeAreaUW1")
+NPCTradeAreaUW1 = NodePath("../UW1/ConversationUW1/NPCTradeAreaUW1")
+ConversationScrollTopUW1 = NodePath("../UW1/ConversationUW1/ConversationTopBorderUW1")
+ConversationScrollBottomUW1 = NodePath("../UW1/ConversationUW1/ConversationBottomBorderUW1")
+ConversationTextUW1 = NodePath("../UW1/ConversationUW1/ConversationTextUW1")
+ConversationPanelUW2 = NodePath("../UW2/ConversationUW2")
+PlayerPortraitUW2 = NodePath("../UW2/ConversationUW2/PlayerPortraitUW2")
+NPCPortraitUW2 = NodePath("../UW2/ConversationUW2/NPCPortraitUW2")
+PlayerNameLabelUW2 = NodePath("../UW2/ConversationUW2/PlayerNameLabelUW1")
+NPCNameLabelUW2 = NodePath("../UW2/ConversationUW2/NPCNameLabelUW2")
+ConversationTextUW2 = NodePath("../UW2/ConversationUW2/ConversationTextUW2")
+CutsFull = NodePath("../Common/CutsFullscreen")
+CutsSmallUW1 = NodePath("../UW1/CutsceneSmallUW1")
+CutsSmallUW2 = NodePath("../UW2/CutsceneSmallUW2")
+Cuts3DWinUW1 = NodePath("../UW1/Cuts3DWinUW1")
+Cuts3DWinUW2 = NodePath("../UW2/Cuts3DWinUW2")
+CutsSubtitle = NodePath("../Common/CutsSubtitle")
+DragonPanel = NodePath("../Common/Dragons")
+DragonHeads = [NodePath("../Common/Dragons/LeftSideDragonHead"), NodePath("../Common/Dragons/RightSideDragonHead")]
+DragonTails = [NodePath("../Common/Dragons/LeftSideDragonTail"), NodePath("../Common/Dragons/RightSideDragonTail")]
+DragonTorsos = [NodePath("../Common/Dragons/LeftSideDragonTorso"), NodePath("../Common/Dragons/RightSideDragonTorso")]
+PanelEndGame = NodePath("../Common/Endgame")
+EndGameBackground = NodePath("../Common/Endgame/EndgameBackground")
+EndGameStats = NodePath("../Common/Endgame/EndGameStats")
+Eyes = NodePath("../Common/OtherControls/Eyes")
+HealthFlaskPanel = NodePath("../Common/HealthFlask")
+HealthFlask = [NodePath("../Common/HealthFlask/FlaskLevel0"), NodePath("../Common/HealthFlask/FlaskLevel1"), NodePath("../Common/HealthFlask/FlaskLevel2"), NodePath("../Common/HealthFlask/FlaskLevel3"), NodePath("../Common/HealthFlask/FlaskLevel4"), NodePath("../Common/HealthFlask/FlaskLevel5"), NodePath("../Common/HealthFlask/FlaskLevel6"), NodePath("../Common/HealthFlask/FlaskLevel7"), NodePath("../Common/HealthFlask/FlaskLevel8"), NodePath("../Common/HealthFlask/FlaskLevel9"), NodePath("../Common/HealthFlask/FlaskLevel10"), NodePath("../Common/HealthFlask/FlaskLevel11"), NodePath("../Common/HealthFlask/FlaskLevel12")]
+HealthFlaskBG = NodePath("../Common/HealthFlask/FlaskBorder")
+ManaFlaskPanel = NodePath("../Common/ManaFlask")
+ManaFlask = [NodePath("../Common/ManaFlask/FlaskLevel0"), NodePath("../Common/ManaFlask/FlaskLevel1"), NodePath("../Common/ManaFlask/FlaskLevel2"), NodePath("../Common/ManaFlask/FlaskLevel3"), NodePath("../Common/ManaFlask/FlaskLevel4"), NodePath("../Common/ManaFlask/FlaskLevel5"), NodePath("../Common/ManaFlask/FlaskLevel6"), NodePath("../Common/ManaFlask/FlaskLevel7"), NodePath("../Common/ManaFlask/FlaskLevel8"), NodePath("../Common/ManaFlask/FlaskLevel9"), NodePath("../Common/ManaFlask/FlaskLevel10"), NodePath("../Common/ManaFlask/FlaskLevel11"), NodePath("../Common/ManaFlask/FlaskLevel12")]
+ManaFlaskBG = NodePath("../Common/ManaFlask/FlaskBorder")
+HealthBubbles = NodePath("../Common/HealthFlask/FlaskHealthBubble")
+ManaBubbles = NodePath("../Common/ManaFlask/FlaskManaBubble")
+Font4X5P = ExtResource("5_8iiwt")
+Font5X6I = ExtResource("3_safdl")
+Font5X6P = ExtResource("4_pfbet")
+FontBig = ExtResource("5_kj12g")
+InteractionButtonsUW1 = [NodePath("../UW1/OptionsButtonUW1"), NodePath("../UW1/TalkButtonUW1"), NodePath("../UW1/PickupButtonUW1"), NodePath("../UW1/LookButtonUW1"), NodePath("../UW1/AttackButtonUW1"), NodePath("../UW1/UseButtonUW1")]
+InteractionButtonsUW2 = [NodePath("../UW2/OptionsButtonUW2"), NodePath("../UW2/TalkButtonUW2"), NodePath("../UW2/PickupButtonUW2"), NodePath("../UW2/LookButtonUW2"), NodePath("../UW2/AttackButtonUW2"), NodePath("../UW2/UseButtonUW2")]
+PanelMainMenu = NodePath("../Common/MainMenu")
+MainMenuBG = NodePath("../Common/MainMenu/MainMenuBG")
+MainMenuButtons = [NodePath("../Common/MainMenu/Introduction"), NodePath("../Common/MainMenu/CreateCharacter"), NodePath("../Common/MainMenu/Acknowledgements"), NodePath("../Common/MainMenu/JourneyOnwards")]
+LoadingLabel = NodePath("../Common/MainMenu/LoadingLabel")
+SaveGamesNames = [NodePath("../Common/MainMenu/Save1"), NodePath("../Common/MainMenu/Save2"), NodePath("../Common/MainMenu/Save3"), NodePath("../Common/MainMenu/Save4")]
+AutomapPanel = NodePath("../Common/Automap")
+AutomapBG = NodePath("../Common/Automap/MapBackground")
+AutomapImage = NodePath("../Common/Automap/MapImage")
+NotesPanel = NodePath("../Common/Automap/MapNotes")
+AutomapNumberLabel = NodePath("../Common/Automap/MapNo")
+AutomapWorldGem = [NodePath("../Common/Automap/Gem/World0"), NodePath("../Common/Automap/Gem/World1"), NodePath("../Common/Automap/Gem/World2"), NodePath("../Common/Automap/Gem/World3"), NodePath("../Common/Automap/Gem/World4"), NodePath("../Common/Automap/Gem/World5"), NodePath("../Common/Automap/Gem/World6"), NodePath("../Common/Automap/Gem/World7"), NodePath("../Common/Automap/Gem/World8")]
+messageScrollUW1 = NodePath("../UW1/MessageScrollPanelUW1/MessageScrollUW1")
+messageScrollUW2 = NodePath("../UW2/MessageScrollPanelUW2/messageScrollUW2")
+scrollEdgeUW1Left = NodePath("../UW1/MessageScrollPanelUW1/MessageScrollEdgeLeftUW1")
+scrollEdgeUW1Right = NodePath("../UW1/MessageScrollPanelUW1/MessageScrollEdgeRightUW1")
+scrollEdgeUW2Left = NodePath("../UW2/MessageScrollPanelUW2/MessageScrollEdgeLeftUW2")
+scrollEdgeUW2Right = NodePath("../UW2/MessageScrollPanelUW2/MessageScrollEdgeRightUW2")
+ConvoscrollEdgeUW1Left = [NodePath("../UW1/ConversationUW1/ConversationScrollEdgeLeftUW1_1"), NodePath("../UW1/ConversationUW1/ConversationScrollEdgeLeftUW1_2"), NodePath("../UW1/ConversationUW1/ConversationScrollEdgeLeftUW1_3"), NodePath("../UW1/ConversationUW1/ConversationScrollEdgeLeftUW1_1")]
+ConvoscrollEdgeUW1Right = [NodePath("../UW1/ConversationUW1/ConversationScrollEdgeRightUW1_1"), NodePath("../UW1/ConversationUW1/ConversationScrollEdgeRightUW1_2"), NodePath("../UW1/ConversationUW1/ConversationScrollEdgeRightUW1_3")]
+ConvoscrollEdgeUW2Left = [NodePath("../UW2/ConversationUW2/ConversationScrollEdgeLeftUW2_1"), NodePath("../UW2/ConversationUW2/ConversationScrollEdgeLeftUW2_2"), NodePath("../UW2/ConversationUW2/ConversationScrollEdgeLeftUW2_3")]
+ConvoscrollEdgeUW2Right = [NodePath("../UW2/ConversationUW2/ConversationScrollEdgeRightUW2_1"), NodePath("../UW2/ConversationUW2/ConversationScrollEdgeRightUW2_2"), NodePath("../UW2/ConversationUW2/ConversationScrollEdgeRightUW2_3")]
+TypedInput = NodePath("../Common/TypedInput")
+GameOptionButtonsUW1 = [NodePath("../UW1/GameOptionsUW1_0"), NodePath("../UW1/GameOptionsUW1_1"), NodePath("../UW1/GameOptionsUW1_2"), NodePath("../UW1/GameOptionsUW1_3"), NodePath("../UW1/GameOptionsUW1_4"), NodePath("../UW1/GameOptionsUW1_5"), NodePath("../UW1/GameOptionsUW1_6")]
+GameOptionButtonsUW2 = [NodePath("../UW2/GameOptionsUW2_0"), NodePath("../UW2/GameOptionsUW2_1"), NodePath("../UW2/GameOptionsUW2_2"), NodePath("../UW2/GameOptionsUW2_3"), NodePath("../UW2/GameOptionsUW2_4"), NodePath("../UW2/GameOptionsUW2_5"), NodePath("../UW2/GameOptionsUW2_6")]
+GameOptionsBackgroundUW1 = NodePath("../UW1/OptionsBackgroundUW1")
+GameOptionsBackgroundUW2 = NodePath("../UW2/GameOptionsBackgroundUW2")
+PanelInventory = NodePath("../Common/PaperDoll")
+PanelInventoryArt = NodePath("../Common/PaperDoll/PaperDollPanel")
+PanelRuneBag = NodePath("../Common/RuneBag")
+PanelRuneBagArt = NodePath("../Common/RuneBag/RuneBagPanel")
+PanelStats = NodePath("../Common/StatsDisplay")
+PanelStatsArt = NodePath("../Common/StatsDisplay/StatsPanel")
+Body = NodePath("../Common/PaperDoll/Body")
+Helm = NodePath("../Common/PaperDoll/Helm")
+Armour = NodePath("../Common/PaperDoll/Armour")
+ArmourInput = NodePath("../Common/PaperDoll/ArmourInput")
+Leggings = NodePath("../Common/PaperDoll/Leggings")
+LeggingsInput = NodePath("../Common/PaperDoll/LeggingsInput")
+Boots = NodePath("../Common/PaperDoll/Boots")
+Gloves = NodePath("../Common/PaperDoll/Gloves")
+GlovesInput1 = NodePath("../Common/PaperDoll/GlovesInput1")
+GlovesInput2 = NodePath("../Common/PaperDoll/GlovesInput2")
+RightShoulder = NodePath("../Common/PaperDoll/RightShoulder")
+RightShoulderQTY = NodePath("../Common/PaperDoll/RightShoulder/lblRightShoulder")
+LeftShoulder = NodePath("../Common/PaperDoll/LeftShoulder")
+LeftShoulderQTY = NodePath("../Common/PaperDoll/LeftShoulder/lblLeftShoulder")
+RightHand = NodePath("../Common/PaperDoll/RightHand")
+RightHandQTY = NodePath("../Common/PaperDoll/RightHand/lblRightHand")
+LeftHand = NodePath("../Common/PaperDoll/LeftHand")
+LeftHandQTY = NodePath("../Common/PaperDoll/LeftHand/lblLeftHand")
+RightRing = NodePath("../Common/PaperDoll/RightRing")
+RightRingInput = NodePath("../Common/PaperDoll/RightRingInput")
+LeftRing = NodePath("../Common/PaperDoll/LeftRing")
+LeftRingInput = NodePath("../Common/PaperDoll/LeftRingInput")
+Backpack = [NodePath("../Common/PaperDoll/Back0"), NodePath("../Common/PaperDoll/Back1"), NodePath("../Common/PaperDoll/Back2"), NodePath("../Common/PaperDoll/Back3"), NodePath("../Common/PaperDoll/Back4"), NodePath("../Common/PaperDoll/Back5"), NodePath("../Common/PaperDoll/Back6"), NodePath("../Common/PaperDoll/Back7")]
+BackpackQTY = [NodePath("../Common/PaperDoll/Back0/lblBack0"), NodePath("../Common/PaperDoll/Back1/lblBack1"), NodePath("../Common/PaperDoll/Back2/lblBack2"), NodePath("../Common/PaperDoll/Back3/lblBack3"), NodePath("../Common/PaperDoll/Back4/lblBack4"), NodePath("../Common/PaperDoll/Back5/lblBack5"), NodePath("../Common/PaperDoll/Back6/lblBack6"), NodePath("../Common/PaperDoll/Back7/lblBack7")]
+ArrowUp = NodePath("../Common/PaperDoll/UpArrow")
+ArrowDown = NodePath("../Common/PaperDoll/DownArrow")
+OpenedContainer = NodePath("../Common/PaperDoll/OpenedContainer")
+Chains = NodePath("../Common/OtherControls/Chain")
+BackpackBG = NodePath("../Common/PaperDoll/BackPackBG")
+WeightCapacity = NodePath("../Common/PaperDoll/WeightCapacity")
+RuneTiles = [NodePath("../Common/RuneBag/Rune0"), NodePath("../Common/RuneBag/Rune1"), NodePath("../Common/RuneBag/Rune2"), NodePath("../Common/RuneBag/Rune3"), NodePath("../Common/RuneBag/Rune4"), NodePath("../Common/RuneBag/Rune5"), NodePath("../Common/RuneBag/Rune6"), NodePath("../Common/RuneBag/Rune7"), NodePath("../Common/RuneBag/Rune8"), NodePath("../Common/RuneBag/Rune9"), NodePath("../Common/RuneBag/Rune10"), NodePath("../Common/RuneBag/Rune11"), NodePath("../Common/RuneBag/Rune12"), NodePath("../Common/RuneBag/Rune13"), NodePath("../Common/RuneBag/Rune14"), NodePath("../Common/RuneBag/Rune15"), NodePath("../Common/RuneBag/Rune16"), NodePath("../Common/RuneBag/Rune17"), NodePath("../Common/RuneBag/Rune18"), NodePath("../Common/RuneBag/Rune19"), NodePath("../Common/RuneBag/Rune20"), NodePath("../Common/RuneBag/Rune21"), NodePath("../Common/RuneBag/Rune22"), NodePath("../Common/RuneBag/Rune23")]
+SelectedRunes = [NodePath("../Common/OtherControls/SelectedRune0"), NodePath("../Common/OtherControls/SelectedRune1"), NodePath("../Common/OtherControls/SelectedRune2")]
+ActiveSpellIcons = [NodePath("../Common/OtherControls/SpellIcon0"), NodePath("../Common/OtherControls/SpellIcon1"), NodePath("../Common/OtherControls/SpellIcon2")]
+Charname = NodePath("../Common/StatsDisplay/Charname")
+CharLevel = NodePath("../Common/StatsDisplay/CharLevel")
+CharClass = NodePath("../Common/StatsDisplay/CharClass")
+STR = NodePath("../Common/StatsDisplay/STR")
+DEX = NodePath("../Common/StatsDisplay/DEX")
+INT = NodePath("../Common/StatsDisplay/INT")
+VIT = NodePath("../Common/StatsDisplay/VIT")
+MANA = NodePath("../Common/StatsDisplay/MANA")
+EXP = NodePath("../Common/StatsDisplay/EXP")
+StatsName = NodePath("../Common/StatsDisplay/StatNames")
+StatsValue = NodePath("../Common/StatsDisplay/StatValues")
+cross = ExtResource("18_tfr7p")
+cross2 = ExtResource("21_5p8p7")
+PlayerTradeSlotUW1 = [NodePath("../UW1/ConversationUW1/PlayerTradeUW1_0"), NodePath("../UW1/ConversationUW1/PlayerTradeUW1_1"), NodePath("../UW1/ConversationUW1/PlayerTradeUW1_2"), NodePath("../UW1/ConversationUW1/PlayerTradeUW1_3")]
+NPCTradeSlotUW1 = [NodePath("../UW1/ConversationUW1/NPCTradeUW1_0"), NodePath("../UW1/ConversationUW1/NPCTradeUW1_1"), NodePath("../UW1/ConversationUW1/NPCTradeUW1_2"), NodePath("../UW1/ConversationUW1/NPCTradeUW1_3")]
+PlayerTradeSelectedUW1 = [NodePath("../UW1/ConversationUW1/PlayerTradeSelectedUW1_0"), NodePath("../UW1/ConversationUW1/PlayerTradeSelectedUW1_1"), NodePath("../UW1/ConversationUW1/PlayerTradeSelectedUW1_2"), NodePath("../UW1/ConversationUW1/PlayerTradeSelectedUW1_3")]
+NPCTradeSelectedUW1 = [NodePath("../UW1/ConversationUW1/NPCTradeSelectedUW1_0"), NodePath("../UW1/ConversationUW1/NPCTradeSelectedUW1_1"), NodePath("../UW1/ConversationUW1/NPCTradeSelectedUW1_2"), NodePath("../UW1/ConversationUW1/NPCTradeSelectedUW1_3")]
+PlayerTradeSlotUW2 = [NodePath("../UW2/ConversationUW2/PlayerTradeUW2_0"), NodePath("../UW2/ConversationUW2/PlayerTradeUW2_1"), NodePath("../UW2/ConversationUW2/PlayerTradeUW2_2"), NodePath("../UW2/ConversationUW2/PlayerTradeUW2_3"), NodePath("../UW2/ConversationUW2/PlayerTradeUW2_4"), NodePath("../UW2/ConversationUW2/PlayerTradeUW2_5")]
+NPCTradeSlotUW2 = [NodePath("../UW2/ConversationUW2/NPCTradeUW2_0"), NodePath("../UW2/ConversationUW2/NPCTradeUW2_1"), NodePath("../UW2/ConversationUW2/NPCTradeUW2_2"), NodePath("../UW2/ConversationUW2/NPCTradeUW2_3"), NodePath("../UW2/ConversationUW2/NPCTradeUW2_4"), NodePath("../UW2/ConversationUW2/NPCTradeUW2_5")]
+PlayerTradeSelectedUW2 = [NodePath("../UW2/ConversationUW2/PlayerTradeSelectedUW2_0"), NodePath("../UW2/ConversationUW2/PlayerTradeSelectedUW2_1"), NodePath("../UW2/ConversationUW2/PlayerTradeSelectedUW2_2"), NodePath("../UW2/ConversationUW2/PlayerTradeSelectedUW2_3"), NodePath("../UW2/ConversationUW2/PlayerTradeSelectedUW2_4"), NodePath("../UW2/ConversationUW2/PlayerTradeSelectedUW2_5")]
+NPCTradeSelectedUW2 = [NodePath("../UW2/ConversationUW2/NPCTradeSelectedUW2_0"), NodePath("../UW2/ConversationUW2/NPCTradeSelectedUW2_1"), NodePath("../UW2/ConversationUW2/NPCTradeSelectedUW2_2"), NodePath("../UW2/ConversationUW2/NPCTradeSelectedUW2_3"), NodePath("../UW2/ConversationUW2/NPCTradeSelectedUW2_4"), NodePath("../UW2/ConversationUW2/NPCTradeSelectedUW2_5")]
+cam = NodePath("../../SubViewportWorld/GimbalYaw/GimbalRoll/GimbalPitchCamera_world")
+uwviewport = NodePath("../3DWin/OutputTextureCombined")
+uwsubviewport = NodePath("../../SubViewportWorld")
+uwsubviewport_world = NodePath("../../SubViewportWorld")
+uwsubviewport_sprites = NodePath("../../SubViewportSprites")
+uwsubviewport_objectinfo = NodePath("../../SubViewportObjectInfo")
+textureobjectinfo = NodePath("../3DWin/OutputObjectInfo")
+mousecursor = NodePath("../mouse/mouseCursor")
+uw1UI = NodePath("../UW1")
+uw2UI = NodePath("../UW2")
+mainwindowUW1 = NodePath("../UW1/3DWinUW1")
+mainwindowUW2 = NodePath("../UW2/3DWinUW2")
+weaponanimuw1 = NodePath("../UW1/WeaponAnimationUW1")
+weaponanimuw2 = NodePath("../UW2/WeaponAnimUW2")
+placeholderuw1 = NodePath("../UW1/placeholdermainuw1")
+placeholderuw2 = NodePath("../UW2/placeholdermainuw2")
+PowerGemUW1 = NodePath("../UW1/PowerGemUW1")
+PowerGemUW2 = NodePath("../UW2/PowerGemUW2")
+
+[node name="worldobjects" type="Node3D" parent="."]
+
+[node name="tilemap" type="Node3D" parent="."]
+
+[connection signal="mouse_entered" from="UI/UW1/MessageScrollPanelUW1" to="UI/uiManager" method="_on_message_scroll_mouse_entered"]
+[connection signal="mouse_exited" from="UI/UW1/MessageScrollPanelUW1" to="UI/uiManager" method="_on_message_scroll_mouse_exit"]
+[connection signal="gui_input" from="UI/UW1/CompassUW1/CompassClickArea" to="UI/uiManager" method="_on_compass_click"]
+[connection signal="gui_input" from="UI/UW1/ConversationUW1/PlayerTradeSelectedUW1_0" to="UI/uiManager" method="_on_player_trade_selected" binds= [0]]
+[connection signal="gui_input" from="UI/UW1/ConversationUW1/PlayerTradeSelectedUW1_1" to="UI/uiManager" method="_on_player_trade_selected" binds= [1]]
+[connection signal="gui_input" from="UI/UW1/ConversationUW1/PlayerTradeSelectedUW1_2" to="UI/uiManager" method="_on_player_trade_selected" binds= [2]]
+[connection signal="gui_input" from="UI/UW1/ConversationUW1/PlayerTradeSelectedUW1_3" to="UI/uiManager" method="_on_player_trade_selected" binds= [3]]
+[connection signal="gui_input" from="UI/UW1/ConversationUW1/PlayerTradeUW1_0" to="UI/uiManager" method="_on_player_trade_input" binds= [0]]
+[connection signal="gui_input" from="UI/UW1/ConversationUW1/PlayerTradeUW1_1" to="UI/uiManager" method="_on_player_trade_input" binds= [1]]
+[connection signal="gui_input" from="UI/UW1/ConversationUW1/PlayerTradeUW1_2" to="UI/uiManager" method="_on_player_trade_input" binds= [2]]
+[connection signal="gui_input" from="UI/UW1/ConversationUW1/PlayerTradeUW1_3" to="UI/uiManager" method="_on_player_trade_input" binds= [3]]
+[connection signal="gui_input" from="UI/UW1/ConversationUW1/NPCTradeUW1_0" to="UI/uiManager" method="_on_npc_trade_input" binds= [0]]
+[connection signal="gui_input" from="UI/UW1/ConversationUW1/NPCTradeUW1_1" to="UI/uiManager" method="_on_npc_trade_input" binds= [1]]
+[connection signal="gui_input" from="UI/UW1/ConversationUW1/NPCTradeUW1_2" to="UI/uiManager" method="_on_npc_trade_input" binds= [2]]
+[connection signal="gui_input" from="UI/UW1/ConversationUW1/NPCTradeUW1_3" to="UI/uiManager" method="_on_npc_trade_input" binds= [3]]
+[connection signal="gui_input" from="UI/UW1/ConversationUW1/NPCTradeSelectedUW1_0" to="UI/uiManager" method="_on_npc_trade_selected" binds= [0]]
+[connection signal="gui_input" from="UI/UW1/ConversationUW1/NPCTradeSelectedUW1_1" to="UI/uiManager" method="_on_npc_trade_selected" binds= [1]]
+[connection signal="gui_input" from="UI/UW1/ConversationUW1/NPCTradeSelectedUW1_2" to="UI/uiManager" method="_on_npc_trade_selected" binds= [2]]
+[connection signal="gui_input" from="UI/UW1/ConversationUW1/NPCTradeSelectedUW1_3" to="UI/uiManager" method="_on_npc_trade_selected" binds= [3]]
+[connection signal="gui_input" from="UI/UW1/OptionsButtonUW1" to="UI/uiManager" method="_on_interactionoptions_button" binds= [0]]
+[connection signal="gui_input" from="UI/UW1/TalkButtonUW1" to="UI/uiManager" method="_on_interactionoptions_button" binds= [1]]
+[connection signal="gui_input" from="UI/UW1/PickupButtonUW1" to="UI/uiManager" method="_on_interactionoptions_button" binds= [2]]
+[connection signal="gui_input" from="UI/UW1/LookButtonUW1" to="UI/uiManager" method="_on_interactionoptions_button" binds= [3]]
+[connection signal="gui_input" from="UI/UW1/AttackButtonUW1" to="UI/uiManager" method="_on_interactionoptions_button" binds= [4]]
+[connection signal="gui_input" from="UI/UW1/UseButtonUW1" to="UI/uiManager" method="_on_interactionoptions_button" binds= [5]]
+[connection signal="gui_input" from="UI/UW1/GameOptionsUW1_0" to="UI/uiManager" method="_on_game_options_input" binds= [0]]
+[connection signal="gui_input" from="UI/UW1/GameOptionsUW1_1" to="UI/uiManager" method="_on_game_options_input" binds= [1]]
+[connection signal="gui_input" from="UI/UW1/GameOptionsUW1_2" to="UI/uiManager" method="_on_game_options_input" binds= [2]]
+[connection signal="gui_input" from="UI/UW1/GameOptionsUW1_3" to="UI/uiManager" method="_on_game_options_input" binds= [3]]
+[connection signal="gui_input" from="UI/UW1/GameOptionsUW1_4" to="UI/uiManager" method="_on_game_options_input" binds= [4]]
+[connection signal="gui_input" from="UI/UW1/GameOptionsUW1_5" to="UI/uiManager" method="_on_game_options_input" binds= [5]]
+[connection signal="gui_input" from="UI/UW1/GameOptionsUW1_6" to="UI/uiManager" method="_on_game_options_input" binds= [6]]
+[connection signal="mouse_entered" from="UI/UW2/MessageScrollPanelUW2" to="UI/uiManager" method="_on_message_scroll_mouse_entered"]
+[connection signal="mouse_exited" from="UI/UW2/MessageScrollPanelUW2" to="UI/uiManager" method="_on_message_scroll_mouse_exit"]
+[connection signal="gui_input" from="UI/UW2/OptionsButtonUW2" to="UI/uiManager" method="_on_interactionoptions_button" binds= [0]]
+[connection signal="gui_input" from="UI/UW2/TalkButtonUW2" to="UI/uiManager" method="_on_interactionoptions_button" binds= [1]]
+[connection signal="gui_input" from="UI/UW2/PickupButtonUW2" to="UI/uiManager" method="_on_interactionoptions_button" binds= [2]]
+[connection signal="gui_input" from="UI/UW2/LookButtonUW2" to="UI/uiManager" method="_on_interactionoptions_button" binds= [3]]
+[connection signal="gui_input" from="UI/UW2/AttackButtonUW2" to="UI/uiManager" method="_on_interactionoptions_button" binds= [4]]
+[connection signal="gui_input" from="UI/UW2/UseButtonUW2" to="UI/uiManager" method="_on_interactionoptions_button" binds= [5]]
+[connection signal="gui_input" from="UI/UW2/CompassUW2/CompassClickArea" to="UI/uiManager" method="_on_compass_click"]
+[connection signal="gui_input" from="UI/UW2/GameOptionsUW2_0" to="UI/uiManager" method="_on_game_options_input" binds= [0]]
+[connection signal="gui_input" from="UI/UW2/GameOptionsUW2_1" to="UI/uiManager" method="_on_game_options_input" binds= [1]]
+[connection signal="gui_input" from="UI/UW2/GameOptionsUW2_2" to="UI/uiManager" method="_on_game_options_input" binds= [2]]
+[connection signal="gui_input" from="UI/UW2/GameOptionsUW2_3" to="UI/uiManager" method="_on_game_options_input" binds= [3]]
+[connection signal="gui_input" from="UI/UW2/GameOptionsUW2_4" to="UI/uiManager" method="_on_game_options_input" binds= [4]]
+[connection signal="gui_input" from="UI/UW2/GameOptionsUW2_5" to="UI/uiManager" method="_on_game_options_input" binds= [5]]
+[connection signal="gui_input" from="UI/UW2/GameOptionsUW2_6" to="UI/uiManager" method="_on_game_options_input" binds= [6]]
+[connection signal="gui_input" from="UI/UW2/ConversationUW2/PlayerTradeUW2_0" to="UI/uiManager" method="_on_player_trade_input" binds= [0]]
+[connection signal="gui_input" from="UI/UW2/ConversationUW2/PlayerTradeUW2_1" to="UI/uiManager" method="_on_player_trade_input" binds= [1]]
+[connection signal="gui_input" from="UI/UW2/ConversationUW2/PlayerTradeUW2_2" to="UI/uiManager" method="_on_player_trade_input" binds= [2]]
+[connection signal="gui_input" from="UI/UW2/ConversationUW2/PlayerTradeUW2_3" to="UI/uiManager" method="_on_player_trade_input" binds= [3]]
+[connection signal="gui_input" from="UI/UW2/ConversationUW2/PlayerTradeUW2_4" to="UI/uiManager" method="_on_player_trade_input" binds= [4]]
+[connection signal="gui_input" from="UI/UW2/ConversationUW2/PlayerTradeUW2_5" to="UI/uiManager" method="_on_player_trade_input" binds= [5]]
+[connection signal="gui_input" from="UI/UW2/ConversationUW2/NPCTradeUW2_0" to="UI/uiManager" method="_on_npc_trade_input" binds= [0]]
+[connection signal="gui_input" from="UI/UW2/ConversationUW2/NPCTradeUW2_1" to="UI/uiManager" method="_on_npc_trade_input" binds= [1]]
+[connection signal="gui_input" from="UI/UW2/ConversationUW2/NPCTradeUW2_2" to="UI/uiManager" method="_on_npc_trade_input" binds= [2]]
+[connection signal="gui_input" from="UI/UW2/ConversationUW2/NPCTradeUW2_3" to="UI/uiManager" method="_on_npc_trade_input" binds= [3]]
+[connection signal="gui_input" from="UI/UW2/ConversationUW2/NPCTradeUW2_4" to="UI/uiManager" method="_on_npc_trade_input" binds= [4]]
+[connection signal="gui_input" from="UI/UW2/ConversationUW2/NPCTradeUW2_5" to="UI/uiManager" method="_on_npc_trade_input" binds= [5]]
+[connection signal="gui_input" from="UI/UW2/ConversationUW2/PlayerTradeSelectedUW2_0" to="UI/uiManager" method="_on_player_trade_selected" binds= [0]]
+[connection signal="gui_input" from="UI/UW2/ConversationUW2/PlayerTradeSelectedUW2_1" to="UI/uiManager" method="_on_player_trade_selected" binds= [1]]
+[connection signal="gui_input" from="UI/UW2/ConversationUW2/PlayerTradeSelectedUW2_2" to="UI/uiManager" method="_on_player_trade_selected" binds= [2]]
+[connection signal="gui_input" from="UI/UW2/ConversationUW2/PlayerTradeSelectedUW2_3" to="UI/uiManager" method="_on_player_trade_selected" binds= [3]]
+[connection signal="gui_input" from="UI/UW2/ConversationUW2/PlayerTradeSelectedUW2_4" to="UI/uiManager" method="_on_player_trade_selected" binds= [4]]
+[connection signal="gui_input" from="UI/UW2/ConversationUW2/PlayerTradeSelectedUW2_5" to="UI/uiManager" method="_on_player_trade_selected" binds= [5]]
+[connection signal="gui_input" from="UI/UW2/ConversationUW2/NPCTradeSelectedUW2_0" to="UI/uiManager" method="_on_npc_trade_selected" binds= [0]]
+[connection signal="gui_input" from="UI/UW2/ConversationUW2/NPCTradeSelectedUW2_1" to="UI/uiManager" method="_on_npc_trade_selected" binds= [1]]
+[connection signal="gui_input" from="UI/UW2/ConversationUW2/NPCTradeSelectedUW2_2" to="UI/uiManager" method="_on_npc_trade_selected" binds= [2]]
+[connection signal="gui_input" from="UI/UW2/ConversationUW2/NPCTradeSelectedUW2_3" to="UI/uiManager" method="_on_npc_trade_selected" binds= [4]]
+[connection signal="gui_input" from="UI/UW2/ConversationUW2/NPCTradeSelectedUW2_4" to="UI/uiManager" method="_on_npc_trade_selected" binds= [4]]
+[connection signal="gui_input" from="UI/UW2/ConversationUW2/NPCTradeSelectedUW2_5" to="UI/uiManager" method="_on_npc_trade_selected" binds= [5]]
+[connection signal="gui_input" from="UI/Common/PaperDoll/Helm" to="UI/uiManager" method="_paperdoll_gui_input" binds= ["Helm"]]
+[connection signal="gui_input" from="UI/Common/PaperDoll/Boots" to="UI/uiManager" method="_paperdoll_gui_input" binds= ["Boots"]]
+[connection signal="gui_input" from="UI/Common/PaperDoll/ArmourInput" to="UI/uiManager" method="_paperdoll_gui_input" binds= ["Armour"]]
+[connection signal="gui_input" from="UI/Common/PaperDoll/LeggingsInput" to="UI/uiManager" method="_paperdoll_gui_input" binds= ["Leggings"]]
+[connection signal="gui_input" from="UI/Common/PaperDoll/GlovesInput1" to="UI/uiManager" method="_paperdoll_gui_input" binds= ["Gloves"]]
+[connection signal="gui_input" from="UI/Common/PaperDoll/GlovesInput2" to="UI/uiManager" method="_paperdoll_gui_input" binds= ["Gloves"]]
+[connection signal="gui_input" from="UI/Common/PaperDoll/LeftShoulder" to="UI/uiManager" method="_paperdoll_gui_input" binds= ["LeftShoulder"]]
+[connection signal="gui_input" from="UI/Common/PaperDoll/RightShoulder" to="UI/uiManager" method="_paperdoll_gui_input" binds= ["RightShoulder"]]
+[connection signal="gui_input" from="UI/Common/PaperDoll/LeftHand" to="UI/uiManager" method="_paperdoll_gui_input" binds= ["LeftHand"]]
+[connection signal="gui_input" from="UI/Common/PaperDoll/RightHand" to="UI/uiManager" method="_paperdoll_gui_input" binds= ["RightHand"]]
+[connection signal="gui_input" from="UI/Common/PaperDoll/RightRingInput" to="UI/uiManager" method="_paperdoll_gui_input" binds= ["RightRing"]]
+[connection signal="gui_input" from="UI/Common/PaperDoll/LeftRingInput" to="UI/uiManager" method="_paperdoll_gui_input" binds= ["LeftRing"]]
+[connection signal="gui_input" from="UI/Common/PaperDoll/Back0" to="UI/uiManager" method="_paperdoll_gui_input" binds= ["Back0"]]
+[connection signal="gui_input" from="UI/Common/PaperDoll/Back1" to="UI/uiManager" method="_paperdoll_gui_input" binds= ["Back1"]]
+[connection signal="gui_input" from="UI/Common/PaperDoll/Back2" to="UI/uiManager" method="_paperdoll_gui_input" binds= ["Back2"]]
+[connection signal="gui_input" from="UI/Common/PaperDoll/Back3" to="UI/uiManager" method="_paperdoll_gui_input" binds= ["Back3"]]
+[connection signal="gui_input" from="UI/Common/PaperDoll/Back4" to="UI/uiManager" method="_paperdoll_gui_input" binds= ["Back4"]]
+[connection signal="gui_input" from="UI/Common/PaperDoll/Back5" to="UI/uiManager" method="_paperdoll_gui_input" binds= ["Back5"]]
+[connection signal="gui_input" from="UI/Common/PaperDoll/Back6" to="UI/uiManager" method="_paperdoll_gui_input" binds= ["Back6"]]
+[connection signal="gui_input" from="UI/Common/PaperDoll/Back7" to="UI/uiManager" method="_paperdoll_gui_input" binds= ["Back7"]]
+[connection signal="gui_input" from="UI/Common/PaperDoll/OpenedContainer" to="UI/uiManager" method="_paperdoll_gui_input" binds= ["OpenedContainer"]]
+[connection signal="gui_input" from="UI/Common/PaperDoll/UpArrow" to="UI/uiManager" method="_on_updown_arrow_gui_input" binds= [1]]
+[connection signal="gui_input" from="UI/Common/PaperDoll/DownArrow" to="UI/uiManager" method="_on_updown_arrow_gui_input" binds= [-1]]
+[connection signal="gui_input" from="UI/Common/RuneBag/Rune0" to="UI/uiManager" method="RuneClick" binds= [0]]
+[connection signal="gui_input" from="UI/Common/RuneBag/Rune1" to="UI/uiManager" method="RuneClick" binds= [1]]
+[connection signal="gui_input" from="UI/Common/RuneBag/Rune2" to="UI/uiManager" method="RuneClick" binds= [2]]
+[connection signal="gui_input" from="UI/Common/RuneBag/Rune3" to="UI/uiManager" method="RuneClick" binds= [3]]
+[connection signal="gui_input" from="UI/Common/RuneBag/Rune4" to="UI/uiManager" method="RuneClick" binds= [4]]
+[connection signal="gui_input" from="UI/Common/RuneBag/Rune5" to="UI/uiManager" method="RuneClick" binds= [5]]
+[connection signal="gui_input" from="UI/Common/RuneBag/Rune6" to="UI/uiManager" method="RuneClick" binds= [6]]
+[connection signal="gui_input" from="UI/Common/RuneBag/Rune7" to="UI/uiManager" method="RuneClick" binds= [7]]
+[connection signal="gui_input" from="UI/Common/RuneBag/Rune8" to="UI/uiManager" method="RuneClick" binds= [8]]
+[connection signal="gui_input" from="UI/Common/RuneBag/Rune9" to="UI/uiManager" method="RuneClick" binds= [9]]
+[connection signal="gui_input" from="UI/Common/RuneBag/Rune10" to="UI/uiManager" method="RuneClick" binds= [10]]
+[connection signal="gui_input" from="UI/Common/RuneBag/Rune11" to="UI/uiManager" method="RuneClick" binds= [11]]
+[connection signal="gui_input" from="UI/Common/RuneBag/Rune12" to="UI/uiManager" method="RuneClick" binds= [12]]
+[connection signal="gui_input" from="UI/Common/RuneBag/Rune13" to="UI/uiManager" method="RuneClick" binds= [13]]
+[connection signal="gui_input" from="UI/Common/RuneBag/Rune14" to="UI/uiManager" method="RuneClick" binds= [14]]
+[connection signal="gui_input" from="UI/Common/RuneBag/Rune15" to="UI/uiManager" method="RuneClick" binds= [15]]
+[connection signal="gui_input" from="UI/Common/RuneBag/Rune16" to="UI/uiManager" method="RuneClick" binds= [16]]
+[connection signal="gui_input" from="UI/Common/RuneBag/Rune17" to="UI/uiManager" method="RuneClick" binds= [17]]
+[connection signal="gui_input" from="UI/Common/RuneBag/Rune18" to="UI/uiManager" method="RuneClick" binds= [18]]
+[connection signal="gui_input" from="UI/Common/RuneBag/Rune19" to="UI/uiManager" method="RuneClick" binds= [19]]
+[connection signal="gui_input" from="UI/Common/RuneBag/Rune20" to="UI/uiManager" method="RuneClick" binds= [20]]
+[connection signal="gui_input" from="UI/Common/RuneBag/Rune21" to="UI/uiManager" method="RuneClick" binds= [21]]
+[connection signal="gui_input" from="UI/Common/RuneBag/Rune22" to="UI/uiManager" method="RuneClick" binds= [22]]
+[connection signal="gui_input" from="UI/Common/RuneBag/Rune23" to="UI/uiManager" method="RuneClick" binds= [23]]
+[connection signal="gui_input" from="UI/Common/RuneBag/PutRunesAway" to="UI/uiManager" method="RuneClick" binds= [-1]]
+[connection signal="gui_input" from="UI/Common/StatsDisplay/StatsUp" to="UI/uiManager" method="_on_stats_updown_gui_input" binds= [-1]]
+[connection signal="gui_input" from="UI/Common/StatsDisplay/StatsDown" to="UI/uiManager" method="_on_stats_updown_gui_input" binds= [1]]
+[connection signal="gui_input" from="UI/Common/OtherControls/Chain" to="UI/uiManager" method="ChainPull"]
+[connection signal="gui_input" from="UI/Common/OtherControls/SelectedRune0" to="UI/uiManager" method="SelectedRunesClick"]
+[connection signal="gui_input" from="UI/Common/OtherControls/SelectedRune1" to="UI/uiManager" method="SelectedRunesClick"]
+[connection signal="gui_input" from="UI/Common/OtherControls/SelectedRune2" to="UI/uiManager" method="SelectedRunesClick"]
+[connection signal="gui_input" from="UI/Common/OtherControls/SpellIcon0" to="UI/uiManager" method="_on_spell_icon_gui_input" binds= [0]]
+[connection signal="gui_input" from="UI/Common/OtherControls/SpellIcon1" to="UI/uiManager" method="_on_spell_icon_gui_input" binds= [1]]
+[connection signal="gui_input" from="UI/Common/OtherControls/SpellIcon2" to="UI/uiManager" method="_on_spell_icon_gui_input" binds= [2]]
+[connection signal="gui_input" from="UI/Common/HealthFlask/FlaskBorder" to="UI/uiManager" method="_on_healthflask_gui_input"]
+[connection signal="gui_input" from="UI/Common/ManaFlask/FlaskBorder" to="UI/uiManager" method="_on_manaflask_gui_input"]
+[connection signal="gui_input" from="UI/Common/Automap/MapBackground" to="UI/uiManager" method="_on_map_background_gui_input"]
+[connection signal="gui_input" from="UI/Common/Automap/MapImage" to="UI/uiManager" method="_on_map_background_gui_input"]
+[connection signal="gui_input" from="UI/Common/Automap/Close" to="UI/uiManager" method="CloseAutomap"]
+[connection signal="gui_input" from="UI/Common/Automap/Eraser" to="UI/uiManager" method="EraseMapNote"]
+[connection signal="gui_input" from="UI/Common/Automap/MapUp" to="UI/uiManager" method="_on_map_up_gui_input"]
+[connection signal="gui_input" from="UI/Common/Automap/MapDown" to="UI/uiManager" method="_on_map_down_gui_input"]
+[connection signal="gui_input" from="UI/Common/Automap/Gem/World0" to="UI/uiManager" method="_on_world_gui_input" binds= [0]]
+[connection signal="gui_input" from="UI/Common/Automap/Gem/World1" to="UI/uiManager" method="_on_world_gui_input" binds= [1]]
+[connection signal="gui_input" from="UI/Common/Automap/Gem/World2" to="UI/uiManager" method="_on_world_gui_input" binds= [2]]
+[connection signal="gui_input" from="UI/Common/Automap/Gem/World3" to="UI/uiManager" method="_on_world_gui_input" binds= [3]]
+[connection signal="gui_input" from="UI/Common/Automap/Gem/World4" to="UI/uiManager" method="_on_world_gui_input" binds= [4]]
+[connection signal="gui_input" from="UI/Common/Automap/Gem/World5" to="UI/uiManager" method="_on_world_gui_input" binds= [5]]
+[connection signal="gui_input" from="UI/Common/Automap/Gem/World6" to="UI/uiManager" method="_on_world_gui_input" binds= [7]]
+[connection signal="gui_input" from="UI/Common/Automap/Gem/World7" to="UI/uiManager" method="_on_world_gui_input" binds= [6]]
+[connection signal="gui_input" from="UI/Common/Automap/Gem/World8" to="UI/uiManager" method="_on_world_gui_input" binds= [8]]
+[connection signal="gui_input" from="UI/Common/MainMenu/Introduction" to="UI/uiManager" method="_on_introduction_gui_input"]
+[connection signal="mouse_entered" from="UI/Common/MainMenu/Introduction" to="UI/uiManager" method="_on_introduction_mouse_entered"]
+[connection signal="mouse_exited" from="UI/Common/MainMenu/Introduction" to="UI/uiManager" method="_on_introduction_mouse_exited"]
+[connection signal="gui_input" from="UI/Common/MainMenu/CreateCharacter" to="UI/uiManager" method="_on_create_character_gui_input"]
+[connection signal="mouse_entered" from="UI/Common/MainMenu/CreateCharacter" to="UI/uiManager" method="_on_create_character_mouse_entered"]
+[connection signal="mouse_exited" from="UI/Common/MainMenu/CreateCharacter" to="UI/uiManager" method="_on_create_character_mouse_exited"]
+[connection signal="gui_input" from="UI/Common/MainMenu/Acknowledgements" to="UI/uiManager" method="_on_acknowledgements_gui_input"]
+[connection signal="mouse_entered" from="UI/Common/MainMenu/Acknowledgements" to="UI/uiManager" method="_on_acknowledgements_mouse_entered"]
+[connection signal="mouse_exited" from="UI/Common/MainMenu/Acknowledgements" to="UI/uiManager" method="_on_acknowledgements_mouse_exited"]
+[connection signal="gui_input" from="UI/Common/MainMenu/JourneyOnwards" to="UI/uiManager" method="_on_journey_onwards_gui_input"]
+[connection signal="mouse_entered" from="UI/Common/MainMenu/JourneyOnwards" to="UI/uiManager" method="_on_journey_onwards_mouse_entered"]
+[connection signal="mouse_exited" from="UI/Common/MainMenu/JourneyOnwards" to="UI/uiManager" method="_on_journey_onwards_mouse_exited"]
+[connection signal="gui_input" from="UI/Common/MainMenu/Save1" to="UI/uiManager" method="_on_save_1_gui_input"]
+[connection signal="gui_input" from="UI/Common/MainMenu/Save2" to="UI/uiManager" method="_on_save_2_gui_input"]
+[connection signal="gui_input" from="UI/Common/MainMenu/Save3" to="UI/uiManager" method="_on_save_3_gui_input"]
+[connection signal="gui_input" from="UI/Common/MainMenu/Save4" to="UI/uiManager" method="_on_save_4_gui_input"]
+[connection signal="gui_input" from="UI/Common/Endgame" to="UI/uiManager" method="_on_endgame_gui_input"]

@@ -1,0 +1,459 @@
+using System;
+using System.Diagnostics;
+using System.IO.Compression;
+using System.Security;
+using Godot;
+
+namespace Underworld
+{
+
+    public partial class uimanager : Node2D
+    {
+        /// <summary>
+        /// Identifies what mode of object usage is currently being used.
+        /// 0 = default interactions
+        /// 1 = Player has selected an object and it has changed to prompt to be used on something. Eg rockhammer, doorkey, oil flask
+        /// 2 = Player is casting a spell and the spell needs to be clicked on an object.
+        /// </summary>
+        public static int UsageMode
+        {
+            get
+            {
+                if (useon.CurrentItemBeingUsed != null)
+                {
+                    return 1;
+                }
+                if (SpellCasting.currentSpell != null)
+                {
+                    return 2;
+                }
+                return 0;
+            }
+        }
+
+        public enum InteractionModes
+        {
+            ModeNone = -1,
+            ModeOptions = 0,
+            ModeTalk = 1,
+            ModePickup = 2,
+            ModeLook = 3,
+            ModeAttack = 4,
+            ModeUse = 5
+        };
+
+        public static InteractionModes InteractionMode = InteractionModes.ModeUse;
+        [ExportGroup("InteractionModes")]
+        //Array to store the interaction mode mo
+        [Export] public Godot.TextureRect[] InteractionButtonsUW1 = new Godot.TextureRect[6];
+        [Export] public Godot.TextureRect[] InteractionButtonsUW2 = new Godot.TextureRect[6];
+
+        public ImageTexture[] UW2InteractionBtnsOff;
+        public ImageTexture[] UW2InteractionButtonsOn;
+
+        private void InitInteraction()
+        {
+
+            if (UWClass._RES == UWClass.GAME_UW2)
+            {//load interaction button art for uw2. the images need to be cropped out of a master image.
+
+                UW2InteractionBtnsOff = new ImageTexture[6];
+                UW2InteractionButtonsOn = new ImageTexture[6];
+
+                //CropTexture, as the rects are in original pixels and HD art is several times larger
+                var Off = grOptBtns.LoadImageAt(0);
+                var On = grOptBtns.LoadImageAt(1);
+                UW2InteractionBtnsOff[4] = ArtLoader.CropTexture(Off, new Rect2I(0, 0, 25, 14)); //attack button off
+                UW2InteractionButtonsOn[4] = ArtLoader.CropTexture(On, new Rect2I(0, 0, 25, 14)); //attack button on
+
+                UW2InteractionBtnsOff[5] = ArtLoader.CropTexture(Off, new Rect2I(26, 0, 25, 14)); //use button off
+                UW2InteractionButtonsOn[5] = ArtLoader.CropTexture(On, new Rect2I(26, 0, 25, 14)); //use button on
+
+                UW2InteractionBtnsOff[2] = ArtLoader.CropTexture(Off, new Rect2I(52, 0, 25, 14)); //pickup button off
+                UW2InteractionButtonsOn[2] = ArtLoader.CropTexture(On, new Rect2I(52, 0, 25, 14)); //pickup button on
+
+                UW2InteractionBtnsOff[1] = ArtLoader.CropTexture(Off, new Rect2I(0, 15, 25, 14)); //talk button off
+                UW2InteractionButtonsOn[1] = ArtLoader.CropTexture(On, new Rect2I(0, 15, 25, 14)); //talk button on
+
+                UW2InteractionBtnsOff[3] = ArtLoader.CropTexture(Off, new Rect2I(26, 15, 25, 14)); //look button off
+                UW2InteractionButtonsOn[3] = ArtLoader.CropTexture(On, new Rect2I(26, 15, 25, 14)); //look button on
+
+                UW2InteractionBtnsOff[0] = ArtLoader.CropTexture(Off, new Rect2I(52, 15, 25, 14)); //options button off
+                UW2InteractionButtonsOn[0] = ArtLoader.CropTexture(On, new Rect2I(52, 15, 25, 14)); //option button on
+            }
+
+
+            switch (UWClass._RES)
+            {
+                case UWClass.GAME_UW2:
+                    for (int i = 0; i <= InteractionButtonsUW2.GetUpperBound(0); i++)
+                    {
+                        if (i != (int)InteractionMode)
+                        {
+                            InteractionButtonsUW2[i].Texture = UW2InteractionBtnsOff[i];
+                        }
+                        else
+                        {
+                            InteractionButtonsUW2[i].Texture = UW2InteractionButtonsOn[i];
+                        }
+                    }
+                    break;
+                default:
+                    for (int i = 0; i <= InteractionButtonsUW1.GetUpperBound(0); i++)
+                    {
+                        if (i != (int)InteractionMode)
+                        {
+                            InteractionButtonsUW1[i].Texture = grLfti.LoadImageAt(i * 2, false); //off button
+                        }
+                        else
+                        {
+                            InteractionButtonsUW1[i].Texture = grLfti.LoadImageAt(i * 2 + 1, false);//on button
+                        }
+                    }
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Handles interacting with objects in the world
+        /// </summary>
+        /// <param name="index"></param>
+        public static void InteractWithObjectCollider(int index, bool LeftClick)
+        {
+            if (playerdat.ParalyseTimer > 0)
+            {
+                return;//stop interaction while player is paralysed
+            }
+            switch (InteractionMode)
+            {
+                case InteractionModes.ModeTalk:
+                    talk.Talk(
+                        ConversationNPC: UWTileMap.current_tilemap.LevelObjects[index],
+                        WorldObject: true);
+                    break;
+                case InteractionModes.ModeLook:
+                    //Do a look interaction with the object
+                    look.LookAt(
+                        index: index,
+                        objList: UWTileMap.current_tilemap.LevelObjects,
+                        WorldObject: true);
+                    break;
+                case InteractionModes.ModeUse:
+                    //do a use interaction with the object.
+                    if (CanReach(UWTileMap.current_tilemap.LevelObjects[index], playerdat.UseDistance))
+                    {
+                        if (useon.CurrentItemBeingUsed != null)
+                        {
+                            //handle using an object on another.       
+                            useon.UseOn(
+                                ObjectUsed: UWTileMap.current_tilemap.LevelObjects[index],
+                                srcObject: useon.CurrentItemBeingUsed,
+                                WorldObject: true);
+                        }
+                        else
+                        {
+                            use.Use(
+                                ObjectUsed: UWTileMap.current_tilemap.LevelObjects[index],
+                                UsingObjectOrCharacter: playerdat.playerObject,
+                                objList: UWTileMap.current_tilemap.LevelObjects,
+                                WorldObject: true);
+                        }
+                    }
+                    else
+                    {
+                        uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, GameStrings.str_you_are_unable_to_use_that_from_here_));
+                    }
+                    break;
+                case InteractionModes.ModePickup:
+                    if (playerdat.ObjectInHand == -1)//don't do pickup if holding something already.
+                    {
+                        if (CanReach(UWTileMap.current_tilemap.LevelObjects[index], playerdat.PickupDistance))
+                        {
+                            //get weight of object being picked
+                            pickup.PickUp(
+                                index: index,
+                                objList: UWTileMap.current_tilemap.LevelObjects,
+                                WorldObject: true);
+                        }
+                        else
+                        {
+                            uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, GameStrings.str_you_cannot_reach_that_));
+                        }
+                    }
+                    break;
+            }
+        }
+
+        static bool CanReach(uwObject obj, int UseDistance)
+        {
+            if (UseDistance == 0)
+            {
+                return true;
+            }
+            else
+            {
+                var xCoord = Math.Abs((obj.tileX << 3) + obj.xpos) - ((playerdat.playerObject.tileX << 3) + playerdat.playerObject.xpos);
+                var yCoord = Math.Abs((obj.tileY << 3) + obj.ypos) - ((playerdat.playerObject.tileY << 3) + playerdat.playerObject.ypos);
+
+                if ((yCoord * yCoord) + (xCoord * xCoord) > UseDistance)
+                {
+                    return false;
+                }
+                else
+                {
+                    var zDiff = playerdat.playerObject.zpos - obj.zpos;
+                    if (playerdat.SwimCounter > 0x50)
+                    {
+                        zDiff -= (playerdat.SwimCounter >> 3);
+                    }
+                    int pole = 0;
+                    if (playerdat.usingpole)
+                    {
+                        pole = 1;
+                    }
+                    pole++;
+
+                    if ((pole * 0xC) >= zDiff)
+                    {
+                        if ((pole * -24) <= zDiff)
+                        {
+                            return true;
+                        }
+                    }
+                    else
+                    {
+                        return false;
+                    }
+                }
+
+            }
+            return false;
+        }
+
+        public static void InteractionModeToggle(InteractionModes index)
+        {
+            PreviousInteractionMode = InteractionMode;
+            ToggleInteractionButtonDisplay(index);
+
+            ///special handling for some modes
+            switch (index)
+            {
+                case InteractionModes.ModeOptions:
+                    {
+                        if (UWClass._RES == UWClass.GAME_UW2)
+                        {
+
+                        }
+                        else
+                        {
+                            InteractionModeShowHide(false);//hide the interaction buttons.  
+                        }
+                        //turn off mouselook (obsolete?)
+                        Input.MouseMode = Input.MouseModeEnum.Hidden;
+                        ReturnToTopOptionsMenu();
+                        break;
+                    }
+                case InteractionModes.ModeAttack:
+                    {
+                        ToggleWeaponAnimationState(playerdat.play_drawn != 1);
+                        break;
+                    }
+                default:
+                    //ensure weapon is not drawn.
+                    if (playerdat.play_drawn == 1)
+                    {
+                        ToggleWeaponAnimationState(false);
+                    }
+
+                    //XMIMusic.PickLevelThemeMusic(); //in future this needs to take into account combat state.
+                    //
+                    break;
+
+            }
+        }
+
+        /// <summary>
+        /// DOS "no mode": no interaction button selected. Inventory uses L=Use, R=Look.
+        /// </summary>
+        public static void EnterInteractionModeNone()
+        {
+            PreviousInteractionMode = InteractionMode;
+            InteractionMode = InteractionModes.ModeNone;
+            SetAllInteractionButtonsOff();
+            if (playerdat.play_drawn == 1)
+            {
+                ToggleWeaponAnimationState(false);
+            }
+        }
+
+        static void SetAllInteractionButtonsOff()
+        {
+            if (UWClass._RES == UWClass.GAME_UW2)
+            {
+                for (int i = 0; i <= instance.InteractionButtonsUW2.GetUpperBound(0); i++)
+                {
+                    instance.InteractionButtonsUW2[i].Texture = instance.UW2InteractionBtnsOff[i];
+                }
+            }
+            else
+            {
+                for (int i = 0; i <= instance.InteractionButtonsUW1.GetUpperBound(0); i++)
+                {
+                    instance.InteractionButtonsUW1[i].Texture = grLfti.LoadImageAt(i * 2, false);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Sets the on button for the interaction buttons to the specified index.
+        /// </summary>
+        /// <param name="index"></param>
+        private static void ToggleInteractionButtonDisplay(InteractionModes index)
+        {
+            if (index == InteractionModes.ModeNone)
+            {
+                EnterInteractionModeNone();
+                return;
+            }
+
+            if (UWClass._RES == UWClass.GAME_UW2)
+            {
+                for (int i = 0; i <= instance.InteractionButtonsUW2.GetUpperBound(0); i++)
+                {
+                    if (i == (int)(index))
+                    {
+                        InteractionMode = index;
+                        instance.InteractionButtonsUW2[i].Texture = instance.UW2InteractionButtonsOn[i];
+                    }
+                    else
+                    {
+                        instance.InteractionButtonsUW2[i].Texture = instance.UW2InteractionBtnsOff[i];
+                    }
+                }
+            }
+            else
+            {
+                for (int i = 0; i <= instance.InteractionButtonsUW1.GetUpperBound(0); i++)
+                {
+                    if (i == (int)(index))
+                    {
+                        InteractionMode = index;
+                        instance.InteractionButtonsUW1[i].Texture = grLfti.LoadImageAt(i * 2 + 1, false);//on button
+                    }
+                    else
+                    {
+                        instance.InteractionButtonsUW1[i].Texture = grLfti.LoadImageAt(i * 2, false);//off button
+                    }
+                }
+            }
+        }
+
+
+        public static void ToggleWeaponAnimationState(bool drawWeapon, bool updateThemes = true)
+        {
+            //PreviousWeaponAnimation = -1; //force redraw.
+            //combat.stage = combat.CombatStages.OutOfCombat;
+            if (drawWeapon)     //(playerdat.play_drawn != 1)
+            {
+                playerdat.play_drawn = 1;//draw the weapon 
+                if (updateThemes)
+                {
+                    XMIMusic.ChangeThemeMusic(XMIMusic.Armed);
+                }
+            }
+            else
+            {
+                playerdat.play_drawn = 0; //ensure weapon is not drawn.
+                if (updateThemes)
+                {
+                    XMIMusic.PickLevelThemeMusic(0);
+                }
+                if (UWClass._RES == UWClass.GAME_UW2)
+                {
+                    instance.InteractionButtonsUW2[(int)(InteractionModes.ModeAttack)].Texture = instance.UW2InteractionBtnsOff[(int)(InteractionModes.ModeAttack)];
+                }
+                else
+                {
+                    instance.InteractionButtonsUW1[(int)(InteractionModes.ModeAttack)].Texture = grLfti.LoadImageAt((int)(InteractionModes.ModeAttack) * 2, false);
+                }
+            }
+
+            var obj = playerdat.PrimaryHandObject;
+            switch (combat.isWeapon(obj))
+            {
+                case 1://melee weapon
+                case 2: //rangedweapon
+                    combat.currentweapon = obj; break;
+                default:
+                    combat.currentweapon = null; break;
+            }
+        }
+
+        public static void InteractionModeShowHide(bool state)
+        {
+            if (UWClass._RES == UWClass.GAME_UW2)
+            {
+
+                for (int i = 0; i <= instance.InteractionButtonsUW2.GetUpperBound(0); i++)
+                {
+                    EnableDisable(instance.InteractionButtonsUW2[i], state);
+                }
+            }
+            else
+            {
+                for (int i = 0; i <= instance.InteractionButtonsUW1.GetUpperBound(0); i++)
+                {
+                    EnableDisable(instance.InteractionButtonsUW1[i], state);
+                }
+            }
+        }
+
+
+        /// <summary>
+        /// User clicked a mode button / pressed F2-F6. Re-clicking the active mode
+        /// (except Options) enters no-mode. Attack also sheaths if drawn.
+        /// </summary>
+        public static void InteractionModeButtonPressed(InteractionModes index)
+        {
+            if (index == InteractionMode
+                && index != InteractionModes.ModeOptions
+                && index != InteractionModes.ModeNone)
+            {
+                if (index == InteractionModes.ModeAttack && playerdat.play_drawn == 1)
+                {
+                    ToggleWeaponAnimationState(false);
+                }
+                EnterInteractionModeNone();
+                return;
+            }
+            InteractionModeToggle(index);
+        }
+
+        private void _on_interactionoptions_button(InputEvent @event, long extra_arg_0)
+        {
+            if (@event is InputEventMouseButton eventMouseButton && eventMouseButton.Pressed && eventMouseButton.ButtonIndex == MouseButton.Left)
+            {
+                if (playerdat.play_hp == 0)
+                {
+                    //prevent player from entering menu or changing modes when dead...
+                    return;
+                }
+
+                if (!uimanager.blockinput)
+                {
+                    if (playerdat.ObjectInHand != -1)
+                    {
+                        return;
+                    }
+                    if (UsageMode != 0)
+                    {
+                        return;
+                    }
+                    InteractionModeButtonPressed((InteractionModes)extra_arg_0);
+                }
+            }
+        }
+
+
+    }//end class    
+}//end namespace

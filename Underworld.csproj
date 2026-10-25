@@ -1,0 +1,39 @@
+<Project Sdk="Godot.NET.Sdk/4.3.0">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <!-- Exported builds carry no debug symbols and no path of the machine they were built on
+       (the pdb path in the dll, the source paths in the pdb). -->
+  <PropertyGroup Condition="'$(Configuration)' == 'ExportRelease'">
+    <DebugType>none</DebugType>
+    <PathMap>$(MSBuildProjectDirectory)=/_/</PathMap>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="tests/**/*.cs" />
+    <!-- The render test is a script on a scene, so it must be in the assembly to load at
+         all. Debug only, so it never reaches an exported build. -->
+    <Compile Include="tests/godot/FontRenderTest.cs" Condition="'$(Configuration)' == 'Debug'" />
+    <Compile Include="tests/godot/FontBootTest.cs" Condition="'$(Configuration)' == 'Debug'" />
+    <Compile Include="tests/godot/FontResizeTest.cs" Condition="'$(Configuration)' == 'Debug'" />
+    <Compile Include="tests/godot/FontPlacementTest.cs" Condition="'$(Configuration)' == 'Debug'" />
+    <Compile Include="tests/godot/CursorPlacementTest.cs" Condition="'$(Configuration)' == 'Debug'" />
+    <Compile Include="tests/godot/LauncherValidationTest.cs" Condition="'$(Configuration)' == 'Debug'" />
+    <Compile Include="tests/godot/FontFailureTest.cs" Condition="'$(Configuration)' == 'Debug'" />
+    <Compile Include="tests/godot/FontDemoBootTest.cs" Condition="'$(Configuration)' == 'Debug'" />
+    <Compile Include="tests/godot/OrdinalFitTest.cs" Condition="'$(Configuration)' == 'Debug'" />
+    <Compile Include="tests/godot/HdArtTest.cs" Condition="'$(Configuration)' == 'Debug'" />
+    <Compile Include="tests/godot/ArtOptionTest.cs" Condition="'$(Configuration)' == 'Debug'" />
+    <Compile Include="tests/godot/LocalizationTest.cs" Condition="'$(Configuration)' == 'Debug'" />
+    <Compile Include="tests/godot/ResolutionOptionTest.cs" Condition="'$(Configuration)' == 'Debug'" />
+    <None Remove="tests/**/*" />
+    <Compile Remove="tools/**/*.cs" />
+    <None Remove="tools/**/*" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Munt.NET" Version="0.2.2" />
+    <PackageReference Include="ADLMidi.NET" Version="1.2.0" />
+    <PackageReference Include="MeltySynth" Version="2.4.1" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,191 @@
+using Godot;
+
+namespace Underworld
+{
+	public partial class uimanager : Node2D
+	{
+		public static uimanager instance;
+
+
+		public enum GameModes
+		{ 
+			MAIN,
+			JOURNEY,
+			CHARGEN,
+			GAME,
+			OPTIONS,
+			AUTOMAP,
+			CONVERSATION,
+			CUTSCENE,
+			DEATH,
+			ENDGAME
+		}
+
+		public static GameModes CurrentGameMode = GameModes.CUTSCENE;
+
+
+		/// <summary>
+		/// Game activity will only current during this mode.
+		/// </summary>
+		public static bool InGame
+		{
+			get
+			{
+				return (uimanager.CurrentGameMode == uimanager.GameModes.GAME);
+			}
+		}
+
+		public static bool AtMainMenu
+		{
+			get 
+			{
+				return 
+					(uimanager.CurrentGameMode == uimanager.GameModes.JOURNEY)
+					||
+					(uimanager.CurrentGameMode == uimanager.GameModes.CHARGEN)
+					||
+					(uimanager.CurrentGameMode == uimanager.GameModes.MAIN);
+			}
+		}
+
+		public static bool InConversation
+		{
+			get
+			{
+				return (uimanager.CurrentGameMode == uimanager.GameModes.CONVERSATION);
+			}
+		}
+
+		public static bool InAutomap
+		{
+			get
+			{
+				return (uimanager.CurrentGameMode == uimanager.GameModes.AUTOMAP);
+			}			
+		}
+
+		
+
+	public static bool blockinput
+	{
+		get
+		{
+			return
+			 uimanager.InConversation
+			 ||
+			 uimanager.InAutomap
+			 ||
+			 MessageDisplay.WaitingForTypedInput
+			 ||
+			 MessageDisplay.WaitingForMore
+			 ||
+			 MessageDisplay.WaitingForYesOrNo
+			 ||
+			 musicalinstrument.PlayingInstrument
+			 ||
+			 uimanager.CurrentGameMode == GameModes.OPTIONS
+			 ;
+		}
+	}
+
+		
+		
+		[ExportGroup("Placeholders")]
+		[Export] public TextureRect placeholderuw1;
+		[Export] public TextureRect placeholderuw2;
+
+
+		public override void _Ready()
+		{
+			//Debug.Print("Uimanager about to set instance to this");
+			instance = this;
+			// The prompt's state and its field are static but the scene can be built more
+			// than once, from the launcher. Anything left over belongs to a UI that no
+			// longer exists, and would otherwise send Escape to a freed node.
+			//
+			// This runs BEFORE the font guard below, on purpose. The guard can return
+			// early, and stale prompt state from a previous scene has to be cleared on
+			// that path too, or a retry after a font failure inherits it.
+			ResetSaveDescriptionPrompt();
+
+			// Fonts are published by the scene root in _EnterTree. Without them there is
+			// nothing to render with, so the game must not start.
+			//
+			// Fails closed on purpose: if the root cannot be found, that is a broken
+			// assumption about the scene, not permission to carry on. Ancestor walk rather
+			// than CurrentScene, which is not this root when the scene is instantiated as
+			// another node's child, as the tests do.
+			var root = UnderworldRoot.Find(this);
+			if (root == null || !root.FontsReady)
+			{
+				GD.PrintErr(root == null
+					? "Not starting the game: no UnderworldRoot above this node."
+					: "Not starting the game: fonts were not loaded.");
+				return;
+			}
+
+			main.StartGame();
+		}
+
+		public void InitUI()
+		{
+			InitArt();
+			if (UWClass._RES != UWClass.GAME_UWDEMO)
+			{
+				InitMainMenu();	
+			}			
+			InitFlasks();
+			InitCoversation();
+			InitPanels();
+			InitPaperdoll();
+			InitGameOptions();
+			InitInteraction();
+			InitViews();
+			InitMessageScrolls();
+			InitCuts();
+			InitSpellIcons();
+			InitCompass();
+			InitAutomap();
+			InitPower();
+			InitStats();
+			InitWeaponAnimation();
+			InitEyes();
+			InitDragons();
+
+			AutomapBG.Texture = bitmaps.LoadImageAt(BytLoader.BLNKMAP_BYT);
+			EnableDisable(AutomapPanel,false);
+
+			mousecursor.InitCursor();
+
+			EnableDisable(placeholderuw1, false);
+			EnableDisable(placeholderuw2, false);
+			EnableDisable(uw1UI, UWClass._RES != UWClass.GAME_UW2);
+			EnableDisable(uw2UI, UWClass._RES == UWClass.GAME_UW2);  			
+			EnableDisable(PanelMainMenu,true);          
+		}
+		
+
+		public override void _Process(double delta)
+		{
+			_ProcessPanels(delta);
+			//_ProcessWeaponAnims(delta);
+			_ProcessEyeAnims(delta);
+		}
+
+		public static void EnableDisable(Control ctrl, bool state)
+		{
+			if (ctrl != null)
+			{
+				ctrl.Visible = state;
+			}
+		}
+
+		public static void EnableDisable(CanvasLayer ctrl, bool state)
+		{
+			if (ctrl != null)
+			{
+				ctrl.Visible = state;
+			}
+		}
+	} //end class
+}   //end namespace

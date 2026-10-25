@@ -1,0 +1,90 @@
+using System.Collections;
+using Peaky.Coroutines;
+
+namespace Underworld
+{
+    public partial class ConversationVM : UWClass
+    {
+
+        /// <summary>
+        /// Assesses the value of the offered trade.
+        /// </summary>
+        public static IEnumerator do_judgement()
+        {
+            int evaluation;
+            int appraisal_certainty;
+            int final_evaluation;
+            var appraise_accuracy = 50 - ((playerdat.Appraise * 45) / 30); //the variant range +/- that will be used to assess item values.
+
+            //Get total value of player offering
+            var playervalue = GetPCTradeValue(ApplyLikeDislike: false, appraise_accuracy: appraise_accuracy, applyAccuracy: true);
+
+            //Get total value of npc offering without applying likes dislikes.
+            var npcvalue = GetNPCTradeValue(ApplyLikeDislike: false, appraise_accuracy: appraise_accuracy, applyAccuracy: true);
+            npcvalue += BablTradeBonus; 
+            if (npcvalue == 0)
+            {
+                evaluation = 100;
+            }
+            else
+            {
+                evaluation = ((playervalue - npcvalue) * 100) / npcvalue;
+            }
+
+            switch (playerdat.Appraise)
+            {
+                case < 6:
+                    appraisal_certainty = 0; break;
+                case >=6 and <12:
+                    appraisal_certainty = 1; break;
+                case >=12 and <18:
+                    appraisal_certainty = 2; break;
+                case >=18 and <24:
+                    appraisal_certainty = 3; break;
+                case >=24:
+                    appraisal_certainty = 4; break;                    
+            }          
+
+            switch (evaluation)
+            {
+                case > 50:
+                    final_evaluation =0; break;
+                case >35 and <=50:
+                    final_evaluation = 1;break;
+                case >25 and <=35:
+                    final_evaluation = 2;break;
+                case >10 and <=25:
+                    final_evaluation = 3;break;
+                case >-10 and <=10:
+                    final_evaluation = 4;break;
+                case >-25 and <=-10:
+                    final_evaluation = 5;break;
+                case >-35 and <=-25:
+                    final_evaluation = 6;break;
+                case >-50 and <=-35:
+                    final_evaluation = 7;break;
+                case <=-50:
+                    final_evaluation = 8;break;
+            }
+
+            string output =
+                GameStrings.GetDisplayString(7, 3 + appraisal_certainty)
+                +
+                GameStrings.GetDisplayString(7, 2)
+                +
+                GameStrings.GetDisplayString(7, 8 + final_evaluation);
+
+            //Debug.Print(output);
+            uimanager.AddToMessageScroll(
+                stringToAdd: output, 
+                option: PRINT_SAY, 
+                mode: MessageDisplay.MessageDisplayMode.TemporaryMessage);   
+
+            while (uimanager.MessageScrollIsTemporary)
+            {//ugh
+                yield return new WaitForSeconds(0.1f);
+            }        
+            yield return 0;
+        } 
+    }//end class
+}//end namespace

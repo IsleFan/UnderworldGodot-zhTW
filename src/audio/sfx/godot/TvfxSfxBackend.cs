@@ -1,0 +1,69 @@
+using System;
+using Godot;
+
+namespace Underworld.Sfx;
+
+/// <summary>
+/// SFX backend that drives a TVFX state machine over an OPL2 chip via
+/// <see cref="SfxStreamPlayer"/>. The pan parameter is accepted but ignored —
+/// real AdLib hardware is mono and the per-voice mix happens inside the OPL
+/// chip; per-voice pan would require either a dedicated chip per voice or
+/// post-mix tricks neither of which is in v1 scope.
+/// </summary>
+public sealed class TvfxSfxBackend : ISfxBackend
+{
+    private readonly TvfxPatchBank _bank;
+    private readonly SfxStreamPlayer _player;
+
+    public TvfxSfxBackend(TvfxPatchBank bank, SfxStreamPlayer player)
+    {
+        _bank = bank ?? throw new ArgumentNullException(nameof(bank));
+        _player = player ?? throw new ArgumentNullException(nameof(player));
+    }
+
+    public void Play(SoundEntry entry, byte pan, byte velocityOffset)
+    {
+        // pan is authentic no-op (OPL is mono). velocityOffset drives the
+        // carrier TL scaling — see TvfxVelocity.ComputeVolScale (Miles
+        // YAMAHA.INC:1491-1502 with C = E = 127 defaults).
+        var patch = _bank.GetTvfx(entry.PatchNum);
+        if (patch == null)
+        {
+            GD.PushWarning($"TvfxSfxBackend: no patch for sound id (patchNum={entry.PatchNum})");
+            return;
+        }
+
+        // SOUNDS.DAT byte3-4 → voice lifetime. Conversion traced in asm:
+        //   - UW1_asm.asm 65827-65834: raw word → SIGNED divide by 16 (cwd;
+        //     idiv bx with bx=16) → stored at dseg+262Ch as a countdown.
+        //   - seg014_D15 decrements at 16 Hz (UW1_asm.asm 65608-65620 pushes
+        //     0x10=16 Hz; seg020_94D + seg020_5D5 compute 1,000,000/16 = 62500
+        //     µs period). Sends a note off when the counter hits 0, which
+        //     releases the voice (TvfxVoice.ServiceTick).
+        //
+        // Raw values with bit 15 set would become large negative quotients
+        // (0x8000 / 16 signed = -2048) that take ~66 minutes to count down —
+        // effectively infinite. UW1's are all 64 to 6400 once read big-endian
+        // (SoundsDatLoader), so this only guards unexpected data.
+        //
+        // Our ServiceTick runs at 60 Hz. For positive quotients:
+        //   game_lifetime_s = (raw/16) / 16 = raw / 256
+        //   our_service_ticks = raw × 60 / 256 = raw × 15 / 64
+        //
+        // Sentinels:
+        //   0xFFFF       : explicit "infinite" in the original loader
+        //   bit 15 set   : signed divide wraps, decrement-to-zero takes ~66min
+        //   both collapse to our -1 (don't enforce an external cutoff; let the
+        //   TVFX engine's intrinsic Duration + release-decay terminate).
+        int lifetime;
+        if (entry.DurationWord == 0xFFFF || (entry.DurationWord & 0x8000) != 0)
+            lifetime = -1;
+        else
+            lifetime = entry.DurationWord * 15 / 64;
+
+        byte volScale = TvfxVelocity.ComputeVolScale(entry.Velocity, velocityOffset);
+        _player.Enqueue(new SfxCommand(patch, lifetime, volScale));
+    }
+
+    public void Dispose() { /* SfxStreamPlayer is owned by the Godot scene tree */ }
+}

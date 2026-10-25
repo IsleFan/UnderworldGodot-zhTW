@@ -1,0 +1,565 @@
+[gd_scene load_steps=15 format=3 uid="uid://ba5m1urf788ey"]
+
+[ext_resource type="Script" path="res://src/ui/LaunchMenu.cs" id="1_ukjsy"]
+[ext_resource type="Texture2D" uid="uid://ciqrdjocqcm2p" path="res://resources/splash/uw1_poster.jpg" id="22_2v7cv"]
+[ext_resource type="Texture2D" uid="uid://cxu7fxiybk3ee" path="res://resources/splash/uw2_poster.jpg" id="23_f4jqj"]
+
+[sub_resource type="Gradient" id="Gradient_bg"]
+offsets = PackedFloat32Array(0, 0.55, 1)
+colors = PackedColorArray(0.13, 0.1, 0.075, 1, 0.06, 0.05, 0.045, 1, 0.025, 0.022, 0.03, 1)
+
+[sub_resource type="GradientTexture2D" id="GradientTexture2D_bg"]
+gradient = SubResource("Gradient_bg")
+fill_from = Vector2(0.5, 0)
+fill_to = Vector2(0.5, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_card"]
+content_margin_left = 18.0
+content_margin_top = 16.0
+content_margin_right = 18.0
+content_margin_bottom = 16.0
+bg_color = Color(0.075, 0.065, 0.055, 0.88)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.55, 0.43, 0.24, 0.55)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+shadow_color = Color(0, 0, 0, 0.45)
+shadow_size = 10
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_start"]
+content_margin_left = 12.0
+content_margin_top = 8.0
+content_margin_right = 12.0
+content_margin_bottom = 8.0
+bg_color = Color(0.4, 0.27, 0.11, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.85, 0.68, 0.35, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_start_hover"]
+content_margin_left = 12.0
+content_margin_top = 8.0
+content_margin_right = 12.0
+content_margin_bottom = 8.0
+bg_color = Color(0.55, 0.37, 0.15, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(1, 0.84, 0.5, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_start_pressed"]
+content_margin_left = 12.0
+content_margin_top = 8.0
+content_margin_right = 12.0
+content_margin_bottom = 8.0
+bg_color = Color(0.3, 0.2, 0.08, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.85, 0.68, 0.35, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_start_disabled"]
+content_margin_left = 12.0
+content_margin_top = 8.0
+content_margin_right = 12.0
+content_margin_bottom = 8.0
+bg_color = Color(0.16, 0.15, 0.14, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.3, 0.28, 0.25, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[sub_resource type="StyleBoxLine" id="StyleBoxLine_rule"]
+color = Color(0.55, 0.43, 0.24, 0.5)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_button"]
+content_margin_left = 10.0
+content_margin_top = 4.0
+content_margin_right = 10.0
+content_margin_bottom = 4.0
+bg_color = Color(0.15, 0.125, 0.1, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.55, 0.43, 0.24, 0.7)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_button_hover"]
+content_margin_left = 10.0
+content_margin_top = 4.0
+content_margin_right = 10.0
+content_margin_bottom = 4.0
+bg_color = Color(0.24, 0.19, 0.13, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.85, 0.68, 0.35, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="Theme" id="Theme_launch"]
+default_font_size = 15
+Button/colors/font_color = Color(0.9, 0.85, 0.75, 1)
+Button/colors/font_hover_color = Color(1, 0.95, 0.85, 1)
+Button/styles/focus = SubResource("StyleBoxFlat_button_hover")
+Button/styles/hover = SubResource("StyleBoxFlat_button_hover")
+Button/styles/normal = SubResource("StyleBoxFlat_button")
+Button/styles/pressed = SubResource("StyleBoxFlat_button")
+HSeparator/styles/separator = SubResource("StyleBoxLine_rule")
+Label/colors/font_color = Color(0.86, 0.82, 0.74, 1)
+OptionButton/colors/font_color = Color(0.9, 0.85, 0.75, 1)
+OptionButton/colors/font_hover_color = Color(1, 0.95, 0.85, 1)
+OptionButton/styles/focus = SubResource("StyleBoxFlat_button_hover")
+OptionButton/styles/hover = SubResource("StyleBoxFlat_button_hover")
+OptionButton/styles/normal = SubResource("StyleBoxFlat_button")
+OptionButton/styles/pressed = SubResource("StyleBoxFlat_button")
+
+[node name="LaunchMenu" type="Control" node_paths=PackedStringArray("SelectUW1", "PathUW1", "SelectUW2", "PathUW2", "GameFilesSelector", "SoundOptionSelector", "SynthPath", "ArtOptionSelector", "LanguageOptionSelector", "ResolutionOptionSelector", "LaunchError", "PathUW1Label", "PathUW1Status", "PathUW2Label", "PathUW2Status", "RomPath", "RomLabel", "RomStatus", "RomDirSelector", "SoundLabel", "ArtLabel", "LanguageLabel", "ResolutionLabel", "StartUW1", "StartUW2", "BrowseUW1", "BrowseUW2", "BrowseSynth", "BrowseRom", "GameDirSelector", "TitleLabel", "SubtitleLabel", "SettingsTitle", "SoundHint", "SynthLabel", "SoundFontBox", "RomBox")]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = SubResource("Theme_launch")
+script = ExtResource("1_ukjsy")
+SelectUW1 = NodePath("Margins/Page/Body/UW1Card/UW1/UW1Poster")
+PathUW1 = NodePath("Margins/Page/Body/UW1Card/UW1/UW1PathRow/UW1Path")
+SelectUW2 = NodePath("Margins/Page/Body/UW2Card/UW2/UW2Poster")
+PathUW2 = NodePath("Margins/Page/Body/UW2Card/UW2/UW2PathRow/UW2Path")
+GameFilesSelector = NodePath("GameFilesSelector")
+SoundOptionSelector = NodePath("Margins/Page/Body/SettingsCard/Settings/Grid/SoundOptions")
+SynthPath = NodePath("Margins/Page/Body/SettingsCard/Settings/SoundFontBox/SynthRow/SynthPath")
+ArtOptionSelector = NodePath("Margins/Page/Body/SettingsCard/Settings/Grid/ArtOptions")
+LanguageOptionSelector = NodePath("Margins/Page/Body/SettingsCard/Settings/Grid/LanguageOptions")
+ResolutionOptionSelector = NodePath("Margins/Page/Body/SettingsCard/Settings/Grid/ResolutionOptions")
+LaunchError = NodePath("Margins/Page/LaunchError")
+PathUW1Label = NodePath("Margins/Page/Body/UW1Card/UW1/UW1PathLabel")
+PathUW1Status = NodePath("Margins/Page/Body/UW1Card/UW1/UW1Status")
+PathUW2Label = NodePath("Margins/Page/Body/UW2Card/UW2/UW2PathLabel")
+PathUW2Status = NodePath("Margins/Page/Body/UW2Card/UW2/UW2Status")
+RomPath = NodePath("Margins/Page/Body/SettingsCard/Settings/RomBox/RomRow/RomPath")
+RomLabel = NodePath("Margins/Page/Body/SettingsCard/Settings/RomBox/RomLabel")
+RomStatus = NodePath("Margins/Page/Body/SettingsCard/Settings/RomBox/RomStatus")
+RomDirSelector = NodePath("RomDirSelector")
+SoundLabel = NodePath("Margins/Page/Body/SettingsCard/Settings/Grid/SoundLabel")
+ArtLabel = NodePath("Margins/Page/Body/SettingsCard/Settings/Grid/ArtLabel")
+LanguageLabel = NodePath("Margins/Page/Body/SettingsCard/Settings/Grid/LanguageLabel")
+ResolutionLabel = NodePath("Margins/Page/Body/SettingsCard/Settings/Grid/ResolutionLabel")
+StartUW1 = NodePath("Margins/Page/Body/UW1Card/UW1/UW1Start")
+StartUW2 = NodePath("Margins/Page/Body/UW2Card/UW2/UW2Start")
+BrowseUW1 = NodePath("Margins/Page/Body/UW1Card/UW1/UW1PathRow/UW1Browse")
+BrowseUW2 = NodePath("Margins/Page/Body/UW2Card/UW2/UW2PathRow/UW2Browse")
+BrowseSynth = NodePath("Margins/Page/Body/SettingsCard/Settings/SoundFontBox/SynthRow/SynthBrowse")
+BrowseRom = NodePath("Margins/Page/Body/SettingsCard/Settings/RomBox/RomRow/RomBrowse")
+GameDirSelector = NodePath("GameDirSelector")
+TitleLabel = NodePath("Margins/Page/Header/Title")
+SubtitleLabel = NodePath("Margins/Page/Header/Subtitle")
+SettingsTitle = NodePath("Margins/Page/Body/SettingsCard/Settings/SettingsTitle")
+SoundHint = NodePath("Margins/Page/Body/SettingsCard/Settings/SoundHint")
+SynthLabel = NodePath("Margins/Page/Body/SettingsCard/Settings/SoundFontBox/SynthLabel")
+SoundFontBox = NodePath("Margins/Page/Body/SettingsCard/Settings/SoundFontBox")
+RomBox = NodePath("Margins/Page/Body/SettingsCard/Settings/RomBox")
+
+[node name="Background" type="TextureRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+texture = SubResource("GradientTexture2D_bg")
+expand_mode = 1
+
+[node name="Margins" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 44
+theme_override_constants/margin_top = 28
+theme_override_constants/margin_right = 44
+theme_override_constants/margin_bottom = 20
+
+[node name="Page" type="VBoxContainer" parent="Margins"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="Header" type="VBoxContainer" parent="Margins/Page"]
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="Title" type="Label" parent="Margins/Page/Header"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.73, 0.42, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.8)
+theme_override_constants/shadow_offset_x = 2
+theme_override_constants/shadow_offset_y = 2
+theme_override_font_sizes/font_size = 34
+text = "Ultima Underworld"
+
+[node name="Subtitle" type="Label" parent="Margins/Page/Header"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.66, 0.6, 0.5, 1)
+theme_override_font_sizes/font_size = 15
+
+[node name="Rule" type="HSeparator" parent="Margins/Page"]
+layout_mode = 2
+
+[node name="Body" type="HBoxContainer" parent="Margins/Page"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 22
+
+[node name="UW1Card" type="PanelContainer" parent="Margins/Page/Body"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_card")
+
+[node name="UW1" type="VBoxContainer" parent="Margins/Page/Body/UW1Card"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="UW1Poster" type="TextureRect" parent="Margins/Page/Body/UW1Card/UW1"]
+custom_minimum_size = Vector2(0, 260)
+layout_mode = 2
+size_flags_vertical = 3
+focus_mode = 2
+mouse_default_cursor_shape = 2
+texture = ExtResource("22_2v7cv")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="UW1Title" type="Label" parent="Margins/Page/Body/UW1Card/UW1"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.73, 0.42, 1)
+theme_override_font_sizes/font_size = 19
+text = "Ultima Underworld I"
+horizontal_alignment = 1
+
+[node name="UW1Subtitle" type="Label" parent="Margins/Page/Body/UW1Card/UW1"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.66, 0.6, 0.5, 1)
+theme_override_font_sizes/font_size = 14
+text = "The Stygian Abyss"
+horizontal_alignment = 1
+
+[node name="UW1PathLabel" type="Label" parent="Margins/Page/Body/UW1Card/UW1"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.66, 0.6, 0.5, 1)
+theme_override_font_sizes/font_size = 13
+
+[node name="UW1PathRow" type="HBoxContainer" parent="Margins/Page/Body/UW1Card/UW1"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="UW1Path" type="Label" parent="Margins/Page/Body/UW1Card/UW1/UW1PathRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 0
+theme_override_font_sizes/font_size = 13
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="UW1Browse" type="Button" parent="Margins/Page/Body/UW1Card/UW1/UW1PathRow"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+
+[node name="UW1Status" type="Label" parent="Margins/Page/Body/UW1Card/UW1"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+autowrap_mode = 3
+
+[node name="UW1Start" type="Button" parent="Margins/Page/Body/UW1Card/UW1"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.93, 0.78, 1)
+theme_override_colors/font_hover_color = Color(1, 0.97, 0.88, 1)
+theme_override_colors/font_disabled_color = Color(0.5, 0.47, 0.42, 1)
+theme_override_font_sizes/font_size = 18
+theme_override_styles/normal = SubResource("StyleBoxFlat_start")
+theme_override_styles/hover = SubResource("StyleBoxFlat_start_hover")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_start_pressed")
+theme_override_styles/disabled = SubResource("StyleBoxFlat_start_disabled")
+theme_override_styles/focus = SubResource("StyleBoxFlat_start_hover")
+
+[node name="UW2Card" type="PanelContainer" parent="Margins/Page/Body"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_card")
+
+[node name="UW2" type="VBoxContainer" parent="Margins/Page/Body/UW2Card"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="UW2Poster" type="TextureRect" parent="Margins/Page/Body/UW2Card/UW2"]
+custom_minimum_size = Vector2(0, 260)
+layout_mode = 2
+size_flags_vertical = 3
+focus_mode = 2
+mouse_default_cursor_shape = 2
+texture = ExtResource("23_f4jqj")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="UW2Title" type="Label" parent="Margins/Page/Body/UW2Card/UW2"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.73, 0.42, 1)
+theme_override_font_sizes/font_size = 19
+text = "Ultima Underworld II"
+horizontal_alignment = 1
+
+[node name="UW2Subtitle" type="Label" parent="Margins/Page/Body/UW2Card/UW2"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.66, 0.6, 0.5, 1)
+theme_override_font_sizes/font_size = 14
+text = "Labyrinth of Worlds"
+horizontal_alignment = 1
+
+[node name="UW2PathLabel" type="Label" parent="Margins/Page/Body/UW2Card/UW2"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.66, 0.6, 0.5, 1)
+theme_override_font_sizes/font_size = 13
+
+[node name="UW2PathRow" type="HBoxContainer" parent="Margins/Page/Body/UW2Card/UW2"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="UW2Path" type="Label" parent="Margins/Page/Body/UW2Card/UW2/UW2PathRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 0
+theme_override_font_sizes/font_size = 13
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="UW2Browse" type="Button" parent="Margins/Page/Body/UW2Card/UW2/UW2PathRow"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+
+[node name="UW2Status" type="Label" parent="Margins/Page/Body/UW2Card/UW2"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+autowrap_mode = 3
+
+[node name="UW2Start" type="Button" parent="Margins/Page/Body/UW2Card/UW2"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.93, 0.78, 1)
+theme_override_colors/font_hover_color = Color(1, 0.97, 0.88, 1)
+theme_override_colors/font_disabled_color = Color(0.5, 0.47, 0.42, 1)
+theme_override_font_sizes/font_size = 18
+theme_override_styles/normal = SubResource("StyleBoxFlat_start")
+theme_override_styles/hover = SubResource("StyleBoxFlat_start_hover")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_start_pressed")
+theme_override_styles/disabled = SubResource("StyleBoxFlat_start_disabled")
+theme_override_styles/focus = SubResource("StyleBoxFlat_start_hover")
+
+[node name="SettingsCard" type="PanelContainer" parent="Margins/Page/Body"]
+custom_minimum_size = Vector2(380, 0)
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_card")
+
+[node name="Settings" type="VBoxContainer" parent="Margins/Page/Body/SettingsCard"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="SettingsTitle" type="Label" parent="Margins/Page/Body/SettingsCard/Settings"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.73, 0.42, 1)
+theme_override_font_sizes/font_size = 19
+
+[node name="Rule" type="HSeparator" parent="Margins/Page/Body/SettingsCard/Settings"]
+layout_mode = 2
+
+[node name="Grid" type="GridContainer" parent="Margins/Page/Body/SettingsCard/Settings"]
+layout_mode = 2
+theme_override_constants/h_separation = 16
+theme_override_constants/v_separation = 12
+columns = 2
+
+[node name="LanguageLabel" type="Label" parent="Margins/Page/Body/SettingsCard/Settings/Grid"]
+custom_minimum_size = Vector2(110, 0)
+layout_mode = 2
+
+[node name="LanguageOptions" type="OptionButton" parent="Margins/Page/Body/SettingsCard/Settings/Grid"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ResolutionLabel" type="Label" parent="Margins/Page/Body/SettingsCard/Settings/Grid"]
+layout_mode = 2
+
+[node name="ResolutionOptions" type="OptionButton" parent="Margins/Page/Body/SettingsCard/Settings/Grid"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ArtLabel" type="Label" parent="Margins/Page/Body/SettingsCard/Settings/Grid"]
+layout_mode = 2
+
+[node name="ArtOptions" type="OptionButton" parent="Margins/Page/Body/SettingsCard/Settings/Grid"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="SoundLabel" type="Label" parent="Margins/Page/Body/SettingsCard/Settings/Grid"]
+layout_mode = 2
+
+[node name="SoundOptions" type="OptionButton" parent="Margins/Page/Body/SettingsCard/Settings/Grid"]
+layout_mode = 2
+size_flags_horizontal = 3
+item_count = 4
+popup/item_0/text = "soundfont"
+popup/item_1/text = "opl"
+popup/item_1/id = 1
+popup/item_2/text = "cm32l"
+popup/item_2/id = 2
+popup/item_3/text = "mt32"
+popup/item_3/id = 3
+
+[node name="SoundHint" type="Label" parent="Margins/Page/Body/SettingsCard/Settings"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.66, 0.6, 0.5, 1)
+theme_override_font_sizes/font_size = 13
+autowrap_mode = 3
+
+[node name="SoundFontBox" type="VBoxContainer" parent="Margins/Page/Body/SettingsCard/Settings"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="SynthLabel" type="Label" parent="Margins/Page/Body/SettingsCard/Settings/SoundFontBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+
+[node name="SynthRow" type="HBoxContainer" parent="Margins/Page/Body/SettingsCard/Settings/SoundFontBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="SynthPath" type="Label" parent="Margins/Page/Body/SettingsCard/Settings/SoundFontBox/SynthRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 0
+theme_override_colors/font_color = Color(0.66, 0.6, 0.5, 1)
+theme_override_font_sizes/font_size = 13
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="SynthBrowse" type="Button" parent="Margins/Page/Body/SettingsCard/Settings/SoundFontBox/SynthRow"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+
+[node name="RomBox" type="VBoxContainer" parent="Margins/Page/Body/SettingsCard/Settings"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="RomLabel" type="Label" parent="Margins/Page/Body/SettingsCard/Settings/RomBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+
+[node name="RomRow" type="HBoxContainer" parent="Margins/Page/Body/SettingsCard/Settings/RomBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="RomPath" type="Label" parent="Margins/Page/Body/SettingsCard/Settings/RomBox/RomRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 0
+theme_override_colors/font_color = Color(0.66, 0.6, 0.5, 1)
+theme_override_font_sizes/font_size = 13
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="RomBrowse" type="Button" parent="Margins/Page/Body/SettingsCard/Settings/RomBox/RomRow"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+
+[node name="RomStatus" type="Label" parent="Margins/Page/Body/SettingsCard/Settings/RomBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+autowrap_mode = 3
+
+[node name="LaunchError" type="Label" parent="Margins/Page"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.4, 0.4, 1)
+theme_override_font_sizes/font_size = 16
+autowrap_mode = 3
+
+[node name="GameDirSelector" type="FileDialog" parent="."]
+title = "Open a Directory"
+initial_position = 1
+size = Vector2i(1000, 640)
+ok_button_text = "Select Current Folder"
+file_mode = 2
+access = 2
+use_native_dialog = true
+
+[node name="RomDirSelector" type="FileDialog" parent="."]
+title = "Open a Directory"
+initial_position = 1
+size = Vector2i(1000, 640)
+ok_button_text = "Select Current Folder"
+file_mode = 2
+access = 2
+use_native_dialog = true
+
+[node name="GameFilesSelector" type="FileDialog" parent="."]
+title = "Open a File"
+initial_position = 1
+size = Vector2i(1000, 640)
+ok_button_text = "Open"
+file_mode = 0
+access = 2
+filters = PackedStringArray("*.sf2")
+use_native_dialog = true
+
+[connection signal="gui_input" from="Margins/Page/Body/UW1Card/UW1/UW1Poster" to="." method="OnLaunchInput" binds= [1]]
+[connection signal="gui_input" from="Margins/Page/Body/UW2Card/UW2/UW2Poster" to="." method="OnLaunchInput" binds= [2]]
+[connection signal="pressed" from="Margins/Page/Body/UW1Card/UW1/UW1Start" to="." method="Launch" binds= [1]]
+[connection signal="pressed" from="Margins/Page/Body/UW2Card/UW2/UW2Start" to="." method="Launch" binds= [2]]
+[connection signal="pressed" from="Margins/Page/Body/UW1Card/UW1/UW1PathRow/UW1Browse" to="." method="BrowseGameFolder" binds= [1]]
+[connection signal="pressed" from="Margins/Page/Body/UW2Card/UW2/UW2PathRow/UW2Browse" to="." method="BrowseGameFolder" binds= [2]]
+[connection signal="pressed" from="Margins/Page/Body/SettingsCard/Settings/SoundFontBox/SynthRow/SynthBrowse" to="." method="BrowseSoundFont"]
+[connection signal="pressed" from="Margins/Page/Body/SettingsCard/Settings/RomBox/RomRow/RomBrowse" to="." method="BrowseRomFolder"]
+[connection signal="item_selected" from="Margins/Page/Body/SettingsCard/Settings/Grid/SoundOptions" to="." method="_on_sound_options_item_selected"]
+[connection signal="item_selected" from="Margins/Page/Body/SettingsCard/Settings/Grid/ArtOptions" to="." method="_on_art_options_item_selected"]
+[connection signal="item_selected" from="Margins/Page/Body/SettingsCard/Settings/Grid/LanguageOptions" to="." method="_on_language_options_item_selected"]
+[connection signal="item_selected" from="Margins/Page/Body/SettingsCard/Settings/Grid/ResolutionOptions" to="." method="_on_resolution_options_item_selected"]
+[connection signal="dir_selected" from="GameDirSelector" to="." method="OnGameDirSelected"]
+[connection signal="canceled" from="GameDirSelector" to="." method="OnDialogCanceled"]
+[connection signal="dir_selected" from="RomDirSelector" to="." method="OnRomDirSelected"]
+[connection signal="canceled" from="RomDirSelector" to="." method="OnDialogCanceled"]
+[connection signal="file_selected" from="GameFilesSelector" to="." method="OnGameFilesSelectorSubmitted"]
+[connection signal="canceled" from="GameFilesSelector" to="." method="OnDialogCanceled"]

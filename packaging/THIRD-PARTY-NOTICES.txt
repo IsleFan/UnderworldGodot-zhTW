@@ -1,0 +1,44 @@
+第三方元件與授權（Third-party notices）
+=======================================
+
+本程式（UnderworldGodot-zhTW）以 MIT 授權發行，見 LICENSE.md。程式裡包含下列第三方元件，
+各自依其授權使用與散布。本程式不含任何《Ultima Underworld》遊戲資料。
+
+程式與執行環境
+--------------
+- UnderworldGodot（Hank Morgan 與貢獻者）：MIT
+  https://github.com/hankmorgan/UnderworldGodot
+- Godot Engine 4.3：MIT（引擎內含的第三方元件見 https://godotengine.org/license）
+- .NET 9 執行環境（Microsoft）：MIT
+  https://github.com/dotnet/runtime
+
+音效與配樂
+----------
+- libADLMIDI v1.6.2（Vitaly Novichkov 等）：整體為 GPL v3 以上，部分為 LGPL v2.1 以上與 MIT
+  原始碼：https://github.com/Wohlstand/libADLMIDI/tree/v1.6.2
+  macOS 版由原始碼重新編譯（packaging/native/build-macos.sh）；Windows 版取自 ADLMidi.NET 1.2.0。
+- ADLMidi.NET 1.2.0（Cam Sinclair）：LGPL v2.1 以上
+  https://github.com/csinkers/AdlMidi.NET
+- SerdesNet 4.1.0（Cam Sinclair）：MIT
+  https://github.com/csinkers/SerdesNet
+- libmt32emu 2.8.3（Munt 專案）：LGPL v2.1 以上
+  原始碼：https://github.com/munt/munt/tree/libmt32emu_2_8_3
+  macOS 版由原始碼重新編譯（packaging/native/build-macos.sh）；Windows 版取自 Munt.NET 0.2.2。
+- Munt.NET 0.2.2：MIT
+  https://github.com/abedegno/Munt.NET
+- MeltySynth 2.4.1（Nobuaki Tanaka）：MIT
+  https://github.com/sinshu/meltysynth
+- 內建 SoundFont（soundfonts/default.sf2）：Phoenix MT-32 SoundFont by Duwindu Tharinda,
+  based on Phoenix-XG by Jexu, CC BY 3.0 — https://musical-artifacts.com/artifacts/1481
+  （見 soundfonts/LICENSE.txt）
+
+MT-32／CM-32L 的 ROM 不隨本程式散布，需要自備。
+
+字型
+----
+- jf open 粉圓 2.1（justfont）：SIL Open Font License 1.1（見 i18n/fonts/jf-openhuninn-OFL.txt）
+  https://github.com/justfont/open-huninn-font
+
+其他
+----
+- GodotCoroutineslikeUnity（Adam Viola）：MIT

@@ -1,0 +1,699 @@
+using System.Collections;
+using System.Diagnostics;
+using System.IO;
+using Godot;
+
+using Peaky.Coroutines;
+
+namespace Underworld
+{
+	public partial class uimanager : Node2D
+	{
+		/// <summary>
+		/// Font colour for the main menu save list and the loading message, into palette 2.
+		///
+		/// DOS sets these through its font colour global immediately before drawing. Selected
+		/// UW1 0xA2 at UW.EXE 0x7FA77, unselected 0xAA at 0x7FA89; UW2 0x07 at UW2.EXE
+		/// 0x98B97 and 0xCD at 0x98BA9. The loading message uses the selected colour in both,
+		/// UW1 0x7FA77's value again at 0x802EE and UW2's at 0x993F9.
+		///
+		/// Palette 2 because the main menu loads it before drawing (the 6A 02 argument in
+		/// MainMenu_ovr138_248 at 0x7FC3F). Palette 0 holds different colours at these
+		/// indices, so reading them from 0 gives a plausible but wrong shade.
+		/// </summary>
+		const int MainMenuPalette = 2;
+
+		byte PaletteIndexSaveGameSelected
+		{
+			get
+			{
+				if (UWClass._RES == UWClass.GAME_UW2)
+				{
+					return 7;
+				}
+				else
+				{
+					return 0xA2;
+				}
+
+			}
+		}
+
+		/// <summary>
+		/// The loading message takes the same colour DOS gives the highlighted save slot:
+		/// the write at UW.EXE 0x802EE is the same index as 0x7FA77, and UW2.EXE 0x993F9
+		/// matches 0x98B97. The scene carried a hardcoded green that is in no palette.
+		/// </summary>
+		private void SetLoadingLabelColour()
+		{
+			if (LoadingLabel == null) { return; }
+			LoadingLabel.Set(
+				"theme_override_colors/font_color",
+				PaletteLoader.Palettes[MainMenuPalette].ColorAtIndex(PaletteIndexSaveGameSelected, false, false));
+		}
+
+		byte PaletteIndexSaveGameUnSelected
+		{
+			get
+			{
+				if (UWClass._RES == UWClass.GAME_UW2)
+				{
+					return 0xCD;
+				}
+				else
+				{
+					return 0xAA;
+				}
+
+			}
+		}
+
+		[ExportGroup("MainMenu")]
+		[Export]
+		public Panel PanelMainMenu;
+		[Export]
+		public TextureRect MainMenuBG;
+
+		[Export]
+		public TextureRect[] MainMenuButtons = new TextureRect[4];
+
+		[Export] public Label LoadingLabel;
+
+		[Export] public Label[] SaveGamesNames = new Label[4];
+
+		private void InitMainMenu()
+		{
+			if (UWClass._RES == UWClass.GAME_UW2)
+			{
+				var bgTex = bitmaps.LoadImageAt(5);
+				Debug.Print($"MainMenu BG texture: {(bgTex != null ? $"{bgTex.GetWidth()}x{bgTex.GetHeight()}" : "NULL")}");
+				MainMenuBG.Texture = bgTex;
+				//move main menu buttons
+				MainMenuButtons[0].Size = new Vector2(436, 68);
+				MainMenuButtons[0].Position = new Vector2(420, 308);
+				MainMenuButtons[1].Position = new Vector2(324, 392);
+
+				MainMenuButtons[2].Size = new Vector2(668, 96);
+				MainMenuButtons[2].Position = new Vector2(300, 484);
+
+				MainMenuButtons[3].Size = new Vector2(580, 100);
+				MainMenuButtons[3].Position = new Vector2(348, 584);
+			}
+			else
+			{
+				bitmaps.UseRedChannel = true;
+				MainMenuBG.Texture = bitmaps.LoadImageAt(BytLoader.OPSCR_BYT);
+				MainMenuBG.Material = bitmaps.GetMaterial(BytLoader.OPSCR_BYT);
+				var img = bitmaps.LoadImageAt(BytLoader.OPSCR_BYT);
+				Palette.CurrentPalette = 2;
+				bitmaps.UseRedChannel = false;
+				if (ZhText.Enabled)
+				{//the Chinese is centred in each button (ZhImages), so centre the buttons on the menu's background to line the words up
+					var centre = MainMenuBG.Position.X + MainMenuBG.Size.X / 2;
+					foreach (var button in MainMenuButtons)
+					{
+						button.Position = new Vector2(centre - button.Size.X / 2, button.Position.Y);
+					}
+				}
+			}
+
+			//Set the font for the save games.
+			foreach (var sgn in SaveGamesNames)
+			{
+				sgn.Set("theme_override_colors/font_color", PaletteLoader.Palettes[MainMenuPalette].ColorAtIndex(PaletteIndexSaveGameUnSelected, false, false));
+			}
+
+			//MainMenuBG.Material = bitmaps.GetMaterial(BytLoader.OPSCR_BYT);
+			LoadingLabel.Text = "";
+			TurnButtonsOff();
+			ToggleMainMenuButtons(true);
+			HideSaves();
+
+			//AtMainMenu = true;
+		}
+
+		/// <summary>
+		/// loads the off graphics for the main menu buttons
+		/// </summary>
+		private void TurnButtonsOff()
+		{
+			if (grOptbtn == null) return;
+			for (int i = 0; i < 4; i++)
+			{
+				if (MainMenuButtons[i] != null)
+					MainMenuButtons[i].Texture = grOptbtn.LoadImageAt(i * 2);
+			}
+		}
+
+
+		/// <summary>
+		/// Shows or hides the 4 main menu options
+		/// </summary>
+		/// <param name="show"></param>
+		private void ToggleMainMenuButtons(bool show)
+		{
+			for (int i = 0; i < 4; i++)
+			{
+				EnableDisable(MainMenuButtons[i], show);
+			}
+		}
+
+
+		/// <summary>
+		/// Hides the list of save games
+		/// </summary>
+		private void HideSaves()
+		{
+			for (int i = 0; i < 4; i++)
+			{
+				EnableDisable(SaveGamesNames[i], false);
+			}
+		}
+
+		private void _on_introduction_mouse_entered()
+		{
+			TurnButtonsOff();
+			MainMenuButtons[0].Texture = grOptbtn.LoadImageAt(1);
+		}
+
+
+		private void _on_introduction_mouse_exited()
+		{
+			TurnButtonsOff();
+			MainMenuButtons[0].Texture = grOptbtn.LoadImageAt(0);
+		}
+
+
+		private void _on_create_character_mouse_entered()
+		{
+			TurnButtonsOff();
+			MainMenuButtons[1].Texture = grOptbtn.LoadImageAt(3);
+		}
+
+
+		private void _on_create_character_mouse_exited()
+		{
+			TurnButtonsOff();
+			MainMenuButtons[1].Texture = grOptbtn.LoadImageAt(2);
+		}
+
+
+		private void _on_acknowledgements_mouse_entered()
+		{
+			TurnButtonsOff();
+			MainMenuButtons[2].Texture = grOptbtn.LoadImageAt(5);
+		}
+
+
+		private void _on_acknowledgements_mouse_exited()
+		{
+			TurnButtonsOff();
+			MainMenuButtons[2].Texture = grOptbtn.LoadImageAt(4);
+		}
+
+		//
+		private void _on_acknowledgements_gui_input(InputEvent @event)
+		{
+			if (@event is InputEventMouseButton eventMouseButton && eventMouseButton.Pressed && eventMouseButton.ButtonIndex == MouseButton.Left)
+			{
+				// Introduction button plays CS000 → CS001 only.
+				// Splash screens (Origin, LGS, title) play on game startup.
+				CurrentGameMode = GameModes.CUTSCENE;
+				cutsplayer.PlayCutscene(0xA, ReturnToMainMenu);
+			}
+		}
+
+		private void _on_journey_onwards_mouse_entered()
+		{
+			TurnButtonsOff();
+			MainMenuButtons[3].Texture = grOptbtn.LoadImageAt(7);
+		}
+
+
+		private void _on_journey_onwards_mouse_exited()
+		{
+			TurnButtonsOff();
+			MainMenuButtons[3].Texture = grOptbtn.LoadImageAt(6);
+		}
+
+
+		/// <summary>
+		/// Load the save game specified in the config file
+		/// </summary>
+		/// <param name="event"></param>
+		private void _on_journey_onwards_gui_input(InputEvent @event)
+		{
+			if (@event is InputEventMouseButton eventMouseButton && eventMouseButton.Pressed && eventMouseButton.ButtonIndex == MouseButton.Left)
+			{
+				CurrentGameMode = GameModes.JOURNEY;
+				ToggleMainMenuButtons(false);
+				ToggleSaves();
+			}
+		}
+
+		private void ToggleSaves(bool show = true)
+		{
+			if (show)
+			{
+				for (int i = 1; i <= 4; i++)
+				{
+					var path = Path.Combine(SlotTransaction.SlotDirectory(UWClass.BasePath, i), "DESC");
+					if (SaveDescription.TryReadSlot(path, out string savename))
+					{
+						EnableDisable(SaveGamesNames[i - 1], true);
+						SaveGamesNames[i - 1].Text = savename;
+					}
+					else
+					{
+						EnableDisable(SaveGamesNames[i - 1], false);
+					}
+				}
+			}
+			else
+			{
+				for (int i = 1; i <= 4; i++)
+				{
+					EnableDisable(SaveGamesNames[i - 1], false);
+				}
+			}
+		}
+
+		private IEnumerator ClearMainMenu()
+		{
+			ToggleMainMenuButtons(false);
+			if (UWClass._RES == UWClass.GAME_UW2)
+			{
+				LoadingLabel.Text = GameStrings.GetDisplayString(1, 273);
+				SetLoadingLabelColour();
+			}
+			else
+			{
+				LoadingLabel.Text = GameStrings.GetDisplayString(1, 257);
+				SetLoadingLabelColour();
+			}
+			yield return 0;
+		}
+
+		/// <summary>
+		/// Loads the save game and map from the selected SAVE game folder ".\SAVEx"
+		/// </summary>
+		/// <param name="folder"></param>
+		public void JourneyOnwards(string folder)
+		{
+			uimanager.CurrentGameMode = GameModes.GAME;
+			
+			playerdat.previousLightLevel = -1;
+			playerdat.currentfolder = folder;
+			playerdat.LoadPlayerDat(datafolder: folder);
+			playerdat.PositionPlayerCamera(DoLineOfSight: false);
+			// //Common launch actions
+			UWTileMap.LoadTileMap(
+					newLevelNo: playerdat.dungeon_level - 1,
+					datafolder: folder,
+					newGameSession: true);
+
+			//add player object data to the map
+			for (int i = 0; i <= 0x1A; i++)
+			{
+				playerdat.playerObject.DataBuffer[playerdat.playerObject.PTR + i] = playerdat.pdat[playerdat.PlayerObjectStoragePTR + i];
+			}
+			playerdat.playerObject.item_id = 127;//make sure the object is an adventurer.
+			playerdat.playerObject.link = 0;//prevents infinite loops.
+			playerdat.playerObject.tileX = playerdat.playerObject.npc_xhome;
+			playerdat.playerObject.tileY = playerdat.playerObject.npc_yhome;
+			
+			if (folder.ToUpper() == "DATA")
+			{
+				//default start locations.
+				switch (UWClass._RES)
+				{
+					case UWClass.GAME_UW2:
+						Teleportation.InitialisePlayerOnLevelOrPositionChange(tileX: 0x13, tileY: 0x30, CeilingSpawn: false);
+						break;
+					default:
+						// DOS UW.EXE chargen spawns the Avatar at tile (32, 2) —
+						// the centre of the starting room. (32, 1) puts the
+						// player jammed against the north wall, which looks
+						// fine in the port but produces awful renders when the
+						// save is loaded in DOS UW.EXE (backed-against-wall
+						// view = mostly wall surface at close range).
+						Teleportation.InitialisePlayerOnLevelOrPositionChange(32, 2, CeilingSpawn: false);
+						break;
+				}
+			}
+			else
+			{
+				playerdat.PlacePlayerInTile(playerdat.playerObject.tileX, playerdat.playerObject.tileY);
+			}
+
+			//Update weight display
+			uimanager.RefreshWeightDisplay();
+			playerdat.PlayerStatusUpdate();
+
+			//restore some UI elements that have been previously hidden as part of the splash intro
+			uimanager.EnableDisable(uimanager.instance.uw1UI, UWClass._RES != UWClass.GAME_UW2);
+			uimanager.EnableDisable(uimanager.instance.uw2UI, UWClass._RES == UWClass.GAME_UW2);
+			uimanager.EnableDisable(uimanager.instance.PanelInventory, true);
+			uimanager.EnableDisable(uimanager.instance.ManaFlaskPanel, true);
+			uimanager.EnableDisable(uimanager.instance.HealthFlaskPanel, true);
+
+
+			uimanager.OpenedContainerIndex = -1;//clear slot graphics
+			uimanager.SetOpenedContainer(0, -1);
+			uimanager.BackPackStart = 0;
+			uimanager.EnableDisable(uimanager.instance.ArrowUp, false);
+			uimanager.EnableDisable(uimanager.instance.ArrowDown, false);
+			EnableDisable(DragonPanel,UWClass._RES != UWClass.GAME_UW2);
+
+			if (!playerdat.MusicEnabled)
+			{
+				MusicStreamPlayer.Instance.Stop();
+			}
+			instance.InitViews();
+			SetPanelMode(0);
+
+			//Apply player motion on game load.
+			motion.PlayerMotion(0x40);
+			if (UWClass._RES == UWClass.GAME_UW2)
+			{//In UW2 the theme music will always change on game load or if coming from main menu. In UW1 it will only happen when loading a game from the options menu. In that case the call to change themes is in the ui code for the options menu
+				//XMIMusic.ChangeTheme(XMIMusic.PickLevelThemeMusic(0));
+				XMIMusic.PickLevelThemeMusic(0);
+			}
+
+			//Set up the weapon animations.
+			ToggleWeaponAnimationState(drawWeapon: playerdat.play_drawn == 1, updateThemes: false);
+			if (playerdat.play_drawn == 1)
+			{
+				InteractionMode = InteractionModes.ModeAttack;
+				PreviousInteractionMode = InteractionModes.ModeAttack;
+			}
+			else
+			{
+				InteractionMode = InteractionModes.ModeUse;
+				PreviousInteractionMode = InteractionModes.ModeUse;
+			}
+			uimanager.UpdateCompass();
+			//set camera to player
+			playerdat.CameraReference = playerdat.playerObject;
+			//reset camera pitch which is not serialised
+			playerdat.PlayerCameraPitch_dseg_67d6_33D6 = 0;
+			//turn off moongate sucking effect (uw1 endgame)
+			playerdat.MoongateSucking = false;
+
+			//if a screenshake has been stored. Apply a brief shake on game load
+			if ((playerdat.TileState & 0x20) != 0)
+			{
+				playerdat.Shake20_Duration_73F = 5;
+			}
+
+			//set up rendering detail.
+			RenderingServer.GlobalShaderParameterSet("renderceilings", playerdat.RenderCeilings);
+			RenderingServer.GlobalShaderParameterSet("renderwalls", playerdat.RenderWalls);
+			RenderingServer.GlobalShaderParameterSet("renderfloors", playerdat.RenderFloors);
+			
+			//And simple shade for object info layer.
+			RenderingServer.GlobalShaderParameterSet("simpleshade", (Texture)shade.shadesdata[playerdat.lightlevel].simpleshade);
+
+			uimanager.EnableDisable(uimanager.instance.uwviewport,true); //turn on camera, this might be turned off due to player death
+			
+		}
+
+		private void _on_create_character_gui_input(InputEvent @event)
+		{
+			if (@event is InputEventMouseButton eventMouseButton && eventMouseButton.Pressed && eventMouseButton.ButtonIndex == MouseButton.Left)
+			{
+				CurrentGameMode = GameModes.CHARGEN;
+				InitChargenUI();
+			}
+		}
+
+
+
+		private void _on_save_1_gui_input(InputEvent @event)
+		{
+			if (@event is InputEventMouse eventMouse)
+			{
+				//Set the font for the save games.
+				SaveGamesNames[0].Set("theme_override_colors/font_color", PaletteLoader.Palettes[MainMenuPalette].ColorAtIndex(PaletteIndexSaveGameSelected, false, false));
+				SaveGamesNames[1].Set("theme_override_colors/font_color", PaletteLoader.Palettes[MainMenuPalette].ColorAtIndex(PaletteIndexSaveGameUnSelected, false, false));
+				SaveGamesNames[2].Set("theme_override_colors/font_color", PaletteLoader.Palettes[MainMenuPalette].ColorAtIndex(PaletteIndexSaveGameUnSelected, false, false));
+				SaveGamesNames[3].Set("theme_override_colors/font_color", PaletteLoader.Palettes[MainMenuPalette].ColorAtIndex(PaletteIndexSaveGameUnSelected, false, false));
+			}
+			if (@event is InputEventMouseButton eventMouseButton && eventMouseButton.Pressed && eventMouseButton.ButtonIndex == MouseButton.Left)
+			{
+				_ = Coroutine.Run(
+				   ClearMainMenu()
+				   , main.instance);
+				JourneyOnwards("SAVE1");
+			}
+		}
+
+		private void _on_save_2_gui_input(InputEvent @event)
+		{
+			if (@event is InputEventMouse eventMouse)
+			{
+				//Set the font for the save games.
+				SaveGamesNames[0].Set("theme_override_colors/font_color", PaletteLoader.Palettes[MainMenuPalette].ColorAtIndex(PaletteIndexSaveGameUnSelected, false, false));
+				SaveGamesNames[1].Set("theme_override_colors/font_color", PaletteLoader.Palettes[MainMenuPalette].ColorAtIndex(PaletteIndexSaveGameSelected, false, false));
+				SaveGamesNames[2].Set("theme_override_colors/font_color", PaletteLoader.Palettes[MainMenuPalette].ColorAtIndex(PaletteIndexSaveGameUnSelected, false, false));
+				SaveGamesNames[3].Set("theme_override_colors/font_color", PaletteLoader.Palettes[MainMenuPalette].ColorAtIndex(PaletteIndexSaveGameUnSelected, false, false));
+			}
+			if (@event is InputEventMouseButton eventMouseButton && eventMouseButton.Pressed && eventMouseButton.ButtonIndex == MouseButton.Left)
+			{
+				_ = Coroutine.Run(
+				   ClearMainMenu()
+				   , main.instance);
+
+				JourneyOnwards("SAVE2");
+			}
+		}
+
+
+		private void _on_save_3_gui_input(InputEvent @event)
+		{
+			if (@event is InputEventMouse eventMouse)
+			{
+				//Set the font for the save games.
+				SaveGamesNames[0].Set("theme_override_colors/font_color", PaletteLoader.Palettes[MainMenuPalette].ColorAtIndex(PaletteIndexSaveGameUnSelected, false, false));
+				SaveGamesNames[1].Set("theme_override_colors/font_color", PaletteLoader.Palettes[MainMenuPalette].ColorAtIndex(PaletteIndexSaveGameUnSelected, false, false));
+				SaveGamesNames[2].Set("theme_override_colors/font_color", PaletteLoader.Palettes[MainMenuPalette].ColorAtIndex(PaletteIndexSaveGameSelected, false, false));
+				SaveGamesNames[3].Set("theme_override_colors/font_color", PaletteLoader.Palettes[MainMenuPalette].ColorAtIndex(PaletteIndexSaveGameUnSelected, false, false));
+			}
+			if (@event is InputEventMouseButton eventMouseButton && eventMouseButton.Pressed && eventMouseButton.ButtonIndex == MouseButton.Left)
+			{
+				_ = Coroutine.Run(
+				   ClearMainMenu()
+				   , main.instance);
+
+				JourneyOnwards("SAVE3");
+			}
+		}
+
+
+		private void _on_save_4_gui_input(InputEvent @event)
+		{
+			if (@event is InputEventMouse eventMouse)
+			{
+				//Set the font for the save games.
+				SaveGamesNames[0].Set("theme_override_colors/font_color", PaletteLoader.Palettes[MainMenuPalette].ColorAtIndex(PaletteIndexSaveGameUnSelected, false, false));
+				SaveGamesNames[1].Set("theme_override_colors/font_color", PaletteLoader.Palettes[MainMenuPalette].ColorAtIndex(PaletteIndexSaveGameUnSelected, false, false));
+				SaveGamesNames[2].Set("theme_override_colors/font_color", PaletteLoader.Palettes[MainMenuPalette].ColorAtIndex(PaletteIndexSaveGameUnSelected, false, false));
+				SaveGamesNames[3].Set("theme_override_colors/font_color", PaletteLoader.Palettes[MainMenuPalette].ColorAtIndex(PaletteIndexSaveGameSelected, false, false));
+			}
+
+			if (@event is InputEventMouseButton eventMouseButton && eventMouseButton.Pressed && eventMouseButton.ButtonIndex == MouseButton.Left)
+			{
+				_ = Coroutine.Run(
+				   ClearMainMenu()
+				   , main.instance);
+
+				JourneyOnwards("SAVE4");
+			}
+		}
+
+		private void _on_introduction_gui_input(InputEvent @event)
+		{
+			if (@event is InputEventMouseButton eventMouseButton && eventMouseButton.Pressed && eventMouseButton.ButtonIndex == MouseButton.Left)
+			{
+				CurrentGameMode = GameModes.CUTSCENE;
+				if (UWClass._RES == UWClass.GAME_UW2)
+				{
+					// Introduction button plays CS000 → CS001 only.
+					cutsplayer.PlayCutscene(0, () =>
+						cutsplayer.PlayCutscene(1, ReturnToMainMenu));
+				}
+				else
+				{
+					// Introduction button plays CS000 only.
+					cutsplayer.PlayCutscene(0, ReturnToMainMenu);
+				}
+			}
+		}
+
+
+		public override void _Input(InputEvent @event)
+		{
+			if (InConversation
+				&& @event is InputEventMouseButton temporaryMessageClick
+				&& (temporaryMessageClick.ButtonIndex == MouseButton.Left
+					|| temporaryMessageClick.ButtonIndex == MouseButton.Right)
+				&& HandleTemporaryMessageClick(temporaryMessageClick))
+			{
+				GetViewport().SetInputAsHandled();
+				return;
+			}
+
+			// Continue inventory drag detection when the cursor leaves the pressed slot control.
+			if (inventoryPointerDown && @event is InputEventMouseMotion mouseMotion)
+			{
+				TryStartInventoryDrag(mouseMotion.GlobalPosition);
+			}
+			if (tradePointerDown && @event is InputEventMouseMotion tradeMotion)
+			{
+				TryStartTradeDrag(tradeMotion.GlobalPosition);
+			}
+
+			if (@event is InputEventMouseButton mouseButton
+				&& !mouseButton.Pressed)
+			{
+				if (inventoryPointerDown
+					&& mouseButton.ButtonIndex == inventoryPointerButton)
+				{
+					TryStartInventoryDrag(mouseButton.GlobalPosition);
+					if (inventoryDragActive
+						&& playerdat.ObjectInHand != -1
+						&& TryPlaceHeldItemInTradeSlot(mouseButton.GlobalPosition))
+					{
+						ClearInventoryPointerState();
+						GetViewport().SetInputAsHandled();
+						return;
+					}
+				}
+
+				if (tradePointerDown
+					&& mouseButton.ButtonIndex == tradePointerButton)
+				{
+					TryStartTradeDrag(mouseButton.GlobalPosition);
+					if (tradeDragActive && playerdat.ObjectInHand != -1)
+					{
+						var destSlot = FindInventorySlotUnderMouse();
+						if (destSlot != null)
+						{
+							ClearTradeDragState();
+							PlaceHeldItemAtSlot(destSlot);
+							GetViewport().SetInputAsHandled();
+							return;
+						}
+					}
+				}
+			}
+
+			if (@event is InputEventKey keyinput)
+			{
+				if (keyinput.Pressed)
+				{
+
+					if (keyinput.Keycode == Key.Escape)
+					{
+						switch (CurrentGameMode)
+						{
+							case GameModes.CUTSCENE:
+								{
+									if (cutsplayer.IsPlaying)
+									{
+										cutsplayer.StopCutscene();//rely on callback to restore menu.
+									}
+									break;
+								}
+							case GameModes.CHARGEN:
+							case GameModes.JOURNEY:
+								{
+									ToggleMainMenuButtons(true);
+									ToggleSaves(false);
+									EnableDisable(PanelChargen, false);
+									EnableDisable(PanelMainMenu, true);
+									break;
+								}
+							case GameModes.GAME://ingame
+								{
+									if (cutsplayer.IsPlaying)
+									{
+										cutsplayer.StopCutscene();
+									}
+									break;
+								}
+						}
+					}
+				}
+			}
+		}
+
+		public override void _UnhandledInput(InputEvent @event)
+		{
+			// Release outside inventory slot controls (e.g. over the 3D view).
+			if (inventoryPointerDown
+				&& @event is InputEventMouseButton mouseButton
+				&& !mouseButton.Pressed
+				&& mouseButton.ButtonIndex == inventoryPointerButton)
+			{
+				TryStartInventoryDrag(mouseButton.GlobalPosition);
+				ClearInventoryPointerState();
+
+				if (playerdat.ObjectInHand != -1)
+				{
+					var destSlot = FindInventorySlotUnderMouse();
+					if (destSlot != null)
+					{
+						PlaceHeldItemAtSlot(destSlot);
+					}
+					else if (!InConversation && IsMouseInViewPort())
+					{
+						DropHeldItemIntoWorld();
+					}
+				}
+			}
+
+			if (tradePointerDown
+				&& @event is InputEventMouseButton tradeMouseButton
+				&& !tradeMouseButton.Pressed
+				&& tradeMouseButton.ButtonIndex == tradePointerButton)
+			{
+				TryStartTradeDrag(tradeMouseButton.GlobalPosition);
+				var wasTradeDrag = tradeDragActive;
+				ClearTradeDragState();
+				if (wasTradeDrag && playerdat.ObjectInHand != -1
+					&& !InConversation && IsMouseInViewPort())
+				{
+					DropHeldItemIntoWorld();
+				}
+			}
+		}
+
+
+		/// <summary>
+		/// Returns to main menu from the game (eg on player death)
+		/// </summary>
+		public static void ReturnToMainMenu()
+		{
+			//playerdat.PlayerInDeathMode = false;
+			Palette.CurrentPalette = 2; //supposed to ensure no graphical glitching when returning from skulls animaiton, but does not suceed
+			uimanager.CurrentGameMode = uimanager.GameModes.MAIN;
+			//Still some weirdness with enabling the main menu again. eg palette switch in UW1
+			if (MusicStreamPlayer.Instance?.IsPlaying != true || XMIMusic.CurrentlyPlayingThemeNo != 1)
+			{
+				XMIMusic.LoadXMI(1);
+			}
+			EnableDisable(instance.PanelMainMenu, true);
+			instance.ToggleMainMenuButtons(true);
+			instance.ToggleSaves(false); 
+			EnableDisable(instance.DragonPanel,false);           
+			//InGame = false;
+			Node3D the_tiles = main.instance.GetNode<Node3D>("../tilemap");
+			if (the_tiles != null)
+			{
+				UWTileMap.DestroyTileMapAndContents(the_tiles);
+			}
+		}
+
+	}//end class
+}//end namespace

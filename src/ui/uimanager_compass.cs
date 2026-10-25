@@ -1,0 +1,222 @@
+using Godot;
+
+namespace Underworld
+{
+    public partial class uimanager : Node2D
+    {
+        [ExportGroup("CompassDisplay")]
+        [Export]
+        public TextureRect[] CompassBgUW1 = new TextureRect[4];
+        [Export]
+        public TextureRect[] CompassBgUW2 = new TextureRect[4];
+        [Export] 
+        TextureRect[] CompassPointsUW1 = new TextureRect[16];
+        [Export] 
+        TextureRect[] CompassPointsUW2 = new TextureRect[16];
+        
+        [Export]
+        public Panel CompassPanelUW2 = new Panel();
+
+
+        public static void InitCompass()
+        {
+            if (UWClass._RES != UWClass.GAME_UW2)
+            {
+                for (int i = 0; i<=instance.CompassBgUW1.GetUpperBound(0);i++)
+                {
+                    instance.CompassBgUW1[i].Texture = grCompass.LoadImageAt(i);
+                }    
+                for (int i = 0; i <= instance.CompassPointsUW1.GetUpperBound(0); i++)
+                {
+                    instance.CompassPointsUW1[i].Texture = grCompass.LoadImageAt(4+i);
+                }            
+            }
+            else
+            {
+                for (int i = 0; i<=instance.CompassBgUW1.GetUpperBound(0);i++)
+                {
+                    instance.CompassBgUW2[i].Texture = grCompass.LoadImageAt(i);
+                }   
+                for (int i = 0; i <= instance.CompassPointsUW2.GetUpperBound(0); i++)
+                {
+                    instance.CompassPointsUW2[i].Texture = grCompass.LoadImageAt(4+i);
+                }  
+            }
+        }
+
+        public static void UpdateCompass()
+        {    
+            var heading = (playerdat.playerObject.heading<< 5) + playerdat.playerObject.npc_heading;//get full heading into a range of 0-f
+            heading += 8;
+            heading = (heading & 0xFF);
+            PointCompassInDirection((heading>>4));
+        }
+
+        public static void PointCompassInDirection(int heading)
+        {
+            if (UWClass._RES != UWClass.GAME_UW2)
+            {
+                for (int i = 0; i <= instance.CompassBgUW1.GetUpperBound(0); i++)
+                {
+                    EnableDisable(instance.CompassBgUW1[i], (heading % 4 == i));
+                }
+                for (int i = 0; i <= instance.CompassPointsUW1.GetUpperBound(0); i++)
+                {
+                    EnableDisable(instance.CompassPointsUW1[i], (heading % 16 == i));
+                }
+            }
+            else
+            {
+                for (int i = 0; i <= instance.CompassBgUW2.GetUpperBound(0); i++)
+                {
+                    EnableDisable(instance.CompassBgUW2[i], (heading % 4 == i));
+                }
+                for (int i = 0; i <= instance.CompassPointsUW2.GetUpperBound(0); i++)
+                {
+                    EnableDisable(instance.CompassPointsUW2[i], (heading % 16 == i));
+                }
+            }
+        }
+
+
+        private void _on_compass_click(InputEvent @event)
+        {
+            if (@event is InputEventMouseButton eventMouseButton && eventMouseButton.Pressed)
+            { 
+                scroll.Clear();
+                AddToMessageScroll("\n");
+                if (UWClass._RES == UWClass.GAME_UW2)
+                {
+                    StatusMessageUW2();
+                }
+                else
+                {
+                    StatusMessageUW1();
+                }
+            }
+        }
+
+        private static void StatusMessageUW2()
+        {
+            var hunger = 117 + playerdat.play_hunger / 30;
+            var output =
+                GameStrings.GetDisplayString(1, GameStrings.str_you_are_currently_)
+                +
+                GameStrings.GetDisplayString(1, hunger)
+                +
+                GameStrings.GetDisplayString(1, GameStrings.str__and_);
+
+            if (playerdat.DreamingInVoid)
+            {
+                output += GameStrings.GetDisplayString(1, 0x128);//sleeping
+            }
+            else
+            {
+                //general fatigue string
+                var fatigue = playerdat.play_fatigue / 23;
+                if (fatigue > 5) { fatigue = 5; }
+                fatigue = 131 - fatigue;
+                output += GameStrings.GetDisplayString(1, fatigue);
+            }
+            AddToMessageScroll(output);
+
+            var worldsKnown = playerdat.GetQuest(131);
+            if (worldsKnown == 0)
+            {//other world names are unknown
+             //do nothing
+            }
+            else
+            {//other world names are known
+                var world = worlds.GetWorldNo(playerdat.dungeon_level);
+                worldsKnown = 1 + (worldsKnown << 1);
+                var testval = 1 << world;
+                int di;
+                if ((testval & worldsKnown) != 0) //check if we know the name of this world.
+                {
+                    di = world + 2;
+                }
+                else
+                {
+                    di = 1;
+                }
+
+                output =
+                    GameStrings.GetDisplayString(1, 0x49)
+                    +
+                    GameStrings.GetDisplayString(1, 0x49 + di);
+                output = Localization.EndSentence(output);
+
+                AddToMessageScroll(output);
+            }
+
+            var timeofday = (playerdat.ClockValue / 0x1c2000);
+            timeofday = timeofday % 0x12;
+
+            output =
+                GameStrings.GetDisplayString(1, GameStrings.str_you_guess_that_it_is_currently_)
+                +
+                GameStrings.GetDisplayString(1, timeofday + 84);
+
+            AddToMessageScroll(output);
+
+        }
+
+        private static void StatusMessageUW1()
+        {
+            var hunger = 104 + playerdat.play_hunger / 30;
+            var fatigue = playerdat.play_fatigue / 23;
+            if (fatigue > 5) { fatigue = 5; }
+            fatigue = 118 - fatigue;
+
+            //hunger and fatigue line
+            var output =
+                GameStrings.GetDisplayString(1, GameStrings.str_you_are_currently_)
+                +
+                GameStrings.GetDisplayString(1, hunger)
+                +
+                GameStrings.GetDisplayString(1, GameStrings.str__and_)
+                +
+                GameStrings.GetDisplayString(1, fatigue);
+            output = Localization.EndSentence(output);
+
+            AddToMessageScroll(output);
+
+            var level = playerdat.dungeon_level + 410;
+            output =
+                GameStrings.GetDisplayString(1, GameStrings.str_you_are_on_the_)
+                +
+                GameStrings.GetDisplayString(1, level)
+                +
+                GameStrings.GetDisplayString(1, GameStrings.str__level_of_the_abyss_);
+
+            AddToMessageScroll(output);
+
+            var timeofday = (playerdat.ClockValue / 0x1c2000);
+            var noOfDays = timeofday / 12;
+            timeofday = timeofday % 12;
+
+            if (noOfDays > 100)
+            {
+                output = GameStrings.GetDisplayString(1, GameStrings.str_it_has_been_an_uncountable_number_of_days_since_you_entered_the_abyss_);
+            }
+            else
+            {
+                output =
+                    GameStrings.GetDisplayString(1, GameStrings.str_it_is_the_)
+                    +
+                    GameStrings.GetDisplayString(1, noOfDays + 411)
+                    +
+                    GameStrings.GetDisplayString(1, GameStrings.str__day_of_your_imprisonment_);
+
+            }
+            AddToMessageScroll(output);
+
+            output =
+                GameStrings.GetDisplayString(1, GameStrings.str_you_guess_that_it_is_currently_)
+                +
+                GameStrings.GetDisplayString(1, timeofday + 71);
+
+            AddToMessageScroll(output);
+        }
+    }//end class
+}//end namespace

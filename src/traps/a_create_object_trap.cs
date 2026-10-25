@@ -1,0 +1,284 @@
+using System.Diagnostics;
+
+namespace Underworld
+{
+    public class a_create_object_trap : trap
+    {
+
+        static bool FoundCritterWithBitD = false;
+        /// <summary>
+        /// Spawns a copy of the object at trap link. UW1 and UW2 have some differing logic here.
+        /// </summary>
+        /// <param name="triggerObj"></param>
+        /// <param name="trapObj"></param>
+        /// <param name="objList"></param>
+        public static void Activate(uwObject trapObj, int triggerX, int triggerY, uwObject[] objList)
+        {
+            //rng test on trap.
+            if (Rng.r.Next(0x3F) < trapObj.quality)
+            {
+                Debug.Print($"Cancelling createobject trap {trapObj.a_name} i:{trapObj.index} l:{trapObj.link} due to RNG");
+                return;
+            }
+            if ((trapObj.link != 0) && (trapObj.is_quant == 0))
+            {
+                var template = objList[trapObj.link];
+                bool doCreate = false;
+                if (template.majorclass == 1)
+                {
+                    //check for nearby spawns
+                    doCreate = !CheckForMobileBitD_8InArea();
+                }
+                else
+                {
+                    doCreate = true;
+                }
+                if (doCreate)
+                {
+                    Debug.Print($"Cloning {template.index} {template.a_name}");
+                    if (template != null)
+                    {
+                        if (_RES == GAME_UW2)
+                        {
+                            CreateObjectUW2(template, triggerX, triggerY, objList);
+                        }
+                        else
+                        {
+                            CreateObjectUW1(template, trapObj, triggerX, triggerY, objList);
+                        }
+                    }
+                }
+
+
+
+            }
+        }
+
+        static void CreateObjectUW1(uwObject template, uwObject trapObj, int triggerX, int triggerY, uwObject[] objList)
+        {
+            if (Rng.r.Next(0, 63) >= trapObj.quality)
+            {
+                //there appears to be a logic check here first that runs in the area around the template. 
+                //not currently implemented as I suspect it is a check that the template is on the map and/or maybe the player 
+                //do spawn
+                DoCreateObject(triggerX, triggerY, template);
+            }
+        }
+
+        /// <summary>
+        /// UW2 create object has additional logic relating to loths tomb after loth is freed 
+        /// and can spawn leveled creatures if the template object is an adventurer
+        /// </summary>
+        /// <param name="triggerObj"></param>
+        /// <param name="trapObj"></param>
+        /// <param name="template"></param>
+        /// <param name="objList"></param>
+        static void CreateObjectUW2(uwObject template, int triggerX, int triggerY, uwObject[] objList)
+        {
+            if (worlds.GetWorldNo(playerdat.dungeon_level) == 6)//not in loths tomb
+            {
+                if (playerdat.GetQuest(7) == 1)
+                {
+                    return; //loth has been freed. no more object creation in this world, stops the infinite spawning skeletons
+                }
+            }
+
+            if (template.item_id == 127)//adventurer
+            {
+                //spawn a random leveled creature. this is caused by sleeping near the trap or on the playerupdatetimer 
+                // if within range of 8 tiles from the trap.
+                //Eg traps with this condition exist in the gem chamber
+                var spawnRngFactor = worlds.GetWorldNo(playerdat.dungeon_level);
+                spawnRngFactor++;
+                spawnRngFactor *= 3;
+                spawnRngFactor += playerdat.GetXClock(1);
+                spawnRngFactor /= 9;
+
+                var item_id = 0;
+                bool CritterFound = false;
+                //loop rng until we get a critter with random str>1
+                do
+                {
+                    var playRngFactor = playerdat.play_level;
+                    playRngFactor++;
+                    if (playRngFactor <= 0x10)
+                    {
+                        playRngFactor = 0x10;
+                    }
+                    if (playRngFactor <= 0)
+                    {
+                        playRngFactor = 1;
+                    }
+                    var rnd1 = Rng.r.Next(0, spawnRngFactor);
+                    rnd1 <<= 4;
+
+                    var rnd2 = Rng.r.Next(0, playRngFactor);
+
+                    item_id = 0x40 + rnd1 + rnd2;
+
+                    var str = critterObjectDat.strength(item_id);
+                    if (str == 0)
+                    {
+                        CritterFound = false;
+                    }
+                    else
+                    {
+                        CritterFound = Rng.r.Next(0, str) == 0;
+                    }
+                } while (!CritterFound);
+
+                Debug.Print($"This trap will spawn {GameStrings.GetSimpleObjectNameUW(item_id)}");
+
+                //I think the logic now is to temporarily make the template the new item id, 
+                template.item_id = item_id;
+                //but also initialise its defaults depending on the critter defaults
+                ObjectCreator.InitialiseCritter(template);
+                //Create the object 
+                //template.MobileUnk_0xA |=0x80; //set bit
+                template.UnkBit_0XA_Bit7 = 1;
+                var spawned = DoCreateObject(triggerX, triggerY, template);
+                spawned.npc_attitude = 0;
+                spawned.SpawnedCritter_0XD_Bit8 = 1;
+                //and then revert it back to a the adventurer template.
+                template.item_id = 127;
+
+            }
+            else
+            {
+                DoCreateObject(triggerX, triggerY, template);
+            }
+        }
+
+
+        /// <summary>
+        /// Standard create object
+        /// </summary>
+        /// <param name="triggerObj"></param>
+        /// <param name="template"></param>
+        private static uwObject DoCreateObject(int triggerX, int triggerY, uwObject template)
+        {
+            int slot;
+            if (template.IsStatic)
+            {
+                //static object spawn
+                slot = ObjectFreeLists.GetAvailableObjectSlot(ObjectFreeLists.ObjectListType.StaticList);
+            }
+            else
+            {
+                //mobile object spawn
+                slot = ObjectFreeLists.GetAvailableObjectSlot(ObjectFreeLists.ObjectListType.MobileList);
+            }
+            var newobj = UWTileMap.current_tilemap.LevelObjects[slot];
+            //copy from template to new obj
+            if (template.IsStatic)
+            {
+                for (int i = 0; i < 8; i++)
+                {
+                    newobj.DataBuffer[newobj.PTR + i] = template.DataBuffer[template.PTR + i];
+                }
+            }
+            else
+            {
+                for (int i = 0; i < 27; i++)
+                {
+                    newobj.DataBuffer[newobj.PTR + i] = template.DataBuffer[template.PTR + i];
+                }
+            }
+
+            //set new position and spawn
+            newobj.tileX = triggerX;//triggerObj.quality;
+            newobj.tileY = triggerY;//triggerObj.owner;
+            if (UWTileMap.ValidTile(newobj.tileX, newobj.tileY))
+            {
+                var tile = UWTileMap.current_tilemap.Tiles[newobj.tileX, newobj.tileY];
+                UWTileMap.GetRandomXYZForTile(tile, out int newxpos, out int newypos, out int newzpos);
+                newobj.xpos = (short)newxpos;//obj.xpos;
+                newobj.ypos = (short)newypos;///obj.ypos;
+                newobj.zpos = (short)newzpos; //obj.zpos;
+                newobj.next = tile.indexObjectList;//link to tile
+                tile.indexObjectList = newobj.index;
+            }
+            ObjectCreator.RenderObject(newobj, UWTileMap.current_tilemap);
+            return newobj;
+        }
+
+        /// <summary>
+        /// Search for Create Object Traps that are on the map and if the player is within 8 tiles of them trigger them
+        /// </summary>
+        public static void FindAndRunCreateObjectTraps()
+        {
+            //function that spawns critters randomly based on create object traps on the map");
+            //this is called from sleeping and during playerupdates on a random chance.
+            for (int x = 0; x < 64; x++)
+            {
+                for (int y = 0; y < 64; y++)
+                {
+                    var foundObject = objectsearch.FindMatchInTile(
+                        tileX: x, tileY: y,
+                        majorclass: 6,
+                        minorclass: 0,
+                        classindex: 7);
+                    if (foundObject != null)
+                    {
+
+                        Debug.Print($"Found Create Object Trap at {foundObject.index}");
+                        if (foundObject.flags_full == 0)
+                        {
+                            if (foundObject.link > 0)
+                            {
+                                var toCreate = UWTileMap.current_tilemap.LevelObjects[foundObject.link];
+                                if (toCreate != null)
+                                {
+                                    if (!toCreate.IsStatic)
+                                    {
+                                        toCreate.SpawnedCritter_0XD_Bit8 = 1;
+
+                                        if (!TileInfo.CheckIfOutsideRange(targetX: x, targetY: y, isPlayer: true, range: 8))
+                                        {
+                                            trap.ActivateTrap(0, foundObject, null, x, y, UWTileMap.current_tilemap.LevelObjects);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        static bool CheckForMobileBitD_8InArea()
+        {
+            FoundCritterWithBitD = false;
+
+            //CallBacks.RunCodeOnTargetsAroundObject()
+            CallBacks.RunCodeOnTargetsAroundObject(
+                methodToCall: CheckForMobileBitD_8,
+                CentreObject: 1,
+                rngProbablity: 1,
+                targetType: 0,
+                distanceFromObject: 0,
+                tileRadius: 4);
+
+            return FoundCritterWithBitD;
+        }
+
+        public static bool CheckForMobileBitD_8(int x, int y, uwObject obj, TileInfo tile, int srcIndex)
+        {
+            if (obj.SpawnedCritter_0XD_Bit8 == 0)
+            {
+                return FoundCritterWithBitD;
+            }
+            if (obj == CallBacks.CodeCenterObject)
+            {
+                return FoundCritterWithBitD;
+            }
+            if (obj == playerdat.playerObject)
+            {
+                return FoundCritterWithBitD;
+            }
+            FoundCritterWithBitD = true;
+            return FoundCritterWithBitD;
+        }
+
+    }//end class
+}//end namespace

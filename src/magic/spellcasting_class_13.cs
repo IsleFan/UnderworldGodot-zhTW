@@ -1,0 +1,211 @@
+using System;
+
+namespace Underworld
+{
+    public partial class SpellCasting : UWClass
+    {
+        /// <summary>
+        /// Special extra spells
+        /// </summary>
+        /// <param name="minorclass"></param>
+        public static void CastClassD_Spells(int minorclass, uwObject caster)
+        {
+            switch (minorclass)
+            {
+                case 0://altaras wand
+                    {
+                        AltarasWand();
+                        break;
+                    }
+                case 2://mind blast, this spell is normally only castable by npcs
+                    {
+                        var casterIntelligence = critterObjectDat.intelligence(caster.item_id);
+                        //do math for mindblast
+                        var MindBlastResult = (casterIntelligence - playerdat.INT) + Rng.r.Next(6) - Rng.r.Next(6);
+                        if (MindBlastResult < 2)
+                        {
+                            MindBlastResult = 2;
+                        }
+
+                        motion.SetScreenShake(TypeOfShake: 0x40, duration: (byte)MindBlastResult); //duration needs to be updated based on damage.
+                        damage.DamageObject(objToDamage: playerdat.playerObject, basedamage: MindBlastResult / 2, damagetype: 0, objList: UWTileMap.current_tilemap.LevelObjects, WorldObject: true, damagesource: caster.index);
+                        if ((MindBlastResult / 4) > playerdat.play_mana)
+                        {
+                            playerdat.play_mana = 0;
+                        }
+                        else
+                        {
+                            playerdat.play_mana -= MindBlastResult / 4;
+                        }
+
+                        break;
+                    }
+                case 3://basilisk oil and bullfrog
+                    {
+                        if (_RES == GAME_UW2)
+                        {
+                            Hallucination();
+                        }
+                        else
+                        {
+                            //bullfrog reset
+                            a_do_trap_bullfrog.Bullfrog(mode: 4, triggerX: 0, triggerY: 0);
+                        }
+                        break;
+                    }
+                case 4:
+                    {
+                        Hallucination();
+                        break;
+                    }
+                case 5:
+                    {
+                        uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, GameStrings.str_your_vision_distorts_and_you_feel_light_headed_));
+                        playerdat.shrooms = 3;
+                        break;
+                    }
+                case 7:
+                    {//Map area
+                        if (automap.CanMap(playerdat.dungeon_level))
+                        {
+                            var castscore = Math.Max(playerdat.Casting - 13, 0);
+                            var range = 2 + (castscore / 5);
+
+                            automap.MarkRangeOfTilesVisited(
+                                range: range,
+                                cX: playerdat.playerObject.tileX,
+                                cY: playerdat.playerObject.tileY,
+                                dungeon_level: playerdat.dungeon_level
+                                );
+                        }
+                        else
+                        {
+                            uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, GameStrings.str_the_spell_has_no_discernable_effect_));
+                        }
+                        break;
+                    }
+                case 8:
+                    {//acid spit
+                        CastSpell(
+                            majorclass: 5,
+                            minorclass: 4,
+                            caster: caster,
+                            target: null,
+                            tileX: caster.tileX,
+                            tileY: caster.tileY,
+                            CastOnEquip: false
+                            );
+                        break;
+                    }
+                case 9:
+                    {//snowball
+                        CastSpell(
+                            majorclass: 5,
+                            minorclass: 6,
+                            caster: caster,
+                            target: null,
+                            tileX: caster.tileX,
+                            tileY: caster.tileY,
+                            CastOnEquip: false);
+                        break;
+                    }
+                case 12:
+                case 13:
+                case 14:
+                case 15: //mana boost
+                    {
+                        var mc = ((minorclass - 11) << 2) - 1;
+                        CastClass10_ManaBoost(mc);
+                        break;
+                    }
+            }
+        }
+
+        private static void Hallucination()
+        {
+            if (playerdat.shrooms == 0)
+            {
+                var SkillCheckResult = playerdat.SkillCheck(playerdat.INT, 0x14);
+                if (SkillCheckResult <= 0)
+                {
+                    uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, GameStrings.str_your_vision_distorts_and_you_feel_light_headed_));
+                    playerdat.shrooms = 2;
+                }
+                else
+                {
+                    uimanager.FlashColour(95, uimanager.CutsSmall);
+                }
+            }
+            else
+            {
+                uimanager.FlashColour(95, uimanager.CutsSmall);
+            }
+        }
+
+
+
+        /// <summary>
+        /// Checks objects in an area to see if a valid line of power can be cut here.
+        /// </summary>
+        static void AltarasWand()
+        {
+            var worldflag = 1 << ((worlds.GetWorldNo(playerdat.dungeon_level)) - 1);
+            var range = 2;
+            var cX = playerdat.playerObject.tileX; var cY = playerdat.playerObject.tileY;
+            var linesOfPower = playerdat.GetQuest(128);
+
+            //try and find a guardian signet ring in the area
+            for (int aX = cX - range; aX <= cX + range; aX++)
+            {
+                for (int aY = cX - range; aY <= cY + range; aY++)
+                {
+                    if (UWTileMap.ValidTile(aY, aX))
+                    {
+                        var tile = UWTileMap.current_tilemap.Tiles[aX, aY];
+                        var next = tile.indexObjectList;
+                        while (next != 0)
+                        {
+                            var nextObj = UWTileMap.current_tilemap.LevelObjects[next];
+                            if (nextObj.item_id == 53) //signet ring
+                            {
+                                //test this signet ring 
+                                if (nextObj.invis == 1 && nextObj.doordir == 1)
+                                {//line of power marked by an invisible signet ring with doordir=1
+                                    nextObj.doordir = 0;
+                                    if ((linesOfPower & worldflag) == 0)
+                                    {//line can be cut
+
+                                        //update bit
+                                        linesOfPower |= worldflag;
+                                        playerdat.SetQuest(128, linesOfPower);
+                                        linesOfPower = playerdat.GetQuest(128);
+
+                                        if (linesOfPower == 0xFF)
+                                        {//all lines cut.
+                                            playerdat.SetQuest(14, 1);
+                                        }
+                                        animo.SpawnAnimoInTile(7, nextObj.xpos, nextObj.ypos, nextObj.zpos, nextObj.tileX, nextObj.tileY);
+                                        ObjectRemover_OLD.DeleteObjectFromTile_DEPRECIATED(nextObj.tileX, nextObj.tileY, nextObj.index);
+
+                                        if (worlds.GetWorldNo(playerdat.dungeon_level) == 3)
+                                        {//in ice caverns
+                                            playerdat.SetQuest(52, 1);
+                                        }
+
+                                        special_effects.SpecialEffect(effecttype: 0x4, effectparam: 0xF);
+
+                                        UWsoundeffects.PlaySoundEffectAtAvatar(UWsoundeffects.SoundEffectRumble, 0x40, 0x28);
+                                        UWsoundeffects.PlaySoundEffectAtAvatar(UWsoundeffects.SoundEffectSpellRing1, 0x40, 0x14);
+                                        return;
+                                    }
+                                }
+                            }
+                            next = nextObj.next;
+                        }
+                    }
+                }
+            }
+            uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, GameStrings.str_the_spell_has_no_discernable_effect_));
+        }
+    }//end class
+}//end namespace

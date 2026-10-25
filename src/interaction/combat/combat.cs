@@ -1,0 +1,1050 @@
+using System.Diagnostics;
+
+
+namespace Underworld
+{
+    /// <summary>
+    /// Class for combat calculations.
+    /// </summary>
+    public partial class combat : UWClass
+    {
+
+        public static int CurrentWeaponBaseDamage(int attacktype)
+        {
+            if (currentweapon != null)
+            {
+                switch (attacktype)
+                {
+                    case 0://stab
+                        return weaponObjectDat.stab(currentweapon.item_id);
+                    case 1://slash
+                        return weaponObjectDat.slash(currentweapon.item_id);
+                    case 2://bash
+                        return weaponObjectDat.bash(currentweapon.item_id);
+                }
+            }
+            return 0;//no weapon
+        }
+
+
+        /// <summary>
+        /// Gets the skill used for the current melee weapon
+        /// </summary>
+        public static int currentMeleeWeaponSkillNo
+        {
+            get
+            {
+                if (currentweapon == null)
+                {
+                    return 2;
+                }
+                else
+                {
+                    var tmp = weaponObjectDat.skill(currentweapon.item_id);
+                    if (tmp >= 6)//check if a missile weapon or a fist
+                    {
+                        return 2; //return unarmed
+                    }
+                    return tmp;
+                }
+            }
+        }
+
+
+
+
+
+
+        /// <summary>
+        /// Identifies what type of weapon is in use
+        /// </summary>
+        /// <param name="weapon"></param>
+        /// <returns>0= not a weapon/using fist, 1 = melee,  2= ranged</returns>
+        public static int isWeapon(uwObject weapon)
+        {
+            if (weapon == null)
+            {
+                return 0;
+            }
+            if (weapon.majorclass == 0)
+            {
+                switch (weapon.minorclass)
+                {
+                    case 0:
+                        return 1;
+                    case 1:
+                        {
+                            switch (weapon.classindex)
+                            {
+                                case 8://sling
+                                case 9://bow
+                                case 10://crossbow
+                                case 15://jeweled bow
+                                    return 2;
+                            }
+                            break;
+                        }
+                }
+            }
+            return 0;
+        }
+
+
+        /// <summary>
+        /// Calculates the player attack accuracy and base damage scores
+        /// </summary>
+        static void CalculatePlayerAttackScores()
+        {
+            CurrentWeaponRadius = commonObjDat.radius(currentWeaponItemID);
+            var weaponskill = playerdat.GetSkillValue(currentMeleeWeaponSkillNo);
+
+            if (_RES == GAME_UW2)
+            {
+                if (currentWeaponItemID == 10)
+                {
+                    JeweledDagger = true;//Used when killing the listener in the castle.
+                }
+            }
+
+            AttackScore = weaponskill + (playerdat.Attack >> 1) + (playerdat.DEX / 7) + playerdat.ValourBonus;
+            if (playerdat.difficuly == 1)
+            {   //easy dificulty
+                AttackScore += 7;
+            }
+
+            //base damage calcs
+            if (currentMeleeWeaponSkillNo == 2)
+            {
+                //do unarmed calcs for base damage
+                AttackDamage = 4 + (playerdat.STR / 6) + (playerdat.Unarmed << 1) / 5;
+            }
+            else
+            {
+                //Adjust damage by player str and swing type damage.
+                AttackDamage = (playerdat.STR / 9) + CurrentWeaponBaseDamage(WeaponSwingTypePlayer);
+            }
+
+            //Then get weapon enchantments
+            if (currentweapon != null)
+            {
+                var enchant = MagicEnchantment.GetSpellEnchantment(currentweapon, playerdat.InventoryObjects);
+                if (enchant != null)
+                {
+                    if (!enchant.IsFlagBit2Set)
+                    {
+                        Debug.Print($"Weapon has enchantment {enchant.NameEnchantment(currentweapon, playerdat.InventoryObjects, 3)} {enchant.SpellMajorClass} {enchant.SpellMinorClass}");
+                        if (enchant.SpellMajorClass == 12)
+                        {//accuracy or damage bonuses
+                            switch (_RES)
+                            {
+                                case GAME_UW2:
+                                    {
+                                        if (enchant.SpellMinorClass <= 7)
+                                        {
+                                            Debug.Print("check me. Possibly bugged enchantment behaviour in uw2 where attack and accuracy are the wrong way around!");
+                                            if (enchant.SpellMinorClass < 4)
+                                            {
+                                                //this is possibly a bug in uw2 since the accuracy enchantments come to here.
+                                                AttackDamage += (1 + enchant.SpellMinorClass << 1);
+                                            }
+                                            else
+                                            {
+                                                AttackScore += ((enchant.SpellMinorClass << 1) - 7);
+                                            }
+                                        }
+                                        else
+                                        {
+                                            OnHitSpell = enchant.SpellMinorClass - 7;//eg lifestealer, firedoom, stone strike door unlocking
+                                            if (OnHitSpell == 8)
+                                            {
+                                                //unknown special spell.
+                                                AttackDamage += 5;
+                                            }
+                                        }
+                                        break;
+                                    }
+                                default:
+                                    {
+
+                                        if ((enchant.SpellMinorClass & 8) == 0)
+                                        {
+                                            // (minor & 7) + 1, not (1 + minor) & 7. C# binds + tighter
+                                            // than &, so the original lost the whole bonus at minor 7:
+                                            // DOS adds 8 there, this added 0. UW.EXE 0x254FD masks with
+                                            // `and ax,7` and only then `inc ax`. See issue #102.
+                                            AttackScore += (enchant.SpellMinorClass & 0x7) + 1;
+                                        }
+                                        else
+                                        {
+                                            // Same precedence trap as the accuracy arm above. DOS masks
+                                            // then increments in both, so minor 15 adds 8 here, not 0.
+                                            AttackDamage += (enchant.SpellMinorClass & 0x7) + 1;
+                                        }
+                                        break;
+                                    }
+                            }
+                        }
+                    }
+                }
+            }
+            Debug.Print($"Final scores accuracy {AttackScore} basedamage {AttackDamage}");
+        }
+
+
+        /// <summary>
+        /// Starts an NPC attack.
+        /// </summary>
+        /// <param name="attacker"></param>
+        /// <param name="swingtype"></param>
+        /// <param name="attackcharge"></param>
+        /// <param name="attacktype"></param>
+        /// <param name="poisondamage"></param>
+        /// <returns></returns>
+        public static bool NPCExecuteAttack(uwObject attacker, int swingtype, int attackcharge, int attacktype, int poisondamage)
+        {
+            NPCFinalAttackCharge = attackcharge;
+            CurrentWeaponRadius = 2;//always this for NPCS, is this a vanilla bug that overwrites player weapon radius.
+            AttackingCharacter = attacker;
+            AttackDamage = critterObjectDat.attackdamage(attacker.item_id, attacktype) + (critterObjectDat.strength(attacker.item_id) / 5);
+            AttackScore = critterObjectDat.chancetohit(attacker.item_id, attacktype) + (critterObjectDat.EquipmentDamageOrBaseHitChance(attacker.item_id) >> 1);
+
+            if (attacker.IsPowerful == 1)
+            {
+                AttackScore += 7 + Rng.r.Next(6);
+                AttackDamage += 4 + Rng.r.Next(0xC);
+            }
+            var attackresult = ExecuteAttack(attacker);
+            if (attackresult)
+            {
+                if (DefendingCharacter.index == 1)
+                {
+                    if (playerdat.play_poison < poisondamage)
+                    {
+                        Debug.Print("apply poison to player, needs body part hit to apply");
+                        var rng = Rng.r.Next(6 + poisondamage);
+                        if (rng > critterObjectDat.toughness(playerdat.playerObject.item_id, BodyPartHit))
+                        {
+                            var testdam = 1;
+                            var test = damage.ScaleDamage(playerdat.playerObject.item_id, ref testdam, 0x10);
+                            if (test != 0)
+                            {
+                                playerdat.play_poison = (byte)poisondamage;
+                            }
+                        }
+                    }
+                }
+            }
+
+            return attackresult;
+        }
+
+        /// <summary>
+        /// Process a melee combat attack executed by either the player or an NPC.
+        /// </summary>
+        /// <param name="attacker"></param>
+        /// <returns></returns>
+        public static bool ExecuteAttack(uwObject attacker)
+        {
+            AttackingCharacter = attacker;
+            DefendingCharacter = null;
+            if (checkAttackHit())
+            {
+                Debug.Print($"CheckAttackHit = HIT on {DefendingCharacter.a_name} {DefendingCharacter.index}");
+                //var defender = UWTileMap.current_tilemap.LevelObjects[DefenderIndex];
+                if ((AttackingCharacter.index != 1) && (DefendingCharacter.index != 1) && (!DefendingCharacter.IsStatic))
+                {
+                    if (attacker.IsAlly == DefendingCharacter.IsAlly)
+                    {
+                        return false;
+                    }
+                }
+
+                AttackScoreFlankingBonus = CalcFlankingBonus();
+                var attackresult = CalcAttackResults();
+                if (attackresult == 0)
+                {
+                    //A hit
+                    AttackerAppliesFinalDamage(damageType: 4, attacker: AttackingCharacter.index, MissileAttack: false);
+                    return true;
+                }
+                else
+                {
+                    // a miss. The impact sound belongs here, not before the test. DOS
+                    // agrees with the port that zero from CalculateAttackResults is a hit:
+                    // at seg022_230E_E30 it does or ax,ax and jumps to the damage path on
+                    // zero, and that path plays nothing. It reaches this routine only from
+                    // the two miss paths, passing the nonzero result here and a literal
+                    // zero from the no-defender path. Calling it before the test played the
+                    // no-defender whiff on every successful hit. See #108.
+                    //
+                    // DOS calls DamageObject first and sounds afterwards, at
+                    // seg022_230E_E5A and seg022_230E_E62. The order is kept as the port
+                    // had it, since nothing here depends on it and the swap is untested.
+                    CombatMissImpactSound(attackresult);
+                    damage.DamageObject(
+                        objToDamage: DefendingCharacter,
+                        basedamage: 0,
+                        damagetype: 4,
+                        objList: UWTileMap.current_tilemap.LevelObjects,
+                        WorldObject: true,
+                        damagesource: AttackingCharacter.index);
+                    return false;
+                }
+            }
+            else
+            {
+                Debug.Print("CheckAttackHit = MISS");
+                CombatMissImpactSound(0);
+                return false;//swing and a miss
+            }
+        }
+
+        static void CombatMissImpactSound(int attackresult)
+        {
+            if (attackresult != 0)//a hit
+            {
+                int var6 = 0;
+                int var7 = 0;
+                if (AttackingCharacter.index == 1)
+                {
+                    var6 = PlayerWeaponSound;
+                }
+                else
+                {
+                    if (AttackingCharacter.index < 0x100)
+                    {
+                        var6 = critterObjectDat.combatimpactsound_7_3(AttackingCharacter.item_id);
+                    }
+                    else
+                    {
+                        var6 = 1;
+                    }
+                }
+                //seg024_DB9
+                if (DefendingCharacter.index == 1)
+                {
+                    //sound is based on body part/armour piece hit
+                    // Masked to two bits, as DOS does: inc al then and al,3 at
+                    // seg022_230E_C9D in UW1 and seg024_24E9_DC5 in UW2. PickBodyHitPoint
+                    // returns 0 to 3, so a hit on part 3 asks for slot 0, not slot 4.
+                    var var5slot = (BodyPartHit + 1) & 3;
+                    var ObjectInSlot = playerdat.GetInventorySlotObject(var5slot);
+                    if (ObjectInSlot != null)
+                    {
+                        //uw2 values. need to dbl check for uw1
+                        switch (ObjectInSlot.item_id)
+                        {
+                            case 0x20:
+                            case 0x23:
+                            case 0x26:
+                            case 0x29:
+                            case 0x2C://leather objects
+                                var7 = 0;
+                                break;
+                            default:
+                                var7 = 1;
+                                break;
+                        }
+                    }
+                    else
+                    {
+                        // Nothing in the slot classifies as 0 in both games, not 1. DOS
+                        // tests the returned object for null and jumps straight to the
+                        // zero: seg022_230E_CBF into seg022_230E_D0E in UW1, and
+                        // seg024_24E9_DE5 into seg024_24E9_E33 in UW2. It is the same
+                        // value an unarmoured slot would reach through the leather list.
+                        var7 = 0;
+                    }
+                }
+                else
+                {
+                    //defender is not player
+                    if (DefendingCharacter.index < 0x100)
+                    {
+                        var7 = critterObjectDat.combatimpactsound_4_3(DefendingCharacter.item_id);
+                    }
+                    else
+                    {
+                        var7 = 0;
+                    }
+                }
+
+                // The two games decide 7 versus 8 differently, and this was UW2's rule for
+                // both. UW1 gives 7 only when both classifications are 1 (UW.EXE 0x25122);
+                // UW2 also gives 7 when the first is 2 and the second is 1 (UW2.EXE
+                // 0x269F7). See issue #108.
+                int effectVar8;
+                if (_RES == GAME_UW2)
+                {
+                    // 7 when the first is 1, or when it is 2 and the second is 1.
+                    effectVar8 = (var6 == 1 || (var6 == 2 && var7 == 1)) ? 7 : 8;
+                }
+                else
+                {
+                    // UW1 needs both to be 1: the second cmp is only reached when the
+                    // first matched, and either mismatch falls through to 8.
+                    effectVar8 = (var6 == 1 && var7 == 1) ? 7 : 8;
+                }
+                UWsoundeffects.PlaySoundEffectAtObject((byte)effectVar8, DefendingCharacter, 0);
+            }
+            else
+            {
+                //a miss
+                //TODO check a global variable that is related to missile impacts. if set do not play sound.
+                UWsoundeffects.PlaySoundEffectAtObject(effectNo: 0xA, obj: AttackingCharacter, volDelta: 0);
+            }
+        }
+
+
+        /// <summary>
+        /// Finalises the attack results. Updates AttackDamage value and applies equipment damage on misses, critical hits to player and strikes on doors
+        /// </summary>
+        /// <param name="objHit"></param>
+        /// <returns>0 if attack hit</returns>
+        static int CalcAttackResults()
+        {
+            if (DefendingCharacter.majorclass == 1)
+            {
+                //npc
+                if (DefendingCharacter.index == 1)
+                {
+                    //defender is the player. apply locational protections
+                    AttackScore -= playerdat.LocationalProtectionValues[BodyPartHit];
+                }
+
+                var result = playerdat.SkillCheck(skillValue: AttackScore + AttackScoreFlankingBonus, targetValue: critterObjectDat.defence(DefendingCharacter.item_id));
+                if ((playerdat.PoisonedWeapon))
+                {
+                    if (checkforPoisonableWeapon(currentweapon))
+                    {
+                        if (critterObjectDat.bleed(DefendingCharacter.item_id) != 0) //this value is 0 for the player.
+                        {
+                            AttackDamage += ((playerdat.Casting + 30) / 40); //there is a possible bug in vanilla uw2 where this will apply regardless of who the attacker is
+                        }
+                    }
+                }
+                AttackWasACrit = false;
+                if (result == playerdat.SkillCheckResult.CritSucess)
+                {
+                    AttackWasACrit = true;
+                    var critbonus = (48 + Rng.r.Next(30)) >> 5;
+                    AttackDamage = AttackDamage * critbonus;
+
+                    if (DefendingCharacter.index == 1)
+                    {
+                        //a critical hit has landed on the player. Damage equipment
+                        uimanager.FlashColour(0x23, uimanager.Cuts3DWin, 0.1f);
+                        var si_slot = (BodyPartHit + 1) & 0x3;
+                        if (si_slot == 3)
+                        {
+                            if (Rng.r.Next(5) == 0)
+                            {
+                                si_slot++;
+                            }
+                        }
+                        else
+                        {
+                            if (si_slot <= 2)
+                            {
+                                si_slot = 7 + playerdat.handednessvalue;
+                            }
+                        }
+                        Debug.Print($"Equipment damage to slot {si_slot} of {Rng.DiceRoll(2, 4)}");
+                    }
+
+                    return 0;//a hit
+                }
+                else
+                {
+                    if (result == playerdat.SkillCheckResult.CritFail)
+                    {
+                        if (AttackingCharacter.index == 1)
+                        {
+                            if (critterObjectDat.damagesWeaponOnCritMiss(DefendingCharacter.item_id))
+                            {
+                                var weaponselfdamage = Rng.DiceRoll(2, 3);
+                                var si_slot = 8 - playerdat.handednessvalue;
+                                Debug.Print($"Equipment damage to slot {si_slot} of {Rng.DiceRoll(2, 3)}");
+                            }
+                        }
+
+                    }
+                    return 1 - (int)result;
+                }
+            }
+            else
+            {
+                // //did not hit an npc                
+
+                if (AttackingCharacter.index == 1)
+                {
+                    //attack is player
+                    if (DefendingCharacter.OneF0Class == 0x14)
+                    {
+                        //doors       
+                        if (Rng.r.Next(0, 0xC) < (DefendingCharacter.item_id & 0x7) << 1)
+                        {
+                            var si_slot = 8 - playerdat.handednessvalue;
+                            Debug.Print($"Equipment damage to slot {si_slot} of {Rng.DiceRoll(2, 4)}");
+                        }
+
+                    }
+                }
+                return 0; //0 is a hit!
+            }
+        }
+
+
+        /// <summary>
+        /// Calculates the actual damage that applies on a sucessful attack
+        /// </summary>
+        /// <param name="damageType"></param>
+        /// <param name="attacker"></param>
+        /// <param name="MissileAttack"></param>
+        /// <returns></returns>
+        static void AttackerAppliesFinalDamage(int damageType, int attacker, bool MissileAttack = false)
+        {
+            if (AttackDamage < 2)
+            {
+                AttackDamage = 2;
+            }
+            var damagequotient = AttackDamage / 6;
+            var damageremainder = AttackDamage % 6;
+            AttackDamage = 0;
+
+            if (damagequotient != 0)
+            {
+                AttackDamage = Rng.DiceRoll(NoOfLoops: damagequotient, diceRange: 6);
+            }
+            if (damageremainder != 0)
+            {
+                AttackDamage += Rng.DiceRoll(1, damageremainder);
+            }
+            int finaldamage;
+            if (attacker == 1)
+            {
+                finaldamage = (AttackDamage * PlayerAttackCharge) >> 7;
+            }
+            else
+            {
+                finaldamage = (AttackDamage * NPCFinalAttackCharge) >> 7;
+            }
+            //var finaldamage = (AttackDamage * NPCFinalAttackCharge) >> 7;
+            finaldamage += AttackScoreFlankingBonus;
+
+            //Play hit sounds
+            if (DefendingCharacter.index == 1)
+            {
+                //seg024_24E9_A25:
+                UWsoundeffects.PlaySoundEffectAtAvatar(UWsoundeffects.SoundEffectHit1, 0x40, (byte)(AttackDamage << 2));
+            }
+            else
+            {
+                //seg024_24E9_A33:
+                if (!MissileAttack)
+                {
+                    var SoundEffectVarC = 04;
+                    if (_RES == GAME_UW2)
+                    {
+                        switch (PlayerWeaponSound)
+                        {
+                            case 2:
+                                SoundEffectVarC = 0x1B; break;
+                            case 0:
+                            case 1:
+                            default:
+                                SoundEffectVarC = 4; break;
+                        }
+                    }
+
+                    UWsoundeffects.PlaySoundEffectAtCoordinate((byte)SoundEffectVarC, CombatHitTileX, CombatHitTileY, finaldamage << 2);
+                }
+            }
+
+
+            //seg024_24E9_A9B:
+            if (DefendingCharacter.majorclass == 1)
+            {
+                //npc has been hit, apply defenses
+                var bodypartindex = BodyPartHit % 4;
+                int cx = (int)critterObjectDat.toughness(DefendingCharacter.item_id, bodypartindex);
+                if (cx == -1)
+                {
+                    BodyPartHit = BodyPartHit & 4;
+                    cx = critterObjectDat.toughness(DefendingCharacter.item_id, 0);
+                }
+                if (DefendingCharacter.IsPowerful == 1)
+                {
+                    cx = (cx * 5) / 3;
+                }
+
+                if (cx >= finaldamage)
+                {
+                    finaldamage = 0;
+                }
+                else
+                {
+                    finaldamage -= cx;
+                }
+            }
+
+            //Seg24_B23
+            var di_damage_level = finaldamage / 4;
+            if (di_damage_level >= 4)
+            {
+                di_damage_level = 3;//used later on to set the intesity of the screen shake
+            }
+            if (DefendingCharacter.index == 1)
+            {
+                if (playerdat.difficuly == 1)
+                {
+                    finaldamage >>= 1;
+                }
+            }
+            //apply damage
+            var DamageObjectResult = damage.DamageObject(
+                objToDamage: DefendingCharacter,
+                basedamage: finaldamage,
+                damagetype: damageType,
+                objList: UWTileMap.current_tilemap.LevelObjects,
+                WorldObject: true,
+                damagesource: attacker);
+
+            //Resume here.
+            if (finaldamage != 0)
+            {
+                if (attacker != -1)//should be attackingcharacter != -1
+                {
+                    if (BodyPartHit >= 4)
+                    {
+                        BodyPartHit = 4;
+                    }
+                    if (DefendingCharacter.index != 1)
+                    {
+                        //seg024_24E9_BD5:
+                        if (DefendingCharacter.majorclass == 1)
+                        {
+                            if (attacker == 1)
+                            {
+                                //seg024_24E9_BEB
+                                uimanager.SetEyeLevel(DefendingCharacter.npc_hp, critterObjectDat.avghit(DefendingCharacter.item_id));
+                            }
+                            //seg024_24E9_C49:
+                            if (critterObjectDat.bleed(DefendingCharacter.item_id) != 0)
+                            {
+                                animo.SpawnAnimoAtTarget(target: DefendingCharacter, subclassindex: 0, si_zpos: BodyHitZ[BodyPartHit], tileX: CombatHitTileX, tileY: CombatHitTileY);
+                                if (AttackWasACrit && (attacker == 1))
+                                {
+                                    animo.SpawnAnimoAtTarget(target: DefendingCharacter, subclassindex: 0, si_zpos: BodyHitZ[BodyPartHit] - 2, tileX: CombatHitTileX, tileY: CombatHitTileY);
+                                }
+                                return;
+                            }
+                            else
+                            {
+                                DamageObjectResult = false;
+                            }
+                        }
+                        //seg024_24E9_CCD
+                        // if (DamageObjectResult !=0)
+                        // {
+                        //     DefendingCharacter = null;//?
+                        // }
+                        if ((DefendingCharacter.OneF0Class == 0x14) || (DefendingCharacter.item_id == 0x1CF))
+                        {
+                            //door or moving door
+                            if (AttackHitZ_dseg_67d6_24CE > DefendingCharacter.zpos)
+                            {
+                                AttackHitZ_dseg_67d6_24CE = DefendingCharacter.zpos + 2;
+                            }
+                        }
+                        animo.SpawnAnimoAtTarget(target: DefendingCharacter, subclassindex: 0xB, si_zpos: -AttackHitZ_dseg_67d6_24CE, tileX: CombatHitTileX, tileY: CombatHitTileY);//a flash
+                    }
+                    else
+                    {
+                        //Seg24_BC0
+                        //player was the defender.
+                        motion.SetScreenShake(TypeOfShake: 0x20, duration: (byte)(di_damage_level * 5));
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Offset into animation frams for the weapon type
+        /// </summary>
+        /// <returns></returns>
+        static short WeaponAnimGroup
+        {
+            get
+            {
+                switch (currentMeleeWeaponSkillNo)
+                {
+                    case 3:
+                        return 0;
+                    case 4:
+                        return 7;
+                    case 5:
+                        return 14;
+                    default:
+                        return 21;
+                }
+            }
+        }
+
+        static short WeaponAnimHandednessOffset
+        {
+            get
+            {
+                if (playerdat.isLefty)
+                {
+                    return 28;
+                }
+                else
+                {
+                    return 0;
+                }
+            }
+        }
+
+        static short WeaponAnimStrikeOffset
+        {
+            get
+            {
+                switch (WeaponSwingTypePlayer)
+                {
+                    case 1:
+                        return 2; //bash
+                    case 2:
+                        return 4;//stab
+                    case 3:
+                    default:
+                        return 0; //slash
+                }
+                //}
+            }
+        }
+
+        /// <summary>
+        /// Checks for a hit within the weapon radius+3 and gets the body positions where the target has been hit
+        /// </summary>
+        /// <returns></returns>
+        static bool checkAttackHit()
+        {
+            MotionCalcArray.PtrToMotionCalc = new byte[0x20];
+            MotionCalcArray.MotionArrayObjectIndexA = AttackingCharacter.index;
+            //var radius = (byte)commonObjDat.radius(currentWeaponItemID);
+            MotionCalcArray.Radius8 = (byte)(CurrentWeaponRadius + 1);
+            MotionCalcArray.Height9 = (byte)(((CurrentWeaponRadius << 1) + 1) << 2);
+            MotionCalcArray.z4 = (ushort)(AttackingCharacter.zpos + (commonObjDat.height(AttackingCharacter.item_id) * (AttackSwingHeightAdjust / 3) / 3)); //note when on zpos=0 and using a stab attack the calculated z4 will be out of bounds. this is vanilla behaviour.
+
+            if (AttackingCharacter.index == 1)
+            {
+                MotionCalcArray.z4 += (ushort)(playerdat.PlayerCameraPitch_dseg_67d6_33D6 / 0x200);
+            }
+
+            AttackHitZ_dseg_67d6_24CE = (commonObjDat.height(AttackingCharacter.item_id) / 6) + MotionCalcArray.z4;
+            MotionCalcArray.x0 = (ushort)(AttackingCharacter.xpos + (AttackingCharacter.tileX << 3));
+            MotionCalcArray.y2 = (ushort)(AttackingCharacter.ypos + (AttackingCharacter.tileY << 3));
+            var di_heading = (AttackingCharacter.heading << 5) + AttackingCharacter.npc_heading;
+
+            int x0 = MotionCalcArray.x0; int y2 = MotionCalcArray.y2;
+            motion.GetCoordinateInDirection(di_heading, CurrentWeaponRadius + 3, ref x0, ref y2);
+            MotionCalcArray.x0 = (ushort)x0; MotionCalcArray.y2 = (ushort)y2;
+            Debug.Print($"Calculating attack hit at point {MotionCalcArray.x0},{MotionCalcArray.y2},{MotionCalcArray.z4}");
+            motion.ScanForCollisions(0, 1);
+            if (MotionCalcArray.Unk14_collisoncount != 0)
+            {
+                motion.SortCollisions();
+                if (MotionCalcArray.Unk15 != 0)
+                {
+                    var si_hit = TestForClosestAttackCollisionHit();
+                    if (si_hit >= 0)
+                    {
+                        var collisionRecord = motion.collisionTable[si_hit];
+                        BodyPartHit = PickBodyHitPoint(
+                            defenderZ: collisionRecord.zpos, defenderTop: collisionRecord.height,
+                            attackerZ: MotionCalcArray.z4, attackerTop: MotionCalcArray.z4 + MotionCalcArray.Height9);
+
+                        DefendingCharacter = UWTileMap.current_tilemap.LevelObjects[collisionRecord.link];
+                        return true;
+                    }
+                }
+            }
+            else
+            {
+                //seg024_24E9_65C:
+                motion.ProcessMotionTileHeights_seg028_2941_385(0);
+                // The CURRENT calculation array, not the base one. DOS reads
+                // CurrentCalculationArrayPTR +0x0C and +0x0E right after the call, and
+                // ProcessMotionTileHeights writes those same working fields. The _base
+                // properties address a different buffer that the routine never touches, so
+                // this test was reading whatever an earlier calculation had left there and
+                // passed roughly one swing in twelve. See issue #111.
+                if (((MotionCalcArray.UnkC_terrain | MotionCalcArray.UnkE) & 0x300) != 0)
+                {
+                    // The weapon met terrain rather than an object. DOS restores the
+                    // calculation array's x and y to the attacker's own tile and fine
+                    // coordinates, discarding the projected point GetCoordinateInDirection
+                    // left there, then calls SpawnImpactAnimo_seg022_2D2 with the attacker's
+                    // heading and the same weapon reach.
+                    //
+                    // SpawnImpactAnimo is a walk. It tests the terrain flags where it
+                    // stands, and where they are clear it steps one unit along the heading
+                    // and tests again, covering positions 0 to reach. Position 0 is the
+                    // attacker's own, so DOS can sound there; the last position it steps to
+                    // is never tested. It plays the sound and spawns the animation at the
+                    // first tested position whose flags are set.
+                    //
+                    // Both games play only when the attacker is the player, so an NPC
+                    // hitting a wall is silent: seg022_230E_3BA in UW1, seg024_24E9_3B3 in
+                    // UW2. They choose the effect differently. UW1 always plays 7. UW2
+                    // plays 7 when the player's weapon sound class is 1 or 2 and 8
+                    // otherwise, at seg024_24E9_3BF.
+                    //
+                    // PlayerWeaponSound is still a placeholder pinned to 1 in
+                    // combat_input.cs, so the UW2 arm always yields 7 today. It is written
+                    // out anyway so it comes right on its own when that is derived from the
+                    // weapon.
+                    //
+                    // Not done here. The sound plays at the start of the walk rather than
+                    // at the step that stops it, under a tile short of DOS. UW2 also sets
+                    // ImpactSkipSound at seg024_24E9_3BA, which suppresses the whiff that
+                    // CombatMissImpactSound would otherwise play straight after this; that
+                    // belongs with the change to that routine. And DOS plays nothing at all
+                    // when the impact object cannot be allocated, because the sound sits
+                    // after PrepareNewObjectProps in the routine. The walk, the animation
+                    // and the skip flag are left for their own change. See #111.
+                    if (AttackingCharacter.index == 1)
+                    {
+                        int impactEffect = 7;
+                        if (_RES == GAME_UW2)
+                        {
+                            impactEffect = (PlayerWeaponSound == 1 || PlayerWeaponSound == 2) ? 7 : 8;
+                        }
+                        UWsoundeffects.PlaySoundEffectAtCoordinate(
+                            effectNo: (byte)impactEffect,
+                            packedX: (AttackingCharacter.tileX << 3) + AttackingCharacter.xpos,
+                            packedY: (AttackingCharacter.tileY << 3) + AttackingCharacter.ypos,
+                            volDelta: 0);
+                    }
+                    Debug.Print("Todo SpawnImpactAnimo() walk and animation halves");
+                }
+
+            }
+            return false;
+        }
+
+
+        /// <summary>
+        /// Tests the collisons with the weapon strike to find the closest one.
+        /// </summary>
+        /// <returns></returns>
+        static int TestForClosestAttackCollisionHit()
+        {
+            var result = -1;
+            var di_collisionindex = MotionCalcArray.Unk16_collisionindex;
+
+            var var18_nearestcollision = 0x186a0;
+
+            var var4 = MotionCalcArray.Unk16_collisionindex + MotionCalcArray.Unk15;
+
+            var AttackerX = (AttackingCharacter.npc_xhome << 3) + AttackingCharacter.xpos;
+            var AttackerY = (AttackingCharacter.npc_yhome << 3) + AttackingCharacter.ypos;
+
+            while (di_collisionindex < var4)
+            {
+                var collisionRecord = motion.collisionTable[di_collisionindex];
+                var collisionObject = UWTileMap.current_tilemap.LevelObjects[collisionRecord.link];
+                if (collisionObject.majorclass != 6) //traps and triggers
+                {
+                    if (collisionObject.index != AttackingCharacter.index)
+                    {
+                        bool runBlock = false;
+                        if (AttackingCharacter.index == 1)
+                        {
+                            if (collisionObject.IsStatic)
+                            {
+                                runBlock = true;
+                            }
+                            else
+                            {
+                                if (collisionObject.IsAlly == 0)
+                                {
+                                    runBlock = true;
+                                }
+                                else
+                                {
+                                    if (var4 - 1 == di_collisionindex)
+                                    {
+                                        if (var18_nearestcollision == 0x186A0)
+                                        {
+                                            runBlock = true;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        else
+                        {
+                            runBlock = true;
+                        }
+
+
+                        if (runBlock)
+                        {
+                            //Block_seg024_24E9_192:
+
+                            var CollisionXY = collisionRecord.xyvalue & 0x3F;
+                            CombatHitTileX = ((MotionCalcArray.x0 >> 3) + CollisionXY) & 0x3F;
+
+                            CollisionXY = CombatHitTileX - (MotionCalcArray.x0 >> 3);
+                            CombatHitTileY = (((collisionRecord.xyvalue - CollisionXY) / 0x40) + (MotionCalcArray.y2 >> 3)) & 0x3F;
+
+                            var collisonXCoord = (CombatHitTileX << 3) + collisionObject.xpos;
+                            var xDiff = AttackerX - collisonXCoord;
+
+                            var collisonYCoord = (CombatHitTileY << 3) + collisionObject.ypos;
+                            var yDiff = AttackerY - collisonYCoord;
+
+                            var DistanceSquared_var14 = (xDiff * xDiff) + (yDiff * yDiff);
+                            if (DistanceSquared_var14 < var18_nearestcollision)
+                            {
+                                var18_nearestcollision = DistanceSquared_var14;
+                                result = di_collisionindex;
+                            }
+                        }
+                    }
+                }
+
+                di_collisionindex++;
+            }
+
+            if (result >= 0)
+            {
+                var collisionRecord = motion.collisionTable[result];
+                var CollisionXY = collisionRecord.xyvalue & 0x3F;
+                CombatHitTileX = ((MotionCalcArray.x0 >> 3) + CollisionXY) & 0x3F;
+
+                CollisionXY = CombatHitTileX - (MotionCalcArray.x0 >> 3);
+                CombatHitTileY = (((collisionRecord.xyvalue - CollisionXY) / 0x40) + (MotionCalcArray.y2 >> 3)) & 0x3F;
+            }
+
+            return result;
+        }
+
+
+
+
+        /// <summary>
+        /// Picks the body part that has been hit in combat
+        /// </summary>
+        /// <param name="defenderZ"></param>
+        /// <param name="defenderTop"></param>
+        /// <param name="attackerZ"></param>
+        /// <param name="attackerTop"></param>
+        /// <returns></returns>
+        public static int PickBodyHitPoint(int defenderZ, int defenderTop, int attackerZ, int attackerTop)
+        {
+            var di_defendermid = (defenderZ + defenderTop) >> 1;
+            var si_attackermid = (attackerZ + attackerTop) >> 1;
+
+            if (defenderZ + 1 <= si_attackermid)
+            {
+                //seg024_24E9_29:
+                if (defenderTop - 1 >= attackerZ)
+                {
+                    //seg024_24E9_36
+                    if (si_attackermid >= di_defendermid)
+                    {
+                        //seg024_24E9_4E:
+                        if (Rng.r.Next(3) == 0)
+                        {
+                            return 3;
+                        }
+                    }
+                    else
+                    {
+                        //seg024_24E9_3A
+                        if (Rng.r.Next(2) != 0)
+                        {
+                            return 2;
+                        }
+                    }
+                    //seg024_24E9_62:
+                    if (Rng.r.Next(3) == 0)
+                    {
+                        return 1;
+                    }
+                    else
+                    {
+                        return 0;
+                    }
+
+                }
+                else
+                {
+                    return 3;
+                }
+            }
+            else
+            {
+                return 2;
+            }
+        }
+
+
+        /// <summary>
+        /// Only certain weapons can use a poison enchantment. for the moment return true here.
+        /// </summary>
+        /// <returns></returns>
+        static bool checkforPoisonableWeapon(uwObject Weapon)
+        {
+            if ((_RES != GAME_UW2) || (Weapon == null))
+            {
+                return false;
+            }
+            if (Weapon.majorclass == 0)
+            {
+                if ((Weapon.minorclass != 0) && (Weapon.minorclass !=1))
+                {
+                    return false;
+                }
+                if ((Weapon.item_id >= 0x7) && (Weapon.item_id < 0xA))
+                {
+                    return false;
+                }
+                if ((Weapon.item_id >= 0x18) && (Weapon.item_id == 0x19))
+                {
+                    return false;
+                }
+                else
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Gets a damage bonus based on the relative headings of the attacker and defender.
+        /// </summary>
+        static int CalcFlankingBonus()
+        {
+            if (DefendingCharacter.majorclass == 1)
+            {
+                var bonus = (DefendingCharacter.heading + 0xC - AttackingCharacter.heading) & 0x7;
+                if (bonus > 4)
+                {
+                    bonus = 8 - bonus;
+                }
+                return bonus;
+            }
+            else
+            {
+                return 0;
+            }
+        }
+
+
+    }//end class
+}//end namespace

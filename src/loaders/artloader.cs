@@ -1,0 +1,388 @@
+using Godot;
+
+namespace Underworld
+{
+    public class ArtLoader : Loader
+    {
+        public const byte BitMapHeaderSize = 28;
+
+        /// <summary>
+        /// The complete image file 
+        /// </summary>
+        protected byte[] ImageFileData;
+
+        /// <summary>
+        /// The palette no to use with this file.
+        /// </summary>
+        public short PaletteNo = 0;
+
+        /// <summary>
+        /// Instructs the image() function to crop out based on pixel 0
+        /// </summary>
+        public bool UseCropping = false;
+
+
+        public const float SpriteScale = 0.02f;  //height of 1px of a sprite
+
+        public static float NPCSpriteScale 
+        {
+            get
+            {
+                if (_RES==GAME_UW2)
+                {
+                    return 0.012f;
+                }
+                else
+                {
+                    return 0.015f;
+                }
+            }
+        }
+       
+
+        /// <summary>
+        /// Load art in a low detail mode based on the first pixel color (top left) in the image
+        /// </summary>
+        public bool UseLowDetail = false;
+
+
+        public XferChannnelMode XFER = XferChannnelMode.AllColours;
+        public enum XferChannnelMode
+        {
+            AllColours = 0,
+            NonXFer = 1,
+            XFEROnly = 2
+        }
+
+        /// <summary>
+        /// Loads the image file into the buffer
+        /// </summary>
+        /// <returns><c>true</c>, if image file was loaded, <c>false</c> otherwise.</returns>
+        public virtual bool LoadImageFile()
+        {
+            if (ReadStreamFile(filePath, out ImageFileData))
+            {//data read
+                DataLoaded = true;
+            }
+            else
+            {
+                DataLoaded = false;
+            }
+            return DataLoaded;
+        }
+
+        /// <summary>
+        /// Loads the image at index.
+        /// </summary>
+        /// <returns>The <see cref="UnityEngine.Texture2D"/>.</returns>
+        /// <param name="index">Index.</param>
+        public virtual ImageTexture LoadImageAt(int index)
+        {
+            return null; // new ImageTexture() Texture2D(1, 1);
+        }
+
+        /// <summary>
+        /// Loads the image at index.
+        /// </summary>
+        /// <returns>The <see cref="UnityEngine.Texture2D"/>.</returns>
+        /// <param name="index">Index.</param>
+        public virtual ImageTexture LoadImageAt(int index, bool Alpha)
+        {
+            return null;// new Texture2D(1, 1);
+        }
+
+
+        /// <summary>
+        /// Generates the image from the specified data buffer position
+        /// </summary>
+        /// <param name="databuffer">Databuffer.</param>
+        /// <param name="dataOffSet">Data off set.</param>
+        /// <param name="width">Width.</param>
+        /// <param name="height">Height.</param>
+        /// <param name="imageName">Image name.</param>
+        /// <param name="palette">Pal.</param>
+        /// <param name="useAlphaChannel">If set to <c>true</c> alpha.</param>
+        public static ImageTexture Image(
+            byte[] databuffer,
+            long dataOffSet,
+            int width, int height,
+            Palette palette,
+            bool useAlphaChannel,
+            bool useSingleRedChannel,
+            bool crop = false,
+            bool OutputInLowDetail = false,
+            ArtLoader.XferChannnelMode xfermode = ArtLoader.XferChannnelMode.AllColours)
+        {
+            Godot.Image.Format imgformat;
+            if (useSingleRedChannel)
+            {
+                imgformat = Godot.Image.Format.R8;
+            }
+            else
+            {
+                if (useAlphaChannel)
+                {
+                    imgformat = Godot.Image.Format.Rgba8;
+                }
+                else
+                {
+                    imgformat = Godot.Image.Format.Rgb8;
+                }
+            }
+            if (OutputInLowDetail)
+            {
+                //special mode for low detail levels.
+                //returns an image that is based on the pixel colour of the first byte (top left pixel) of the image.
+                width = 2;
+                height = 2;
+                var img = Godot.Image.CreateEmpty(width, height, false, imgformat);
+                byte pixel = (byte)getAt(databuffer, dataOffSet + 0, 8);
+                for (int iRow = 0; iRow < height; iRow++)
+                {
+                    int iCol = 0;
+                    for (int j = iRow * width; j < (iRow * width) + width; j++)
+                    {
+                        img.SetPixel(iCol, iRow, palette.ColorAtIndex(index: pixel, useAlphaChannel: useAlphaChannel, useSingleRedChannel: useSingleRedChannel));
+                        iCol++;
+                    }
+                }
+                var tex = new ImageTexture();
+                tex.SetImage(img);
+                return tex;
+            }
+            else
+            {
+                var img = Godot.Image.CreateEmpty(width, height, false, imgformat);
+                for (int iRow = 0; iRow < height; iRow++)
+                {
+                    int iCol = 0;
+                    for (int j = iRow * width; j < (iRow * width) + width; j++)
+                    {
+                        byte pixel = (byte)getAt(databuffer, dataOffSet + j, 8);
+                        img.SetPixel(
+                            x: iCol, 
+                            y: iRow, 
+                            color: palette.ColorAtIndex(
+                                index: pixel, 
+                                useAlphaChannel: useAlphaChannel, 
+                                useSingleRedChannel: useSingleRedChannel,
+                                xfermode: xfermode));
+                        iCol++;
+                    }
+                }
+
+                if (crop)
+                {
+                    var bound = GetBoundingBox(databuffer, (int)dataOffSet, width, height);
+                    return CropImage(img, bound);
+                }
+                else
+                {
+                    var tex = new ImageTexture();
+                    tex.SetImage(img);
+                    return tex;
+                }
+            }
+        }
+
+
+        /// <summary>
+        /// Creates a collison mask around the image data.
+        /// </summary>
+        /// <param name="databuffer"></param>
+        /// <param name="dataOffSet"></param>
+        /// <param name="width"></param>
+        /// <param name="height"></param>
+        /// <param name="crop"></param>
+        /// <returns></returns>
+        public static Godot.Collections.Array<Godot.Vector2[]> CreateCollisionMask(
+            byte[] databuffer,
+            long dataOffSet,
+            int width, int height,
+            bool crop = false
+           )
+        {
+
+            var bmp = new Bitmap();
+            bmp.Create(new Vector2I(width, height));
+
+            for (int iRow = 0; iRow < height; iRow++)
+            {
+                int iCol = 0;
+                for (int j = iRow * width; j < (iRow * width) + width; j++)
+                {
+                    byte pixel = (byte)getAt(databuffer, dataOffSet + j, 8);
+                    bmp.SetBit(iCol, iRow, pixel != 0);
+                    iCol++;
+                }
+            }
+            if (crop)
+            {
+                var bound = GetBoundingBox(databuffer, (int)dataOffSet, width, height);
+                return bmp.OpaqueToPolygons(bound);
+            }
+            else
+            {
+                return bmp.OpaqueToPolygons(new Rect2I(0, 0, width, height));
+            }
+
+
+
+
+            // if (crop)
+            // {
+
+            //     return CropImage(img, bound);
+            // }
+            // else
+            // {
+            //     var tex = new ImageTexture();
+            //     tex.SetImage(img);
+            //     return tex;
+            // }
+        }
+
+
+        public static Rect2I GetBoundingBox(byte[] buf, int dataoffset, int width, int height)
+        {//https://stackoverflow.com/questions/32191887/creating-a-bounding-box-in-image-with-transparency
+
+            //search upper bound
+            bool found = false;
+            int x0 = 0; int x1 = width; int y1 = 0; int y0 = height;
+            for (int row = 0; row < height && !found; row++) //row
+            {
+                for (int col = 0; col < width && !found; col++) //column
+                {
+                    int idx = dataoffset + (row * width + col);
+                    if (!(buf[idx] == 0)) //not transparent
+                    {
+                        //BoundingBox.top = row;
+                        y0 = row;
+                        found = true;
+                    }
+                }
+            }
+
+            //search lower bound
+            found = false;
+            for (int row = height - 1; row >= 0 && !found; row--) //row
+            {
+                for (int col = width - 1; col >= 0 && !found; col--) //column
+                {
+                    int idx = dataoffset + (row * width + col);
+                    if (!(buf[idx] == 0)) //not transparent           
+                    {
+                        //BoundingBox.bottom = row;
+                        y1 = row;
+                        found = true;
+                    }
+                }
+            }
+
+
+            //search left bound
+            found = false;
+            for (int col = 0; col < width && !found; col++) //row
+            {
+                for (int row = 0; row < height && !found; row++) //column
+                {
+                    int idx = dataoffset + (row * width + col);
+                    if (!(buf[idx] == 0)) //not transparent           
+                    {
+                        //BoundingBox.left = col;
+                        x0 = col;
+                        found = true;
+                    }
+                }
+            }
+
+
+            //search right bound
+            found = false;
+            for (int col = width - 1; col >= 0 && !found; col--) //row
+            {
+                for (int row = height - 1; row >= 0 && !found; row--) //column
+                {
+                    int idx = dataoffset + (row * width + col);
+                    if (!(buf[idx] == 0)) //not transparent           
+                    {
+                        //BoundingBox.right = col;
+                        x1 = col;
+                        found = true;
+                    }
+                }
+            }
+            return new Rect2I(x0, y0, x1 - x0 + 1, y1 - y0 + 1);
+        }
+
+
+        public static ImageTexture CropImage(Image src, Rect2I rect)
+        {
+            var img = Godot.Image.CreateEmpty(rect.Size.X, rect.Size.Y, false, src.GetFormat());
+            img.BlitRect(src, rect, Vector2I.Zero);
+            var tex = new ImageTexture();
+            tex.SetImage(img);
+            //img.SavePng("c:\\temp\\img\\" + System.Guid.NewGuid() + ".png");
+            return tex;
+        }
+
+        /// <summary>
+        /// Combines the ToInsert image onto the BackgroundImage.
+        /// </summary>
+        /// <param name="srcImg"></param>
+        /// <param name="dstImg"></param>
+        /// <param name="cornerX"></param>
+        /// <param name="cornerY"></param>
+        /// <returns></returns>
+        public static Godot.Image InsertImage(Image srcImg, Image dstImg, int cornerX, int cornerY)
+        {
+            //from the unity implementation.
+            var result = dstImg; //Godot.Image.CreateEmpty(dstImg.GetWidth(), dstImg.GetHeight(), false, Godot.Image.Format.Rgba8);
+            for (int x = 0; x < srcImg.GetWidth(); x++)
+            {
+                for (int y = 0; y < srcImg.GetHeight(); y++)
+                {
+                    if ((x + cornerX < dstImg.GetWidth()) && (y + cornerY < dstImg.GetHeight()))
+                    {
+                        if ((cornerX + x >= 0) && (cornerY + y >= 0))
+                        {
+                            result.SetPixel(cornerX + x, cornerY + y, srcImg.GetPixel(x, y));
+                        }
+                    }
+                }
+            }
+            // background.BlendRect(src: ToInsert, srcRect: new Rect2I(0,0,ToInsert.GetWidth(),ToInsert.GetHeight()), dst: new Vector2I(offX, offY));
+            return result;
+        }
+
+        public static Godot.Image BlankCanvas(int h, int w)
+        {
+            return Godot.Image.CreateEmpty(h, w, false, Godot.Image.Format.Rgba8);
+        }
+
+        /// <summary>
+        /// How many image pixels a texture has per pixel it reports: 1 for original art, 2 or 4 for
+        /// HD art (see HdArt), whose textures report their original size. Code that crops or
+        /// composes GetImage() at original-art coordinates must multiply them by this.
+        /// </summary>
+        public static int HdScale(ImageTexture tex)
+        {
+            if (tex == null || tex.GetWidth() == 0) { return 1; }
+            return System.Math.Max(1, tex.GetImage().GetWidth() / tex.GetWidth());
+        }
+
+        /// <summary>
+        /// CropImage for a texture that may be HD art: <paramref name="rect"/> is in original-art
+        /// pixels, and the result reports the rect's size whatever its scale.
+        /// </summary>
+        public static ImageTexture CropTexture(ImageTexture tex, Rect2I rect)
+        {
+            int s = HdScale(tex);
+            var cropped = CropImage(tex.GetImage(), new Rect2I(rect.Position * s, rect.Size * s));
+            if (s > 1) { cropped.SetSizeOverride(rect.Size); }
+            return cropped;
+        }
+
+    }//class artloader
+
+} //namespace

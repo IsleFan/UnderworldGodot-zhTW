@@ -1,0 +1,984 @@
+using System.Diagnostics;
+using Godot;
+using Peaky.Coroutines;
+using System.Collections;
+
+namespace Underworld
+{
+    public partial class uimanager : Node2D
+    {
+        /// <summary>
+        /// The currently displayed backpack objects.
+        /// </summary>
+        public static int[] BackPackIndices = new int[8];
+
+        /// <summary>
+        /// The container currently opened on the paperdoll.
+        /// </summary>
+        public static int OpenedContainerIndex = -1;
+
+        // Inventory pointer / drag state (DOS paperdoll drag-and-drop).
+        static bool inventoryPointerDown;
+        static bool inventoryDragActive;
+        static MouseButton inventoryPointerButton;
+        static string inventoryPressSlotName;
+        static Vector2 inventoryPressPos;
+        static int inventoryPressObjIndex;
+        static int inventoryPressSlotId;
+        const float InventoryDragThresholdPx = 5f;
+
+        /// <summary>
+        /// UW1: left or right drag. UW2: right drag only (left drag does nothing).
+        /// </summary>
+        static bool CanInventoryDrag(MouseButton button)
+        {
+            if (button == MouseButton.Right)
+            {
+                return true;
+            }
+            if (button == MouseButton.Left)
+            {
+                return UWClass._RES != UWClass.GAME_UW2;
+            }
+            return false;
+        }
+
+        static void ClearInventoryPointerState()
+        {
+            inventoryPointerDown = false;
+            inventoryDragActive = false;
+            inventoryPressSlotName = null;
+            inventoryPressObjIndex = -1;
+            inventoryPressSlotId = -1;
+        }
+
+        static void BeginInventoryPointerDown(string slotname, MouseButton button, Vector2 position)
+        {
+            inventoryPointerDown = true;
+            inventoryDragActive = false;
+            inventoryPointerButton = button;
+            inventoryPressSlotName = slotname;
+            inventoryPressPos = position;
+            inventoryPressObjIndex = GetObjAtSlot(slotname);
+            inventoryPressSlotId = CurrentSlot;
+        }
+
+        /// <summary>
+        /// After moving past the drag threshold, mark the gesture as a drag.
+        /// Pickup only happens when the button is allowed to drag (UW1 L/R, UW2 R).
+        /// UW2 left-drag is therefore a no-op (not a click).
+        /// </summary>
+        static void TryStartInventoryDrag(Vector2 position)
+        {
+            if (!inventoryPointerDown || inventoryDragActive)
+            {
+                return;
+            }
+            if (inventoryPressPos.DistanceTo(position) < InventoryDragThresholdPx)
+            {
+                return;
+            }
+
+            inventoryDragActive = true;
+
+            if (!CanInventoryDrag(inventoryPointerButton))
+            {
+                return;
+            }
+
+            // Already holding something (e.g. from world Get): just mark drag for place-on-release.
+            if (playerdat.ObjectInHand != -1)
+            {
+                return;
+            }
+            if (inventoryPressObjIndex <= 0)
+            {
+                return;
+            }
+            if (inventoryPressSlotName == "OpenedContainer")
+            {
+                return;
+            }
+
+            var obj = playerdat.InventoryObjects[inventoryPressObjIndex];
+            if (obj == null)
+            {
+                return;
+            }
+            if (InConversation && obj.majorclass == 2 && obj.minorclass == 0 && obj.classindex != 0xF)
+            {
+                AddToMessageScroll(
+                    stringToAdd: GameStrings.GetDisplayString(
+                        1,
+                        GameStrings.str_you_cannot_barter_a_container__instead_remove_the_contents_you_want_to_trade_),
+                    option: 2,
+                    mode: MessageDisplay.MessageDisplayMode.TemporaryMessage);
+                return;
+            }
+            switch (inventoryPressSlotName)
+            {
+                case "RightShoulder":
+                case "LeftShoulder":
+                case "RightHand":
+                case "LeftHand":
+                    if (obj.index != OpenedContainerIndex && OpenedContainerIndex != -1)
+                    {
+                        var match = objectsearch.FindMatchInObjectChain(
+                            ListHeadIndex: obj.index,
+                            itemIndex: OpenedContainerIndex,
+                            objList: playerdat.InventoryObjects,
+                            SkipNext: true);
+                        if (match != null)
+                        {
+                            Debug.Print("attempt to pickup container while it or sub-object is opened");
+                            return;
+                        }
+                    }
+                    break;
+            }
+            if (obj.index == OpenedContainerIndex)
+            {
+                return; // don't drag the container currently being viewed
+            }
+
+            CurrentSlot = inventoryPressSlotId;
+            PickupObjectFromSlot(obj);
+        }
+
+        static void PlaceHeldItemAtSlot(string slotname)
+        {
+            GetObjAtSlot(slotname); // sets CurrentSlot
+            if (CurrentSlot == 0 && playerdat.ObjectInHand != 1 && TryEatInteraction())
+            {
+                return;
+            }
+
+            if (slotname == "OpenedContainer")
+            {
+                MoveObjectInHandOutOfOpenedContainer(playerdat.ObjectInHand);
+                return;
+            }
+
+            var objIndex = GetObjAtSlot(slotname);
+            if (objIndex > 0)
+            {
+                UseObjectsTogether(playerdat.ObjectInHand, objIndex);
+            }
+            else
+            {
+                PickupToEmptySlot(playerdat.ObjectInHand);
+            }
+        }
+
+        static void DropHeldItemIntoWorld()
+        {
+            if (playerdat.ObjectInHand == -1)
+            {
+                return;
+            }
+            // Drop vs throw uses these positions in motion.InitPlayerProjectileValues().
+            // Mirror ClickOnViewPort so release height/heading match the cursor.
+            var mouse = instance.GetViewport().GetMousePosition();
+            ViewPortMouseXPos = mouse.X;
+            ViewPortMouseYPos = mouse.Y;
+
+            var objToThrow = UWTileMap.current_tilemap.LevelObjects[playerdat.ObjectInHand];
+            var itemid = objToThrow.item_id;
+            if (pickup.DropObjectByPlayer(objToThrow, true))
+            {
+                playerdat.ObjectInHand = -1;
+                instance.mousecursor.SetCursorToCursor();
+                pickup.DropSpecialCases(itemid);
+            }
+        }
+
+        /// <summary>
+        /// Slot under the cursor for drag-drop. Release events often arrive on the
+        /// press control, so placement must not trust that control's bind name.
+        /// </summary>
+        static string FindInventorySlotUnderMouse()
+        {
+            if (instance == null)
+            {
+                return null;
+            }
+            var mouse = instance.GetViewport().GetMousePosition();
+
+            // Overlapping input hitboxes first, then visible art.
+            if (ControlContainsMouse(instance.ArmourInput, mouse)) return "Armour";
+            if (ControlContainsMouse(instance.LeggingsInput, mouse)) return "Leggings";
+            if (ControlContainsMouse(instance.GlovesInput1, mouse)
+                || ControlContainsMouse(instance.GlovesInput2, mouse)) return "Gloves";
+            if (ControlContainsMouse(instance.RightRingInput, mouse)) return "RightRing";
+            if (ControlContainsMouse(instance.LeftRingInput, mouse)) return "LeftRing";
+
+            if (ControlContainsMouse(instance.Helm, mouse)) return "Helm";
+            if (ControlContainsMouse(instance.Boots, mouse)) return "Boots";
+            if (ControlContainsMouse(instance.RightShoulder, mouse)) return "RightShoulder";
+            if (ControlContainsMouse(instance.LeftShoulder, mouse)) return "LeftShoulder";
+            if (ControlContainsMouse(instance.RightHand, mouse)) return "RightHand";
+            if (ControlContainsMouse(instance.LeftHand, mouse)) return "LeftHand";
+            if (ControlContainsMouse(instance.OpenedContainer, mouse)) return "OpenedContainer";
+
+            if (instance.Backpack != null)
+            {
+                for (int i = 0; i < instance.Backpack.Length; i++)
+                {
+                    if (ControlContainsMouse(instance.Backpack[i], mouse))
+                    {
+                        return $"Back{i}";
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        static bool ControlContainsMouse(Control control, Vector2 mouse)
+        {
+            return control != null
+                && control.IsVisibleInTree()
+                && control.GetGlobalRect().HasPoint(mouse);
+        }
+
+        private static void InteractWithEmptySlot()
+        {
+            if (playerdat.ObjectInHand != -1)
+            {
+                PickupToEmptySlot(playerdat.ObjectInHand);
+            }
+        }
+
+        /// <summary>
+        /// Handles clicking on an empty inventory slot with an object in hand
+        /// </summary>
+        public static void PickupToEmptySlot(int ObjectToPickup)
+        {
+            bool CheckForEnchantments = false;
+            if (ObjectToPickup != -1)
+            {
+                switch (CurrentSlot)
+                {
+                    case -1:
+                        {
+                            MoveObjectInHandOutOfOpenedContainer(ObjectToPickup);
+                            break;
+                        }
+                    case >= 0 and <= 10:
+                        {//paperdoll
+                            if (CurrentSlot == 0) //HELM
+                            {
+                                //try the eat interation.
+                                if (playerdat.ObjectInHand != 1)
+                                {
+                                    if (TryEatInteraction())
+                                    {
+                                        return; //food has been consumed. exit function.
+                                    }
+                                }
+                            }
+
+                            //Test if object is valid for slot
+                            if (!ValidObjectForSlot(CurrentSlot, UWTileMap.current_tilemap.LevelObjects[ObjectToPickup]))
+                            {
+                                return;
+                            }
+                            var index = playerdat.AddObjectToPlayerInventory(ObjectToPickup, false);
+                            playerdat.SetInventorySlotListHead(CurrentSlot, index);
+                            //redraw                
+                            RefreshSlot(CurrentSlot);
+                            if (ObjectToPickup == playerdat.ObjectInHand)
+                            {
+                                playerdat.ObjectInHand = -1;
+                                instance.mousecursor.SetCursorToCursor();
+                            }
+                            //the object added to the paper doll may have a (curse) enchantment that may need to be activated
+                            CheckForEnchantments = true;
+                            break;
+                        }
+                    case >= 11 and <= 18:
+                        //backpack
+                        if (OpenedContainerIndex < 0)
+                        {//backpackslot
+                            var index = playerdat.AddObjectToPlayerInventory(ObjectToPickup, false);
+                            playerdat.SetInventorySlotListHead(CurrentSlot, index);
+
+                            //redraw
+                            BackPackIndices[CurrentSlot - 11] = index;
+                            RefreshSlot(CurrentSlot);
+                            if (ObjectToPickup == playerdat.ObjectInHand)
+                            {
+                                playerdat.ObjectInHand = -1;
+                                instance.mousecursor.SetCursorToCursor();
+                            }
+                        }
+                        else
+                        {//into a container directly. test if it can hold the object
+                            if (container.TestContainerCanHold(
+                                containerobject: playerdat.InventoryObjects[OpenedContainerIndex],
+                                objectToAdd: UWTileMap.current_tilemap.LevelObjects[ObjectToPickup],
+                                printReason: true))
+                            {
+                                int occupiedslots;
+                                var containerobjects = container.GetObjects(
+                                    ContainerIndex: OpenedContainerIndex,
+                                    objList: playerdat.InventoryObjects,
+                                    OccupiedSlots: out occupiedslots,
+                                    start: 0,
+                                    count: 512
+                                    );
+                                //find the object that is previous to the current slot.
+                                var start = BackPackStart + CurrentSlot - 11 - 1;
+                                var previousObjectIndex = -1;
+                                while (start >= 0)
+                                {
+                                    if (containerobjects[start] != -1)
+                                    {
+                                        previousObjectIndex = containerobjects[start];
+                                        break;
+                                    }
+                                    start--;
+                                }
+
+                                //in a container 
+                                var index = playerdat.AddObjectToPlayerInventory(ObjectToPickup, false);
+                                var newobj = playerdat.InventoryObjects[index];
+
+                                if (previousObjectIndex != -1)
+                                {
+                                    //add as a next to that object
+                                    var prev = playerdat.InventoryObjects[previousObjectIndex];
+                                    newobj.next = prev.next;
+                                    prev.next = newobj.index;
+                                }
+                                else
+                                {
+                                    //add to the container link
+                                    var opened = playerdat.InventoryObjects[OpenedContainerIndex];
+                                    newobj.next = opened.link;
+                                    opened.link = index;
+                                }
+
+                                //redraw
+                                BackPackIndices[CurrentSlot - 11] = index;
+                                UpdateInventoryDisplay();
+                                if (ObjectToPickup == playerdat.ObjectInHand)
+                                {
+                                    playerdat.ObjectInHand = -1;
+                                    instance.mousecursor.SetCursorToCursor();
+                                }
+                            }
+                        }
+                        break;
+                }
+                //Update player state
+                playerdat.PlayerStatusUpdate(CastOnEquip: CheckForEnchantments);
+            }
+        }
+
+
+        /// <summary>
+        /// Handles dropping food items on the players head
+        /// </summary>
+        /// <returns></returns>
+        private static bool TryEatInteraction()
+        {
+            if (playerdat.ObjectInHand == -1)
+            {
+                return false;
+            }
+            var objInHand = UWTileMap.current_tilemap.LevelObjects[playerdat.ObjectInHand];
+            if (objInHand.majorclass == 2 && objInHand.minorclass == 3)
+            {
+                Food.Use(objInHand, true);
+                return true;
+            }
+            else
+            {
+                if (Food.SpecialFoodCases(
+                    obj: objInHand,
+                    UsedFromInventory: false))
+                {//if any food special case occurs exit sub
+                    return true;
+                }
+            }
+            return false;
+        }
+
+
+
+        /// <summary>
+        /// Empty-handed inventory click (no drag). Matches DOS: action on release.
+        /// Use = L/R Use; Look UW1 = L Use/R Look, UW2 = L/R Look;
+        /// other modes = L Use, R Look.
+        /// Does not change interaction mode.
+        /// </summary>
+        private static void InteractWithObjectInSlot(string slotname, uwObject objAtSlot, bool isLeftClick)
+        {
+            if ((MessageDisplay.WaitingForTypedInput) || (MessageDisplay.WaitingForYesOrNo))
+            {
+                return;
+            }
+            // Block inventory only during an active combat swing (weapon drawn, not Ready).
+            // Sheathed / no-mode must still allow Use/Look clicks.
+            if (InteractionMode == InteractionModes.ModeAttack
+                && playerdat.play_drawn == 1
+                && combat.stage != combat.CombatStages.Ready)
+            {
+                return;
+            }
+
+            if (slotname == "OpenedContainer")
+            {
+                container.Close(
+                    index: objAtSlot.index,
+                    objList: playerdat.InventoryObjects);
+                return;
+            }
+
+            if (ShouldUseInventoryObjectOnClick(isLeftClick))
+            {
+                UseInventoryObject(objAtSlot);
+            }
+            else
+            {
+                look.LookAt(objAtSlot.index, playerdat.InventoryObjects, false);
+            }
+        }
+
+        /// <summary>
+        /// Empty-handed inventory click: whether this button Uses (vs Looks).
+        /// </summary>
+        static bool ShouldUseInventoryObjectOnClick(bool isLeftClick)
+        {
+            switch (InteractionMode)
+            {
+                case InteractionModes.ModeUse:
+                    return true;
+                case InteractionModes.ModeLook:
+                    // UW2 Look mode: both buttons Look. UW1: left Use, right Look.
+                    return (UWClass._RES != UWClass.GAME_UW2) && isLeftClick;
+                default:
+                    // None / Talk / Get / Combat / Options: left Use, right Look.
+                    return isLeftClick;
+            }
+        }
+
+        static void UseInventoryObject(uwObject objAtSlot)
+        {
+            if (useon.CurrentItemBeingUsed != null)
+            {
+                useon.UseOn(
+                    ObjectUsed: objAtSlot,
+                    srcObject: useon.CurrentItemBeingUsed,
+                    WorldObject: false);
+            }
+            else
+            {
+                use.Use(
+                    ObjectUsed: objAtSlot,
+                    UsingObjectOrCharacter: playerdat.playerObject,
+                    objList: playerdat.InventoryObjects,
+                    WorldObject: false);
+            }
+        }
+
+        /// <summary>
+        /// Conversation inventory clicks keep trade-oriented behaviour (pickup / open / look).
+        /// </summary>
+        static void InteractWithObjectInSlotConversation(uwObject objAtSlot, bool isLeftClick)
+        {
+            if (playerdat.ObjectInHand != -1)
+            {
+                UseObjectsTogether(playerdat.ObjectInHand, objAtSlot.index);
+                return;
+            }
+
+            if (isLeftClick)
+            {
+                if ((objAtSlot.majorclass == 2) && (objAtSlot.minorclass == 0))
+                {
+                    AddToMessageScroll(
+                        stringToAdd: GameStrings.GetDisplayString(1, GameStrings.str_you_cannot_barter_a_container__instead_remove_the_contents_you_want_to_trade_),
+                        option: 2,
+                        mode: MessageDisplay.MessageDisplayMode.TemporaryMessage);
+                }
+                else
+                {
+                    PickupObjectFromSlot(objAtSlot);
+                }
+            }
+            else
+            {
+                if ((objAtSlot.majorclass == 2) && (objAtSlot.minorclass == 0) && (objAtSlot.classindex != 0xF))
+                {
+                    use.Use(
+                        objAtSlot,
+                        playerdat.playerObject,
+                        objList: playerdat.InventoryObjects,
+                        WorldObject: false);
+                }
+                else if ((objAtSlot.majorclass == 2) && (objAtSlot.minorclass == 0) && (objAtSlot.classindex == 0xF))
+                {
+                    // runebag: ignore
+                }
+                else
+                {
+                    look.PrintLookDescription(
+                        obj: objAtSlot,
+                        objList: playerdat.InventoryObjects,
+                        OutputConvo: true,
+                        lorecheckresult: look.LoreCheck(objAtSlot));
+                }
+            }
+        }
+
+
+
+        public static int GetPaperDollObjAtSlot(int slotindex)
+        {
+            var obj = -1;
+            switch (slotindex)
+            {
+                case 0: { obj = playerdat.Helm; break; }
+                case 1: { obj = playerdat.ChestArmour; break; }
+                case 2: { obj = playerdat.Gloves; break; }
+                case 3: { obj = playerdat.Leggings; break; }
+                case 4: { obj = playerdat.Boots; break; }
+
+                case 5: { obj = playerdat.RightShoulder; break; }
+                case 6: { obj = playerdat.LeftShoulder; break; }
+                case 7: { obj = playerdat.RightHand; break; }
+                case 8: { obj = playerdat.LeftHand; break; }
+
+                case 9: { obj = playerdat.RightRing; break; }
+                case 10: { obj = playerdat.LeftRing; break; }
+            }
+            return obj;
+        }
+        /// <summary>
+        /// Gets the object at the named inventory slot
+        /// </summary>
+        /// <param name="slotname"></param>
+        /// <returns></returns>
+        public static int GetObjAtSlot(string slotname)
+        {
+            var obj = -1;
+            switch (slotname)
+            {
+                case "Helm": { obj = playerdat.Helm; CurrentSlot = 0; break; }
+                case "Armour": { obj = playerdat.ChestArmour; CurrentSlot = 1; break; }
+                case "Gloves": { obj = playerdat.Gloves; CurrentSlot = 2; break; }
+                case "Leggings": { obj = playerdat.Leggings; CurrentSlot = 3; break; }
+                case "Boots": { obj = playerdat.Boots; CurrentSlot = 4; break; }
+
+                case "RightShoulder": { obj = playerdat.RightShoulder; CurrentSlot = 5; break; }
+                case "LeftShoulder": { obj = playerdat.LeftShoulder; CurrentSlot = 6; break; }
+                case "RightHand": { obj = playerdat.RightHand; CurrentSlot = 7; break; }
+                case "LeftHand": { obj = playerdat.LeftHand; CurrentSlot = 8; break; }
+
+                case "RightRing": { obj = playerdat.RightRing; CurrentSlot = 9; break; }
+                case "LeftRing": { obj = playerdat.LeftRing; CurrentSlot = 10; break; }
+
+                case "Back0": { obj = GetBackPackIndex(0); CurrentSlot = 11; break; }
+                case "Back1": { obj = GetBackPackIndex(1); CurrentSlot = 12; break; }
+                case "Back2": { obj = GetBackPackIndex(2); CurrentSlot = 13; break; }
+                case "Back3": { obj = GetBackPackIndex(3); CurrentSlot = 14; break; }
+                case "Back4": { obj = GetBackPackIndex(4); CurrentSlot = 15; break; }
+                case "Back5": { obj = GetBackPackIndex(5); CurrentSlot = 16; break; }
+                case "Back6": { obj = GetBackPackIndex(6); CurrentSlot = 17; break; }
+                case "Back7": { obj = GetBackPackIndex(7); CurrentSlot = 18; break; }
+                case "OpenedContainer": { obj = OpenedContainerIndex; CurrentSlot = -1; break; }
+                default:
+                    CurrentSlot = -1;
+                    Debug.Print("Unimplemented inventory slot"); break;
+            }
+
+            return obj;
+        }
+
+
+
+        /// <summary>
+        /// Stores an array listing the currently displayed backpack objects indices
+        /// </summary>
+        /// <param name="slot"></param>
+        /// <param name="obj"></param>
+        public static void SetBackPackIndex(int slot, uwObject obj)
+        {
+            if (obj != null)
+            {
+                BackPackIndices[slot] = obj.index;
+            }
+            else
+            {
+                BackPackIndices[slot] = -1;
+            }
+        }
+
+        /// <summary>
+        /// Get the index of the object at the currently displayed backpack slot
+        /// </summary>
+        /// <param name="slot"></param>
+        /// <returns></returns>
+        public static int GetBackPackIndex(int slot)
+        {
+            return BackPackIndices[slot];
+        }
+
+
+        /// <summary>
+        /// Uses a srcobject from world on a target object in inventory
+        /// </summary>
+        /// <param name="srcObj"></param>
+        /// <param name="targetObj"></param>
+        public static void UseObjectsTogether(int srcObj, int targetObj)
+        {
+            if ((MessageDisplay.WaitingForTypedInput) || (MessageDisplay.WaitingForYesOrNo))
+            {//stop while typing in progress
+                return;
+            }
+            var target = playerdat.InventoryObjects[targetObj];
+            var source = UWTileMap.current_tilemap.LevelObjects[srcObj];
+
+            if ((target.majorclass == 2) && (target.minorclass == 0) && (target.classindex != 0xF))
+            {
+                //containers excluding the runebag.
+                //add object to container
+                if (container.TestContainerCanHold(target, source))
+                {
+                    var Added = playerdat.AddObjectToPlayerInventory(srcObj, false);
+                    var AddedObj = playerdat.InventoryObjects[Added];
+                    AddedObj.next = target.link;
+                    target.link = Added;
+                    playerdat.ObjectInHand = -1;
+                    instance.mousecursor.SetCursorToCursor();
+                }
+                playerdat.PlayerStatusUpdate();
+                return;
+            }
+
+            if ((target.majorclass == 2) && (target.minorclass == 0) && (target.classindex == 0xF))
+            {
+                if (source.majorclass == 3)
+                {
+                    if (
+                        (source.minorclass == 2) && (source.classindex >= 8)
+                        ||
+                         (source.minorclass == 3)
+                    )
+                    {
+                        //the runebag. add to runes if source is a rune.
+                        int runeid = source.item_id - 232;
+                        playerdat.SetRune(runeid, true);
+                        playerdat.ObjectInHand = -1; instance.mousecursor.SetCursorToCursor();
+                        ObjectCreator.Consume(source, false);
+                        return;
+                    }
+                }
+                uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, GameStrings.str_you_can_only_put_runes_in_the_rune_bag_));
+                return;
+            }
+
+            if (target.item_id == source.item_id)
+            {
+                if ((commonObjDat.stackable(target.item_id) & 0x1) == 0)
+                {//and is stackable.
+                    //average out the quality between the stacks
+                    target.quality = (short)(((target.quality * target.ObjectQuantity) + (source.quality * source.ObjectQuantity)) / (target.ObjectQuantity + source.ObjectQuantity));
+
+                    //change the quantities.
+                    target.link += source.link;
+                    target.is_quant = 1;
+
+                    UpdateInventoryDisplay();
+                    //destroy the source.
+                    ObjectFreeLists.ReleaseFreeObject(source); //object in hand
+                    playerdat.ObjectInHand = -1; instance.mousecursor.SetCursorToCursor();
+                    return;
+                }
+            }
+            //try item combinations
+            if (objectCombination.TryObjectCombination(target, source))
+            {
+                return;
+            }
+
+            //swap objects otherwise if object is valid for slot
+            if (ValidObjectForSlot(CurrentSlot, source))
+            {
+                var backup = playerdat.ObjectInHand;
+                PickupObjectFromSlot(objAtSlot: target, forceFullQty: true);
+                PickupToEmptySlot(backup);
+                UpdateInventoryDisplay();
+            }
+
+
+            //Update player state
+            playerdat.PlayerStatusUpdate();
+        }
+
+        public static void PickupObjectFromSlot(uwObject objAtSlot, bool forceFullQty = false)
+        {
+            if ((MessageDisplay.WaitingForTypedInput) || (MessageDisplay.WaitingForYesOrNo))
+            {//stop while another in progress
+                return;
+            }
+            //var obj = playerdat.InventoryObjects[objAtSlot];
+
+            if ((objAtSlot.ObjectQuantity > 1) && (forceFullQty == false))
+            {//object is a quantity, prompty for pickup size and then complete pickup
+                //prompt for quantity in coroutine.
+                _ = Coroutine.Run(
+                        DoPickupQty(objAtSlot: objAtSlot, currslot: CurrentSlot),
+                        main.instance
+                    );
+            }
+            else
+            {
+                //just pick it up
+                DoPickup(objAtSlot);
+            }
+        }
+
+
+
+        /// <summary>
+        /// Does the pickup from inventory and moves object back into the world, optionally places in the player hand.
+        /// </summary>
+        /// <param name="objAtSlot"></param>
+        /// <param name="DestroyInventoryObject"></param>
+        /// <returns></returns>
+        public static int DoPickup(uwObject objAtSlot, bool DestroyInventoryObject = true, bool ChangeHand = true)
+        {
+            var newIndex = playerdat.AddInventoryObjectToWorld(
+                    objIndex: objAtSlot.index,
+                    updateUI: true,
+                    RemoveNext: false,
+                    DestroyInventoryObject: DestroyInventoryObject,
+                    ClearLink: true
+                    );
+            var pickObject = UWTileMap.current_tilemap.LevelObjects[newIndex];
+            pickObject.next = 0;
+            if (ChangeHand)
+            {
+                playerdat.ObjectInHand = newIndex;
+                instance.mousecursor.SetCursorToObject(pickObject.item_id);
+            }
+            playerdat.PlayerStatusUpdate();//check if any enchantments need to be updated
+            return newIndex;
+        }
+
+        public static void MoveObjectInHandOutOfOpenedContainer(int ObjectToPickup)
+        {
+            //the opened container
+            if (OpenedContainerParent == -1)
+            {
+                //on paperdoll. try and add to there
+                var freeslot = FreePaperDollSlot;
+                if (freeslot != -1)
+                {
+                    var index = playerdat.AddObjectToPlayerInventory(ObjectToPickup, false);
+                    playerdat.SetInventorySlotListHead(freeslot, index);
+                    if (ObjectToPickup == playerdat.ObjectInHand)
+                    {
+                        playerdat.ObjectInHand = -1;
+                        instance.mousecursor.SetCursorToCursor();
+                    }
+                }
+                else
+                {
+                    Debug.Print("No room on paperdoll");
+                }
+            }
+            else
+            {
+                //the container that contains the opened container.
+                var index = playerdat.AddObjectToPlayerInventory(playerdat.ObjectInHand, false);
+                var newobj = playerdat.InventoryObjects[index];
+                var container = playerdat.InventoryObjects[OpenedContainerParent];
+                newobj.next = container.link;
+                container.link = index;
+                playerdat.ObjectInHand = -1;
+                instance.mousecursor.SetCursorToCursor();
+            }
+        }
+
+
+        // /// <summary>
+        // /// Finds and changes the backpack display array for the specific object indices
+        // /// </summary>
+        // /// <param name="index"></param>
+        // /// <param name="newValue"></param>
+        // static void FindAndChangeBackpackIndex(int index, int newValue = -1)
+        // {
+        //     for (int i = 0; i < BackPackIndices.GetUpperBound(0); i++)
+        //     {
+        //         if (BackPackIndices[i] == index)
+        //         {
+        //             BackPackIndices[i] = newValue;
+        //         }
+        //     }
+        // }
+
+
+        /// <summary>
+        /// Handles pickup up stacks of objects which need to be split
+        /// </summary>
+        /// <param name="index"></param>
+        /// <param name="objList"></param>
+        /// <param name="obj"></param>
+        /// <returns></returns>
+        public static IEnumerator DoPickupQty(uwObject objAtSlot, int currslot)
+        {
+            MessageScrollLine[] linesToRestore = BackupLines(instance.scroll.Lines, 5);
+            //var obj = playerdat.InventoryObjects[objAtSlot];
+            MessageDisplay.WaitingForTypedInput = true;
+
+            instance.TypedInput.Text = objAtSlot.ObjectQuantity.ToString();
+            uimanager.instance.TypedInput.CaretColumn = uimanager.instance.TypedInput.Text.Length;
+            instance.scroll.Clear();
+            AddToMessageScroll(ZhText.Enabled ? ZhText.Compose("要移動多少？{TYPEDINPUT}|") : "Move how many? {TYPEDINPUT}|", mode: MessageDisplay.MessageDisplayMode.TypedInput);
+
+            while (MessageDisplay.WaitingForTypedInput)
+            {
+                yield return new WaitOneFrame();
+            }
+            //restore currentslot as this gets wiped once the calling function has ended
+            CurrentSlot = currslot;
+
+            var response = instance.TypedInput.Text;
+            if (int.TryParse(response, out int NoOfItemsPickedUp))
+            {
+                if (NoOfItemsPickedUp > 0)
+                {
+                    if (objAtSlot.ObjectQuantity <= NoOfItemsPickedUp)
+                    {//at least all of the stack is selected                        
+                        DoPickup(objAtSlot);
+                    }
+                    else
+                    {
+                        //if <quantity selected, split objects, pickup object of that quantity.
+                        var newObjIndex = ObjectCreator.SpawnObjectInHand(itemid: objAtSlot.item_id, weightmultiplier: NoOfItemsPickedUp); //spawning in hand is very handy here
+                        var newObj = UWTileMap.current_tilemap.LevelObjects[newObjIndex];
+                        for (int i = 0; i < 8; i++)
+                        {
+                            newObj.DataBuffer[newObj.PTR + i] = objAtSlot.DataBuffer[objAtSlot.PTR + i];
+                        }
+                        newObj.link = (short)NoOfItemsPickedUp;
+                        objAtSlot.link = (short)(objAtSlot.link - NoOfItemsPickedUp);//reduce the other object.
+                    }
+                }
+            }
+            UpdateInventoryDisplay();
+            if (uimanager.InConversation)
+            {
+                //restore lines.
+                for (int i = 0; i <= linesToRestore.GetUpperBound(0); i++)
+                {
+                    instance.scroll.Lines[i] = new MessageScrollLine(linesToRestore[i].OptionNo, linesToRestore[i].LineText);
+                }
+                instance.scroll.UpdateMessageDisplay();
+            }
+            CurrentSlot = -1; //cleanup/needed?
+            yield return true;
+        }
+
+        public static bool ValidObjectForSlot(int slot, uwObject obj)
+        {//TODO: this should respect objects.dat settings
+            //test game specific special objects
+            //Ensure that "storage" slots are always valud
+            switch (slot)
+            {
+                case 5: //shoulders and hands
+                case 6:
+                case 7:
+                case 8:
+                case >= 11: //backpacks
+                    return true;
+            }
+            switch (UWClass._RES)
+            {
+                case UWClass.GAME_UW2:
+                    {
+                        switch (obj.item_id)
+                        {
+                            case 47://	a_pair of swamp boots&pairs of swamp boots
+                                return slot == 4;
+                            case 51://	fraznium gauntlets&pairs of fraznium gauntlets
+                                return slot == 2;
+                            case 52://	a_fraznium circlet
+                                return slot == 0;
+                            case 53://	a_Guardian signet ring
+                            case 55://	a_copper ring
+                                return (slot == 9) || (slot == 10);
+                        }
+                        break;
+                    }
+
+                default:
+                    {
+                        switch (obj.item_id)
+                        {
+                            case 47: //a_pair of dragon skin boots&pairs of dragon skin boots
+                                return slot == 4;
+                            case 54://an_iron ring
+                                return (slot == 9) || (slot == 10);
+                        }
+                        break;
+                    }
+            }
+            //standard rules
+            switch (slot)
+            {
+                case 0: //helm. 
+                    return
+                        obj.majorclass == 0
+                        &&
+                        (
+                            (obj.minorclass == 2) && (obj.classindex >= 0xC)
+                            ||
+                            (obj.minorclass == 3) && (obj.classindex <= 2)
+                        );
+                case 1://body armour
+                    return
+                        obj.majorclass == 0
+                        &&
+                        obj.minorclass == 2
+                        &&
+                        (obj.classindex >= 0 && obj.classindex <= 2);
+                case 2://gloves
+                    return
+                        obj.majorclass == 0
+                        &&
+                        obj.minorclass == 2
+                        &&
+                        (obj.classindex >= 6 && obj.classindex <= 8);
+                case 3://leggings
+                    return
+                        obj.majorclass == 0
+                        &&
+                        obj.minorclass == 2
+                        &&
+                        (obj.classindex >= 3 && obj.classindex <= 5);
+                case 4://boots
+                    return
+                        obj.majorclass == 0
+                        &&
+                        obj.minorclass == 2
+                        &&
+                        (obj.classindex >= 9 && obj.classindex <= 0xB);
+                case 9:
+                case 10://rings
+                    return
+                        obj.majorclass == 0
+                        &&
+                        obj.minorclass == 3
+                        &&
+                        (obj.classindex >= 9 && obj.classindex <= 0xB);
+            }
+
+            return true;
+        }
+    }//end class
+}//end namespace

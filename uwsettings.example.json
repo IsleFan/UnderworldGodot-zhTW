@@ -1,0 +1,13 @@
+{
+	"$schema": "uwsettings.schema.json",
+    "pathuw1": "C:\\Games\\UW1\\game\\UW",
+    "pathuw2": "C:\\Games\\UW2IDA\\UW2",
+    "gametoload": "UW1",
+    "level": 0,
+    "lightlevel" : 6,
+    "levarkfolder" : "DATA",
+    "shader" : "UWSHADER",
+    "FOV" : 75.0,
+    "showcolliders" : true,
+    "shaderbandsize" : 8
+}
