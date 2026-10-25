@@ -64,7 +64,6 @@
 
 - [Godot 4.3](https://godotengine.org/download/archive/4.3-stable/) **.NET 版**（不是一般版）
 - [.NET 9 SDK](https://dotnet.microsoft.com/download)
-- [Git LFS](https://git-lfs.com/)（clone 之前先執行一次 `git lfs install`）
 - 自備的遊戲檔案；選用：MT-32／CM-32L ROM
 
 macOS 用 Homebrew 安裝 .NET 時，`dotnet@9` 不會自動加入 `PATH`，需要在 shell 設定檔加上：
@@ -76,7 +75,7 @@ export PATH="$(brew --prefix dotnet@9)/bin:$PATH"
 
 ### 開始使用
 
-1. 安裝 Git LFS 後 clone 這個 repo。
+1. clone 這個 repo（不需要 Git LFS），或在 GitHub 按「Code > Download ZIP」。
 2. 用 Godot 4.3 .NET 版開啟專案，先執行一次 Build；或用下面的啟動檔，它每次都會先編譯。
 3. 執行專案，進入啟動畫面後選遊戲目錄、語言、美術與配樂，按「開始遊戲」。
 

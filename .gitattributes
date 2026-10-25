@@ -1,8 +1,10 @@
 # Normalize EOL for all files that Git considers text files.
 * text=auto eol=lf
-*.ttf filter=lfs diff=lfs merge=lfs -text
-*.png filter=lfs diff=lfs merge=lfs -text
-*.jpg filter=lfs diff=lfs merge=lfs -text
+# Fonts and pictures are stored in git itself, not Git LFS, so a plain clone or a GitHub
+# "Download ZIP" has them (the whole repo is small).
+*.ttf binary
+*.png binary
+*.jpg binary
 # Windows scripts keep CRLF (packaging/INSTALL.bat, install.ps1)
 *.bat text eol=crlf
 *.ps1 text eol=crlf

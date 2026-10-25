@@ -25,7 +25,10 @@ public partial class LocalizationTest : Node
         string dir = OS.GetEnvironment("UW_I18N_DIR");
         if (string.IsNullOrEmpty(dir)) { dir = ProjectSettings.GlobalizePath("res://i18n"); }
         var settings = uwsettings.instance;
-        if (UWClass._RES != UWClass.GAME_UW1 || !File.Exists(Path.Combine(dir, "uw1", "zh-TW", "master.tsv")))
+        //_RES is UW1 by default even with no game installed, so look for the game's strings too
+        string data = string.IsNullOrWhiteSpace(UWClass.BasePath) ? null : Path.Combine(UWClass.BasePath, "DATA");
+        if (UWClass._RES != UWClass.GAME_UW1 || data == null || !File.Exists(Path.Combine(data, "STRINGS.PAK"))
+            || !File.Exists(Path.Combine(dir, "uw1", "zh-TW", "master.tsv")))
         {
             GD.Print("GODOT-TEST-VERDICT SKIP needs UW1 game data");
             GetTree().Quit(0); return;
