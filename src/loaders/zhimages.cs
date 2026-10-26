@@ -351,14 +351,7 @@ namespace Underworld
                     letter[y, x] = letters.Contains(px[(area.Position.Y + y) * w + area.Position.X + x]);
                 }
             }
-            var masked = new bool[ah, aw];
-            for (int y = 0; y < ah; y++)
-            {
-                for (int x = 0; x < aw; x++)
-                {
-                    masked[y, x] = Near(letter, x, y, widen);
-                }
-            }
+            var masked = Dilate(letter, widen);
             var src = (byte[])px.Clone();
             for (int y = 0; y < ah; y++)
             {
@@ -368,14 +361,17 @@ namespace Underworld
                     for (int r = 1; r < Mathf.Max(aw, ah); r++)
                     {
                         int found = -1;
-                        //the ring at distance r, scanned from its top row
+                        //the ring at distance r, scanned from its top row, left to right: only its own
+                        //cells (the whole square each time made 8x pictures take seconds)
                         for (int dy = -r; dy <= r && found < 0; dy++)
                         {
-                            for (int dx = -r; dx <= r; dx++)
+                            int qy = y + dy;
+                            if (qy < 0 || qy >= ah) { continue; }
+                            int step = (dy == -r || dy == r) ? 1 : 2 * r; //full top and bottom rows, the two ends between
+                            for (int dx = -r; dx <= r; dx += step)
                             {
-                                if (Mathf.Max(Mathf.Abs(dx), Mathf.Abs(dy)) != r) { continue; }
-                                int qy = y + dy, qx = x + dx;
-                                if (qy < 0 || qy >= ah || qx < 0 || qx >= aw || masked[qy, qx]) { continue; }
+                                int qx = x + dx;
+                                if (qx < 0 || qx >= aw || masked[qy, qx]) { continue; }
                                 found = src[(area.Position.Y + qy) * w + area.Position.X + qx];
                                 break;
                             }
@@ -410,7 +406,26 @@ namespace Underworld
             int gap = size / 5;
             int total = lines.Sum(l => l.GetLength(0)) + gap * (lines.Count - 1);
             int top = area.Position.Y + (area.Size.Y - total) / 2;
-            var mask = new bool[h, w];
+            //the lines' box widened by the outline: nothing outside it changes, so only it is worked on
+            int r = outline >= 0 ? Mathf.Max(radius, 0) : 0;
+            int bx0 = w, by0 = h, bx1 = -1, by1 = -1;
+            int t = top;
+            foreach (var line in lines)
+            {
+                int lh = line.GetLength(0), lw = line.GetLength(1);
+                int x0 = indent >= 0 ? area.Position.X + indent : area.Position.X + (area.Size.X - lw) / 2;
+                bx0 = Mathf.Min(bx0, x0); bx1 = Mathf.Max(bx1, x0 + lw - 1);
+                by0 = Mathf.Min(by0, t); by1 = Mathf.Max(by1, t + lh - 1);
+                t += lh + gap;
+            }
+            bx0 = Mathf.Max(0, bx0 - r); by0 = Mathf.Max(0, by0 - r);
+            bx1 = Mathf.Min(w - 1, bx1 + r); by1 = Mathf.Min(h - 1, by1 + r);
+            if (bx1 < bx0 || by1 < by0)
+            {
+                return;
+            }
+            int mw = bx1 - bx0 + 1, mh = by1 - by0 + 1;
+            var mask = new bool[mh, mw];
             foreach (var line in lines)
             {
                 int lh = line.GetLength(0), lw = line.GetLength(1);
@@ -420,39 +435,62 @@ namespace Underworld
                     for (int x = 0; x < lw; x++)
                     {
                         int py = top + y, qx = x0 + x;
-                        if (line[y, x] && py >= 0 && py < h && qx >= 0 && qx < w) { mask[py, qx] = true; }
+                        if (line[y, x] && py >= by0 && py <= by1 && qx >= bx0 && qx <= bx1) { mask[py - by0, qx - bx0] = true; }
                     }
                 }
                 top += lh + gap;
             }
-            for (int y = 0; y < h; y++)
+            var near = outline >= 0 ? Dilate(mask, radius) : null;
+            for (int y = 0; y < mh; y++)
             {
-                for (int x = 0; x < w; x++)
+                for (int x = 0; x < mw; x++)
                 {
                     if (mask[y, x])
                     {
-                        px[y * w + x] = ink;
+                        px[(by0 + y) * w + bx0 + x] = ink;
                     }
-                    else if (outline >= 0 && Near(mask, x, y, radius))
+                    else if (near != null && near[y, x])
                     {
-                        px[y * w + x] = (byte)outline;
+                        px[(by0 + y) * w + bx0 + x] = (byte)outline;
                     }
                 }
             }
         }
 
-        static bool Near(bool[,] mask, int x, int y, int r)
+        /// <summary>
+        /// Every place within <paramref name="r"/> (in x and in y) of a set one: Near for the whole
+        /// mask at once, a row pass then a column pass, so large pictures (8x) do not take seconds.
+        /// </summary>
+        static bool[,] Dilate(bool[,] mask, int r)
         {
             int h = mask.GetLength(0), w = mask.GetLength(1);
-            for (int dy = -r; dy <= r; dy++)
+            if (r < 0)
             {
-                for (int dx = -r; dx <= r; dx++)
+                return new bool[h, w];
+            }
+            var rows = new bool[h, w];
+            for (int y = 0; y < h; y++)
+            {
+                int last = int.MinValue / 2; //the last set column seen
+                for (int x = 0; x < w + r; x++)
                 {
-                    int qy = y + dy, qx = x + dx;
-                    if (qy >= 0 && qy < h && qx >= 0 && qx < w && mask[qy, qx]) { return true; }
+                    if (x < w && mask[y, x]) { last = x; }
+                    int at = x - r; //every column up to r after a set one is within r of it...
+                    if (at >= 0 && at < w && x - last <= 2 * r) { rows[y, at] = true; }
                 }
             }
-            return false;
+            var outp = new bool[h, w];
+            for (int x = 0; x < w; x++)
+            {
+                int last = int.MinValue / 2;
+                for (int y = 0; y < h + r; y++)
+                {
+                    if (y < h && rows[y, x]) { last = y; }
+                    int at = y - r;
+                    if (at >= 0 && at < h && y - last <= 2 * r) { outp[at, x] = true; }
+                }
+            }
+            return outp;
         }
 
         /// <summary>The coverage at half or more, cropped to the rows and columns with ink.</summary>

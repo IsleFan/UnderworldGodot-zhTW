@@ -134,9 +134,10 @@ namespace Underworld
             {
                 return;
             }
-            bool MouseHeldDown = (Input.IsMouseButtonPressed(MouseButton.Right) && uimanager.IsMouseInViewPort());
+            //modern controls swing with the left button, leaving the right to look
+            bool MouseHeldDown = (Input.IsMouseButtonPressed(Controls.Modern ? MouseButton.Left : MouseButton.Right) && uimanager.IsMouseInViewPort());
             //check bash, slash and stab inputs.
-            bool KeyboardAttackHeldDown =  Input.IsKeyPressed(Key.P) || Input.IsKeyPressed(Key.Semicolon) || Input.IsKeyPressed(Key.Period);
+            bool KeyboardAttackHeldDown = Controls.Held(Controls.Action.Bash) || Controls.Held(Controls.Action.Slash) || Controls.Held(Controls.Action.Stab);
             switch (stage)
             {
                 case CombatStages.OutOfCombat:
@@ -192,7 +193,11 @@ namespace Underworld
                         }
                         else
                         {
-                            if (MouseHeldDown)
+                            if (MouseHeldDown && Controls.MouseLookActive)
+                            {
+                                GetSwingTypeFromMovement();
+                            }
+                            else if (MouseHeldDown)
                             {
                                 GetSwingTypeFromMousePos();    
                             }
@@ -201,19 +206,19 @@ namespace Underworld
                                 if(KeyboardAttackHeldDown)
                                 {
                                    //  (Input.IsKeyPressed(Key.P)) || (Input.IsKeyPressed(Key.Semicolon) || (Input.IsKeyPressed(Key.Period)
-                                    if (Input.IsKeyPressed(Key.P))
+                                    if (Controls.Held(Controls.Action.Bash))
                                     {
                                         WeaponSwingTypePlayer = 1; //bash
                                     }
                                     else
                                     {
-                                        if (Input.IsKeyPressed(Key.Semicolon))
+                                        if (Controls.Held(Controls.Action.Slash))
                                         {
                                             WeaponSwingTypePlayer = 0;//slash
                                         }
                                         else
                                         {
-                                            if (Input.IsKeyPressed(Key.Period))
+                                            if (Controls.Held(Controls.Action.Stab))
                                             {
                                                 WeaponSwingTypePlayer = 2;//stab
                                             }
@@ -439,6 +444,26 @@ namespace Underworld
             }
         }
 
+
+        /// <summary>
+        /// Mouse look aims at the middle of the view, so the swing comes from the movement keys
+        /// instead: moving forward stabs, moving back bashes, anything else slashes.
+        /// </summary>
+        private static void GetSwingTypeFromMovement()
+        {
+            if (Controls.Held(Controls.Action.Forward))
+            {
+                WeaponSwingTypePlayer = 2;
+            }
+            else if (Controls.Held(Controls.Action.Back))
+            {
+                WeaponSwingTypePlayer = 1;
+            }
+            else
+            {
+                WeaponSwingTypePlayer = 0;
+            }
+        }
 
         private static void GetSwingTypeFromMousePos()
         {

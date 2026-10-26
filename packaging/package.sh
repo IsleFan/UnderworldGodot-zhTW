@@ -52,7 +52,7 @@ make_roms_dir() {
 }
 
 copy_docs() {
-    cp README.md LICENSE.md packaging/THIRD-PARTY-NOTICES.txt "$1/"
+    cp README.md README.en.md LICENSE.md packaging/THIRD-PARTY-NOTICES.txt "$1/"
 }
 
 "$GODOT" --headless --path . --export-release UnderworldWindows "$WIN/Underworld.exe"
@@ -60,14 +60,12 @@ copy_data "$WIN"
 make_roms_dir "$WIN"
 copy_docs "$WIN"
 cp packaging/INSTALL-windows.txt "$WIN/INSTALL.txt"
-cp packaging/INSTALL.bat packaging/install.ps1 "$WIN/"
 
 "$GODOT" --headless --path . --export-release UnderworldMacOS "$MAC/Underworld.app"
 copy_data "$MAC/Underworld.app/Contents/Resources"
 make_roms_dir "$MAC"
 copy_docs "$MAC"
 cp packaging/INSTALL-macos.txt "$MAC/INSTALL.txt"
-cp packaging/install.sh "$MAC/"
 # NuGet 套件附的 OPL／MT-32 函式庫只有 Apple Silicon 版，而且要求 macOS 26／15；換成自己編譯的
 # universal 版（最低 macOS 11，見 packaging/native/build-macos.sh），Intel Mac 也放一份。
 for arch in arm64 x86_64; do

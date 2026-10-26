@@ -196,7 +196,7 @@ namespace Underworld
                         }
                         else
                         {
-                            uimanager.InteractionModeToggle(uimanager.InteractionModes.ModeUse);
+                            uimanager.PutAwayWeapon();
                         }
                         return true;
                     }
@@ -211,7 +211,7 @@ namespace Underworld
                         }
                         else
                         {
-                            uimanager.InteractionModeToggle(uimanager.InteractionModes.ModeUse);
+                            uimanager.PutAwayWeapon();
                         }
                         return true;
                     }

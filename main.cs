@@ -222,6 +222,92 @@ public partial class main : Node3D
 			{//Testing aid: turn to this side panel (1 runes, 2 stats) once the level is loaded.
 				instance.GetTree().CreateTimer(1.0).Timeout += () => uimanager.SetPanelMode(testpanel);
 			}
+			if (OS.GetEnvironment("UW_TESTCONTROLS") == "1")
+			{//Testing aid (modern controls): point at the nearest thing that can be picked up, then shift + click it, then mouse look, the weapon key and the wheel, a second apart, printing what each did.
+				var tree = instance.GetTree();
+				Vector2 target = Vector2.Zero;
+				tree.CreateTimer(1.5).Timeout += () =>
+				{//the object picture is what clicks read: find the nearest pixel of something that can be picked up
+					var view = uimanager.instance.uwviewport;
+					var image = ((Texture2D)uimanager.instance.uwsubviewport_objectinfo.GetTexture()).GetImage();
+					float best = float.MaxValue;
+					for (int y = 0; y < image.GetHeight(); y += 2)
+					{
+						for (int x = 0; x < image.GetWidth(); x += 2)
+						{
+							var pixel = image.GetPixel(x, y);
+							var index = (pixel.B8 << 8) | pixel.G8;
+							if (pixel.R8 != 0 || index <= 0 || index > 1024) { continue; }
+							var o = UWTileMap.current_tilemap.LevelObjects[index];
+							if (o.majorclass == 1 || !commonObjDat.CanBePickedUp(o.item_id)) { continue; }
+							float d = (image.GetHeight() - y);//lowest on screen is nearest
+							if (d < best)
+							{
+								best = d;
+								target = view.GetGlobalRect().Position + new Vector2(x, y);
+								GD.Print($"TESTCONTROLS target {o.index} {GameStrings.GetSimpleObjectNameUW(o.item_id)} at pixel {x},{y}");
+							}
+						}
+					}
+					target = instance.GetTree().Root.GetFinalTransform() * target;//window pixels, which input events and the warp use
+					Input.WarpMouse(target);
+					Input.ParseInputEvent(new InputEventMouseMotion { Position = target, GlobalPosition = target });
+				};
+				tree.CreateTimer(2.0).Timeout += () =>
+				{//right click looks
+					Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Right, Pressed = true, Position = target, GlobalPosition = target });
+					Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Right, Pressed = false, Position = target, GlobalPosition = target });
+				};
+				tree.CreateTimer(2.5).Timeout += () =>
+				{
+					GD.Print($"TESTCONTROLS mode {uimanager.InteractionMode}, in viewport {uimanager.IsMouseInViewPort()}");
+					Input.ParseInputEvent(new InputEventKey { Keycode = Key.Shift, Pressed = true });
+					Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = target, GlobalPosition = target, ShiftPressed = true });
+					Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = target, GlobalPosition = target, ShiftPressed = true });
+					Input.ParseInputEvent(new InputEventKey { Keycode = Key.Shift, Pressed = false });
+				};
+				tree.CreateTimer(3.5).Timeout += () =>
+				{
+					GD.Print($"TESTCONTROLS after click: in hand {playerdat.ObjectInHand}, backpack {string.Join(",", uimanager.BackPackIndices)}");
+					Input.ParseInputEvent(new InputEventKey { Keycode = Controls.KeyFor(Controls.Action.MouseLook), Pressed = true });
+					Input.ParseInputEvent(new InputEventKey { Keycode = Controls.KeyFor(Controls.Action.MouseLook), Pressed = false });
+				};
+				short yawBefore = 0;
+				tree.CreateTimer(4.0).Timeout += () =>
+				{
+					yawBefore = playerdat.PlayerCameraYaw_dseg_8294;
+					Input.ParseInputEvent(new InputEventMouseMotion { Relative = new Vector2(240, -60), ScreenRelative = new Vector2(240, -60) });
+				};
+				tree.CreateTimer(4.5).Timeout += () =>
+					GD.Print($"TESTCONTROLS mouse look {Controls.MouseLookActive}, mouse mode {Input.MouseMode}, yaw {yawBefore} -> {playerdat.PlayerCameraYaw_dseg_8294}, pitch {playerdat.PlayerCameraPitch_dseg_67d6_33D6}");
+				tree.CreateTimer(5.0).Timeout += () =>
+				{
+					Input.ParseInputEvent(new InputEventKey { Keycode = Controls.KeyFor(Controls.Action.Weapon), Pressed = true });
+					Input.ParseInputEvent(new InputEventKey { Keycode = Controls.KeyFor(Controls.Action.Weapon), Pressed = false });
+				};
+				tree.CreateTimer(6.0).Timeout += () =>
+				{
+					GD.Print($"TESTCONTROLS weapon drawn {playerdat.play_drawn}, mode {uimanager.InteractionMode}");
+					Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.WheelDown, Pressed = true });
+				};
+				tree.CreateTimer(6.5).Timeout += () => GD.Print($"TESTCONTROLS after wheel: mode {uimanager.InteractionMode}, weapon drawn {playerdat.play_drawn}");
+			}
+			if (OS.GetEnvironment("UW_TESTMAP") == "1")
+			{//Testing aid: open the map and put the mouse at (600, 400), to see where the quill points.
+				instance.GetTree().CreateTimer(1.0).Timeout += () => uimanager.DrawAutoMap(playerdat.dungeon_level - 1, 0);
+				instance.GetTree().CreateTimer(1.5).Timeout += () =>
+				{
+					var at = instance.GetTree().Root.GetFinalTransform() * new Vector2(600, 400);
+					Input.WarpMouse(at);
+					Input.ParseInputEvent(new InputEventMouseMotion { Position = at, GlobalPosition = at });
+				};
+				instance.GetTree().CreateTimer(2.0).Timeout += () =>
+				{//click to start a note: the writing quill
+					var at = instance.GetTree().Root.GetFinalTransform() * new Vector2(600, 400);
+					Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = at, GlobalPosition = at });
+					Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = at, GlobalPosition = at });
+				};
+			}
 			if (OS.GetEnvironment("UW_TESTLOOK") == "1")
 			{//Testing aid: look at a creature, a named NPC, a weapon and a wall once the level is loaded, to see the descriptions.
 				instance.GetTree().CreateTimer(1.0).Timeout += () =>
@@ -244,7 +330,9 @@ public partial class main : Node3D
 			{//Testing aid: open the options once the level is loaded, or with another number only that picture (OptionButtonIndices), to see their lettering.
 				instance.GetTree().CreateTimer(1.0).Timeout += () =>
 				{
+					var watch = System.Diagnostics.Stopwatch.StartNew();
 					uimanager.InteractionModeToggle(uimanager.InteractionModes.ModeOptions);
+					GD.Print($"TESTOPTIONS opened in {watch.ElapsedMilliseconds} ms");
 					if (testoptions != 1)
 					{//another menu's picture: hide the top menu's buttons so all of it shows
 						uimanager.SetGameOptionButtons(new[] { -1, -1, -1, -1, -1, -1, -1 });
@@ -389,6 +477,45 @@ public partial class main : Node3D
 					instance.GetTree().CreateTimer(5.5).Timeout += () => Teleportation.Teleport(0, homeX, homeY, homeLevel, 0);
 					instance.GetTree().CreateTimer(7.0).Timeout += () => GD.Print($"UW_TESTSAVE back home {State()}");
 				}
+			}
+			if (OS.GetEnvironment("UW_TESTANSWER") == "1")
+			{//Testing aid (with UW_TESTTALK): past the [MORE]s to the first answer menu, print where each answer is, point at the second one, then click it.
+				var tree = instance.GetTree();
+				bool done = false;
+				void Step()
+				{
+					if (done) { return; }
+					if (MessageDisplay.WaitingForMore) { MessageDisplay.WaitingForMore = false; }
+					if (ConversationVM.WaitingForInput && ConversationVM.MaxAnswer >= 2)
+					{
+						done = true;
+						var label = uimanager.MessageScroll;
+						float first = -1, last = -1;
+						for (float y = 0; y <= label.Size.Y; y += 1)
+						{
+							int a = uimanager.instance.AnswerAt(y);
+							if (a == 2) { if (first < 0) { first = y; } last = y; }
+						}
+						for (int l = 0; l < label.GetLineCount(); l++) { GD.Print($"TESTANSWER line {l} at {label.GetLineOffset(l)}"); }
+						var font = label.GetThemeFont("normal_font"); int fsize = label.GetThemeFontSize("normal_font_size");
+						GD.Print($"TESTANSWER font {font?.GetType().Name} size {fsize} ascent {font?.GetAscent(fsize)} descent {font?.GetDescent(fsize)} height {font?.GetHeight(fsize)} sep {label.GetThemeConstant("line_separation")}");
+						GD.Print($"TESTANSWER answers {ConversationVM.MaxAnswer}, answer 2 from {first} to {last}, scroll at {label.GetGlobalRect()}");
+						var at = instance.GetTree().Root.GetFinalTransform() * (label.GetGlobalRect().Position + new Vector2(200, (first + last) / 2));
+						Input.WarpMouse(at);
+						uimanager.CursorOverMessageScroll = true;//the panel's mouse_entered does not follow a warped mouse in a recording
+						Input.ParseInputEvent(new InputEventMouseMotion { Position = at, GlobalPosition = at });
+						tree.CreateTimer(1.0).Timeout += () =>
+						{
+							GD.Print($"TESTANSWER highlighted {uimanager.instance.scroll.HighlightOption}, mouse at {label.GetLocalMousePosition()}");
+							Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = at, GlobalPosition = at });
+							Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = at, GlobalPosition = at });
+						};
+						tree.CreateTimer(1.5).Timeout += () => GD.Print($"TESTANSWER picked {ConversationVM.PlayerNumericAnswer}");
+						return;
+					}
+					tree.CreateTimer(0.5).Timeout += Step;
+				}
+				tree.CreateTimer(1.5).Timeout += Step;
 			}
 			if (int.TryParse(OS.GetEnvironment("UW_TESTTALK"), out int testtalk))
 			{//Testing aid: talk to the first NPC of this whoami on the level once it is loaded, to see conversation text.
@@ -678,11 +805,16 @@ public partial class main : Node3D
 		playerdat.PositionPlayerCamera();
 	}
 
+	/// <summary>Whether the interaction icon may change now, as clicking one checks (not dead, nothing in hand, nothing being used or cast), and the options menu is not open.</summary>
+	static bool CanChangeInteractionMode() =>
+		playerdat.play_hp != 0 && playerdat.ObjectInHand == -1 && uimanager.UsageMode == 0
+		&& uimanager.InteractionMode != uimanager.InteractionModes.ModeOptions;
+
 	static void ProcessMotionInputs()
 	{
 		motion.PlayerMotionWalk_77C = 0;
 		motion.PlayerMotionHeading_77E = 0;
-		if (Input.IsKeyPressed(Key.W))
+		if (Controls.Held(Controls.Action.Forward))
 		{
 			if (Input.IsKeyPressed(Key.Shift))//forwards
 			{
@@ -697,29 +829,29 @@ public partial class main : Node3D
 			motion.MotionInputPressed = 1;
 		}
 
-		if (Input.IsKeyPressed(Key.Q))//turn left
+		if (Controls.Held(Controls.Action.TurnLeft))//turn left
 		{
 			motion.PlayerMotionHeading_77E = -90;//should this be scaled?
 			motion.MotionInputPressed = 1;
 		}
-		if (Input.IsKeyPressed(Key.E))//turn right
+		if (Controls.Held(Controls.Action.TurnRight))//turn right
 		{
 			motion.PlayerMotionHeading_77E = +90;
 			motion.MotionInputPressed = 1;
 		}
-		if (Input.IsKeyPressed(Key.S))//walk backwards
+		if (Controls.Held(Controls.Action.Back))//walk backwards
 		{
 			motion.PlayerMotionWalk_77C = 0;
 			motion.PlayerMotionHeading_77E = 0;
 			motion.MotionInputPressed = 8;
 		}
-		if (Input.IsKeyPressed(Key.A))//slide left
+		if (Controls.Held(Controls.Action.StrafeLeft))//slide left
 		{
 			motion.PlayerMotionWalk_77C = 0;
 			motion.PlayerMotionHeading_77E = 0;
 			motion.MotionInputPressed = 9;
 		}
-		if (Input.IsKeyPressed(Key.D))//slide right
+		if (Controls.Held(Controls.Action.StrafeRight))//slide right
 		{
 			motion.PlayerMotionWalk_77C = 0;
 			motion.PlayerMotionHeading_77E = 0;
@@ -795,7 +927,7 @@ public partial class main : Node3D
 		}
 
 
-		if (Input.IsKeyPressed(Key.J))//jump.
+		if (Controls.Held(Controls.Action.Jump))//jump.
 		{
 			if (playerdat.TileState != 1)//ensure we are not swimming
 			{
@@ -819,7 +951,7 @@ public partial class main : Node3D
 			}
 
 		}
-		if (Input.IsKeyPressed(Key.R))//fly up
+		if (Controls.Held(Controls.Action.FlyUp))//fly up
 		{
 			if ((playerdat.MagicalMotionAbilities & 0x14) != 0)
 			{
@@ -830,7 +962,7 @@ public partial class main : Node3D
 				motion.MotionInputPressed = 0;
 			}
 		}
-		if (Input.IsKeyPressed(Key.F))//fly down
+		if (Controls.Held(Controls.Action.FlyDown))//fly down
 		{
 			if ((playerdat.MagicalMotionAbilities & 0x14) != 0)
 			{
@@ -845,7 +977,7 @@ public partial class main : Node3D
 
 
 		//Addition. capture look up and down
-		if (Input.IsKeyPressed(Key.Key1))
+		if (Controls.Held(Controls.Action.LookDown))
 		{
 			//lookdown
 			if (playerdat.PlayerCameraPitch_dseg_67d6_33D6 >= -4096)
@@ -854,7 +986,7 @@ public partial class main : Node3D
 				//Debug.Print($"{playerdat.PlayerCameraPitch_dseg_67d6_33D6}");
 			}
 		}
-		else if (Input.IsKeyPressed(Key.Key3))
+		else if (Controls.Held(Controls.Action.LookUp))
 		{
 			//lookup
 			if (playerdat.PlayerCameraPitch_dseg_67d6_33D6 <= 4096)
@@ -863,7 +995,7 @@ public partial class main : Node3D
 				//Debug.Print($"{playerdat.PlayerCameraPitch_dseg_67d6_33D6}");
 			}
 		}
-		else if (Input.IsKeyPressed(Key.Key2))
+		else if (Controls.Held(Controls.Action.LookCentre))
 		{
 			playerdat.PlayerCameraPitch_dseg_67d6_33D6 = 0;
 			//Debug.Print($"{playerdat.PlayerCameraPitch_dseg_67d6_33D6}");
@@ -983,6 +1115,27 @@ public partial class main : Node3D
 			return;
 		}
 
+		if (@event is InputEventMouseMotion look && Controls.MouseLookActive)
+		{
+			Controls.Look(look.ScreenRelative);//screen pixels, so the speed is the same at any window size
+		}
+
+		if ((@event is InputEventMouseButton wheel) && wheel.Pressed
+			&& ((wheel.ButtonIndex == MouseButton.WheelUp) || (wheel.ButtonIndex == MouseButton.WheelDown))
+			&& Controls.Modern && uimanager.InGame && !uimanager.blockinput && CanChangeInteractionMode()
+			&& Controls.WheelStep(wheel.Factor))
+		{//modern controls: the wheel steps through the interaction icons
+			var next = Controls.NextMode(wheel.ButtonIndex == MouseButton.WheelDown ? 1 : -1);
+			if (next == uimanager.InteractionModes.ModeNone)
+			{
+				uimanager.EnterInteractionModeNone();
+			}
+			else
+			{
+				uimanager.InteractionModeToggle(next);
+			}
+		}
+
 		if ((@event is InputEventMouseButton eventMouseButton)
 			&&
 			((eventMouseButton.ButtonIndex == MouseButton.Left) || (eventMouseButton.ButtonIndex == MouseButton.Right)))
@@ -1011,6 +1164,25 @@ public partial class main : Node3D
 		{
 			if (@event is InputEventKey keyinput)
 			{
+				if (keyinput.Pressed && !keyinput.Echo && Controls.Modern)
+				{
+					if (Controls.Is(keyinput.Keycode, Controls.Action.MouseLook))
+					{
+						Controls.ToggleMouseLook();
+					}
+					else if (Controls.Is(keyinput.Keycode, Controls.Action.Weapon) && CanChangeInteractionMode())
+					{//draw the weapon, or put it away and go back to context clicks
+						if (playerdat.play_drawn == 1)
+						{
+							uimanager.ToggleWeaponAnimationState(false);
+							uimanager.EnterInteractionModeNone();
+						}
+						else
+						{
+							uimanager.InteractionModeToggle(uimanager.InteractionModes.ModeAttack);
+						}
+					}
+				}
 				if (keyinput.Pressed)
 				{
 					switch (keyinput.Keycode)
@@ -1111,6 +1283,9 @@ public partial class main : Node3D
 		{
 			switch (@event)
 			{
+				case InputEventMouseMotion:
+					uimanager.instance.HighlightAnswerUnderMouse(uimanager.CursorOverMessageScroll);
+					break;
 				//Click to select options in conversation. Ensure we only allow left &right click to adhere to the original UW implementation. 
 				case InputEventMouseButton mouseEvent:
 					if (uimanager.CursorOverMessageScroll)

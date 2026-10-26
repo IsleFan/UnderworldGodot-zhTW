@@ -387,6 +387,11 @@ namespace Underworld
 				InteractionMode = InteractionModes.ModeAttack;
 				PreviousInteractionMode = InteractionModes.ModeAttack;
 			}
+			else if (Controls.Modern)
+			{//modern controls start with no icon selected, so clicks follow what they are on
+				EnterInteractionModeNone();
+				PreviousInteractionMode = InteractionModes.ModeNone;
+			}
 			else
 			{
 				InteractionMode = InteractionModes.ModeUse;

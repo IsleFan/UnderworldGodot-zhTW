@@ -344,26 +344,55 @@ namespace Underworld
 		/// <param name="mouseButton">Mouse click event if clicked in scroll message panel during conversation</param>
 		public int HandleMessageScrollClick(InputEventMouseButton mouseButton)
 		{
-			//Calculate the height of a line in the rich text box
-			int lineHeight = (int)MessageScroll.Size.Y / MessageScroll.GetLineCount();
+			int answer = AnswerUnderMouse();
+			GD.Print(answer > 0 ? $"Clicked line: {answer}" : "Click was outside of valid lines.");
+			return answer > 0 ? answer : -1;
+		}
 
-			//Get the clicked position within the message scroll panel
-			Vector2 localClickPosition = mouseButton.Position - MessageScroll.Position;
+		/// <summary>
+		/// The conversation answer under the mouse, 0 for none. Finds the scroll line under it from
+		/// where the label actually lays its lines out (each line of the scroll is a paragraph of the
+		/// label, its letters where its first character's line draws them), rather than dividing the
+		/// label's height evenly: the lines are not that tall, the letters sit lower than the lines'
+		/// boxes, and an answer that goes on to a second line moved every answer after it down one.
+		/// </summary>
+		public int AnswerUnderMouse() => AnswerAt(MessageScroll.GetLocalMousePosition().Y);
 
-			//Calculate the clicked line
-			int clickedLine = (int)(localClickPosition.Y / lineHeight);
-
-			// Validate the clicked line index
-			if (clickedLine >= 0 && clickedLine < MessageScroll.GetLineCount())
+		/// <summary>The conversation answer at height <paramref name="y"/> in the message scroll, 0 for none (see AnswerUnderMouse).</summary>
+		public int AnswerAt(float y)
+		{
+			var label = MessageScroll;
+			if (y < 0 || y > label.Size.Y)
 			{
-				GD.Print($"Clicked line: {clickedLine + 1}");
-				return clickedLine + 1;
-
+				return 0;
 			}
-			else
+			//the scroll's negative line separation makes each line's box shorter than its text, which
+			//is drawn from the box's top down to the baseline at the font's ascent: so the letters of
+			//a line sit that much lower than its box, in the box of the line below
+			int shift = System.Math.Max(0, -label.GetThemeConstant("line_separation"));
+			var paragraphs = label.GetParsedText().Split('\n');
+			int start = 0, line = -1;
+			for (int p = 0; p < paragraphs.Length && p <= scroll.Lines.GetUpperBound(0); p++)
 			{
-				GD.Print("Click was outside of valid lines.");
-				return -1;
+				int visual = label.GetCharacterLine(System.Math.Min(start, System.Math.Max(0, label.GetTotalCharacterCount() - 1)));
+				if (visual >= 0 && label.GetLineOffset(visual) + shift <= y)
+				{
+					line = p;
+				}
+				start += paragraphs[p].Length + 1;
+			}
+			return line < 0 ? 0 : scroll.AnswerOfLine(line);
+		}
+
+		/// <summary>Draws the answer under the mouse highlighted while a conversation menu waits for one.</summary>
+		public void HighlightAnswerUnderMouse(bool over)
+		{
+			int answer = over ? AnswerUnderMouse() : 0;
+			if (answer > ConversationVM.MaxAnswer) { answer = 0; }
+			if (answer != scroll.HighlightOption)
+			{
+				scroll.HighlightOption = answer;
+				scroll.UpdateMessageDisplay();
 			}
 		}
 

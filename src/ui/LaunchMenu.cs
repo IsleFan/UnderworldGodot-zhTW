@@ -130,6 +130,26 @@ public partial class LaunchMenu : Control
 	[Export]
 	public Label SoundLabel, ArtLabel, LanguageLabel, ResolutionLabel;
 
+	/// <summary>
+	/// The control scheme (Controls): item metadata is uwsettings.controls. ControlsBox, shown for
+	/// the modern one, holds mouse look's speed and direction, the keys and a summary of the scheme.
+	/// </summary>
+	[Export]
+	public Label ControlsLabel, ControlsHint;
+
+	[Export]
+	public OptionButton ControlsOptionSelector;
+
+	[Export]
+	public Control ControlsBox;
+
+	/// <summary>Mouse look speed 1 to 10 (item index + 1), and up and down normal (0) or inverted (1).</summary>
+	[Export]
+	public OptionButton Sensitivity, InvertMouse;
+
+	[Export]
+	public Button KeysButton;
+
 	static readonly Color StatusGood = new(0.55f, 0.85f, 0.55f), StatusBad = new(1f, 0.45f, 0.4f);
 
 	/// <summary>The game whose folder GameDirSelector is choosing.</summary>
@@ -176,6 +196,10 @@ public partial class LaunchMenu : Control
 				}
 			}
 			Callable.From(GenerateHdArt).CallDeferred();
+		}
+		if (OS.GetEnvironment("UW_TESTKEYS") == "1")
+		{//Testing aid: open the key list, to see it.
+			Callable.From(ShowKeyBindings).CallDeferred();
 		}
 #endif
 
@@ -330,6 +354,19 @@ public partial class LaunchMenu : Control
 		SettingsTitle.Text = T("Settings", "設定");
 		LanguageLabel.Text = T("Language", "語言");
 		ResolutionLabel.Text = T("Window", "視窗大小");
+		ControlsLabel.Text = T("Controls", "操作");
+		PopulateControlsOptions();
+		Sensitivity.Clear();
+		for (int speed = 1; speed <= 10; speed++)
+		{
+			Sensitivity.AddItem(T($"Mouse speed {speed}", $"滑鼠速度 {speed}"));
+		}
+		Sensitivity.Selected = Math.Clamp(_uwSettings.mousesensitivity, 1, 10) - 1;
+		InvertMouse.Clear();
+		InvertMouse.AddItem(T("Mouse up = look up", "上下正常"));
+		InvertMouse.AddItem(T("Mouse up = look down", "上下反轉"));
+		InvertMouse.Selected = _uwSettings.invertmouse ? 1 : 0;
+		KeysButton.Text = T("Keys…", "按鍵設定…");
 		ArtLabel.Text = T("Art", "美術");
 		SoundLabel.Text = T("Music", "配樂");
 		SoundHint.Text = T("Sound effects always use the Sound Blaster sounds.", "音效一律使用 Sound Blaster 的音效。");
@@ -909,6 +946,188 @@ public partial class LaunchMenu : Control
 		var size = new Vector2I(Mathf.FloorToInt(w * fit), Mathf.FloorToInt(h * fit));
 		DisplayServer.WindowSetSize(size);
 		DisplayServer.WindowSetPosition(usable.Position + (usable.Size - size) / 2);
+	}
+
+	/// <summary>Lists the two control schemes, selects the one the settings name and shows the modern one's options with it.</summary>
+	private void PopulateControlsOptions()
+	{
+		ControlsOptionSelector.Clear();
+		ControlsOptionSelector.AddItem(T("Original", "原版操作"));
+		ControlsOptionSelector.SetItemMetadata(0, "classic");
+		ControlsOptionSelector.AddItem(T("Modern", "優化操作"));
+		ControlsOptionSelector.SetItemMetadata(1, "modern");
+		ControlsOptionSelector.Selected = _uwSettings.controls == "modern" ? 1 : 0;
+		ShowControlsBox();
+	}
+
+	private void ShowControlsBox()
+	{
+		ControlsBox.Visible = _uwSettings.controls == "modern";
+		ControlsHint.Text = T(
+			$"Left click talks, picks up or uses, by what it is on; right click looks; shift + click puts it in the backpack. {KeyName(Controls.Action.MouseLook)}: mouse look. {KeyName(Controls.Action.Weapon)}: draw the weapon (left button swings). Wheel: change icon. Arrows move, {KeyName(Controls.Action.Jump)} jumps.",
+			$"左鍵依目標自動說話、撿取或使用，右鍵查看，Shift＋左鍵直接收進背包。{KeyName(Controls.Action.MouseLook)}：滑鼠視角。{KeyName(Controls.Action.Weapon)}：拔出武器（左鍵攻擊）。滾輪：切換動作。方向鍵移動，{KeyName(Controls.Action.Jump)} 跳。");
+	}
+
+	public void _on_controls_options_item_selected(int index)
+	{
+		_uwSettings.controls = ControlsOptionSelector.GetItemMetadata(index).AsString();
+		_uwSettings.Save();
+		ShowControlsBox();
+	}
+
+	public void OnSensitivityChanged(int index)
+	{
+		_uwSettings.mousesensitivity = index + 1;
+		_uwSettings.Save();
+	}
+
+	public void OnInvertMouseSelected(int index)
+	{
+		_uwSettings.invertmouse = index == 1;
+		_uwSettings.Save();
+	}
+
+	/// <summary>The keys the player may choose under modern controls, with their names.</summary>
+	private static readonly (Controls.Action Action, string English, string Chinese)[] KeyActions =
+	{
+		(Controls.Action.Forward, "Forward", "前進"), (Controls.Action.Back, "Back", "後退"),
+		(Controls.Action.StrafeLeft, "Step left", "左移"), (Controls.Action.StrafeRight, "Step right", "右移"),
+		(Controls.Action.TurnLeft, "Turn left", "左轉"), (Controls.Action.TurnRight, "Turn right", "右轉"),
+		(Controls.Action.Jump, "Jump", "跳躍"), (Controls.Action.FlyUp, "Fly up", "飛高"), (Controls.Action.FlyDown, "Fly down", "飛低"),
+		(Controls.Action.LookUp, "Look up", "抬頭"), (Controls.Action.LookDown, "Look down", "低頭"), (Controls.Action.LookCentre, "Look ahead", "平視"),
+		(Controls.Action.MouseLook, "Mouse look", "滑鼠視角"), (Controls.Action.Weapon, "Draw weapon", "拔出／收起武器"),
+		(Controls.Action.Bash, "Bash", "重擊"), (Controls.Action.Slash, "Slash", "揮砍"), (Controls.Action.Stab, "Stab", "突刺"),
+	};
+
+	/// <summary>Punctuation keys by their mark rather than Godot's name for them.</summary>
+	private static readonly Dictionary<Key, string> KeyMarks = new()
+	{
+		{ Key.Semicolon, ";" }, { Key.Period, "." }, { Key.Comma, "," }, { Key.Slash, "/" }, { Key.Apostrophe, "'" },
+		{ Key.Bracketleft, "[" }, { Key.Bracketright, "]" }, { Key.Backslash, "\\" }, { Key.Minus, "-" }, { Key.Equal, "=" }, { Key.Quoteleft, "`" },
+	};
+
+	private static string KeyName(Controls.Action action)
+	{
+		var key = Controls.KeyFor(action);
+		return key == Key.None ? "" : KeyMarks.TryGetValue(key, out var mark) ? mark : OS.GetKeycodeString(key);
+	}
+
+	private AcceptDialog _keysDialog;
+	private Button _defaultsButton;
+	private readonly Dictionary<Controls.Action, (Label Name, Button Key)> _keyRows = new();
+	private Controls.Action? _waitingFor;
+
+	/// <summary>
+	/// The key list of modern controls: click an action's key, then press the new one (Escape
+	/// keeps the old). An action that had the new key gets the old one in exchange. "Defaults"
+	/// puts every key back.
+	/// </summary>
+	public void ShowKeyBindings()
+	{
+		if (_keysDialog == null)
+		{
+			_keysDialog = new AcceptDialog { Exclusive = true, Unresizable = true };
+			var grid = new GridContainer { Columns = 4 };
+			grid.AddThemeConstantOverride("h_separation", 12);
+			grid.AddThemeConstantOverride("v_separation", 6);
+			foreach (var (action, _, _) in KeyActions)
+			{
+				var name = new Label();
+				var button = new Button { CustomMinimumSize = new Vector2(120, 0), FocusMode = FocusModeEnum.None };
+				var act = action;
+				button.Pressed += () => WaitForKey(act);
+				_keyRows[action] = (name, button);
+				grid.AddChild(name);
+				grid.AddChild(button);
+			}
+			_keysDialog.AddChild(grid);
+			_defaultsButton = _keysDialog.AddButton("", false, "defaults");
+			_keysDialog.CustomAction += action =>
+			{
+				if (action == "defaults")
+				{
+					_uwSettings.keys.Clear();
+					_uwSettings.Save();
+					_waitingFor = null;
+					ShowKeys();
+				}
+			};
+			_keysDialog.WindowInput += OnKeysDialogInput;
+			_keysDialog.Confirmed += CloseKeyBindings;
+			_keysDialog.Canceled += CloseKeyBindings;
+			AddChild(_keysDialog);
+		}
+		_keysDialog.Title = T("Keys (modern controls)", "按鍵設定（優化操作）");
+		_keysDialog.OkButtonText = T("Done", "完成");
+		_defaultsButton.Text = T("Defaults", "恢復預設");
+		foreach (var (action, english, chinese) in KeyActions)
+		{
+			_keyRows[action].Name.Text = T(english, chinese);
+		}
+		_waitingFor = null;
+		ShowKeys();
+		_mouseModeHistory.Push(Input.MouseMode);
+		Input.MouseMode = Input.MouseModeEnum.Visible;
+		_keysDialog.PopupCentered();
+	}
+
+	private void CloseKeyBindings()
+	{
+		_waitingFor = null;
+		ShowControlsBox();
+		RestoreMouse();
+	}
+
+	private void ShowKeys()
+	{
+		foreach (var (action, row) in _keyRows)
+		{
+			row.Key.Text = _waitingFor == action ? T("Press a key…", "請按鍵…") : KeyName(action);
+		}
+	}
+
+	private void WaitForKey(Controls.Action action)
+	{
+		_waitingFor = action;
+		ShowKeys();
+	}
+
+	private void OnKeysDialogInput(InputEvent @event)
+	{
+		if (_waitingFor is not Controls.Action action || @event is not InputEventKey key || !key.Pressed || key.Echo)
+		{
+			return;
+		}
+		_keysDialog.SetInputAsHandled();
+		var code = key.Keycode;
+		if (code != Key.Escape && code != Key.None)
+		{
+			var old = Controls.KeyFor(action);
+			foreach (var (other, _, _) in KeyActions)
+			{
+				if (other != action && Controls.KeyFor(other) == code)
+				{
+					SetKey(other, old);
+				}
+			}
+			SetKey(action, code);
+			_uwSettings.Save();
+		}
+		_waitingFor = null;
+		ShowKeys();
+	}
+
+	/// <summary>Stores <paramref name="code"/> for <paramref name="action"/>, as nothing when it is the default.</summary>
+	private void SetKey(Controls.Action action, Key code)
+	{
+		if (code == Controls.DefaultKey(action))
+		{
+			_uwSettings.keys.Remove(action.ToString());
+		}
+		else
+		{
+			_uwSettings.keys[action.ToString()] = OS.GetKeycodeString(code);
+		}
 	}
 
 	public void _on_language_options_item_selected(int index)

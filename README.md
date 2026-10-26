@@ -1,5 +1,7 @@
 # 創世紀地下世界 繁體中文版 — Ultima Underworld I & II
 
+**繁體中文** | [English](README.en.md)
+
 > 「你醒來時，四周一片漆黑。冥河深淵的寒氣滲進骨頭裡……」
 
 還記得第一次在 1992 年的螢幕上，舉著火把走進冥河深淵的感覺嗎？還記得在不列顛王的城堡裡，眼睜睜看著黑岩寶石把整座城罩住的那一刻嗎？
@@ -20,8 +22,9 @@
 - **像素高清美術**：除了原版(低像素風格)，在啟動畫面按「產生像素高清素材」，就會用你自己的遊戲檔案在這台電腦產生 2、4 或 8 倍解析度的「像素高清(RotSprite2x／4x／8x)」（大約一分鐘；8 倍約佔 1 GB）：牆面、怪物、物品、介面全部放大，斜線與輪廓補平但保留像素風格；文字與過場字幕用平滑的高清字。素材保留原版調色盤，光影與調色盤動畫照常運作，也不散布任何遊戲美術。
 - **原汁原味的音樂**：MT-32／CM-32L（需自備 ROM）、Sound Blaster／AdLib 的 OPL 配樂，或內建的 SoundFont；音效一律是 Sound Blaster 版。
 - **存檔與原版 DOS 版互通**：本專案存的 UW2 進度，可以用 GOG 原版 UW2.EXE 讀取（已實測開過的門、生命值、位置、裝備、背包與容器內容）；反過來也行。
-- **現代化的便利**：可調整視窗大小或全螢幕、滑鼠可移出視窗、有啟動畫面可以選遊戲、語言、美術與配樂。
-- **Windows 與 macOS（Apple Silicon 與 Intel）**，不用安裝 .NET 或其他執行環境。
+- **可選的優化操作**：啟動畫面的「操作」可選「原版操作」或「優化操作」。優化操作下不用一直切換動作圖示：左鍵依點到的東西自動說話、撿起或使用，右鍵查看，游標旁會顯示左鍵會做什麼；Shift＋左鍵直接收進背包；Tab 切換滑鼠視角（像現代第一人稱遊戲）、X 拔出武器後按住左鍵攻擊、滾輪切換動作、方向鍵移動、Space 跳。滑鼠速度、上下反轉與每個按鍵都可以在啟動畫面調整。
+- **現代化的便利**：可調整視窗大小或全螢幕、滑鼠可移出視窗、有啟動畫面可以選遊戲、語言、操作、美術與配樂；對話時滑鼠移到回答上會變成金色，點選更準確；搭配高清美術時游標也是平滑的高清圖。
+- **Windows 與 macOS（Apple Silicon 與 Intel）**，不用安裝 .NET 或其他執行環境。已在 Windows（實體電腦）、macOS Apple Silicon、macOS Intel 實測可以執行。
 
 ## 你需要準備
 
@@ -30,32 +33,36 @@
 
 ## 下載與安裝
 
-到本 repo 的 [Releases](../../releases) 下載你的平台的 zip（還沒有發布時，可以照下方「自行打包」產生）：
+到本 repo 的 [Releases](../../releases/latest) 下載你的平台的 zip：
 
 | 檔案 | 平台 |
 | --- | --- |
 | `UnderworldGodot-zhTW-版本-windows-x64.zip` | Windows 10／11（x64） |
 | `UnderworldGodot-zhTW-版本-macos.zip` | macOS 12 以上（Apple Silicon 與 Intel） |
 
-解壓縮後打開程式，啟動畫面會**自動尋找遊戲**：程式旁的資料夾（例如把 `UW1`、`UW2` 放在程式旁邊）、一鍵安裝放遊戲的位置，以及 GOG 版的安裝。只找到 GOG 版的光碟映像（`game.gog`）時，會自動把兩代遊戲取出到程式旁的 `UW1`、`UW2`。找到就顯示綠色「已找到遊戲」；沒找到就顯示「沒有找到遊戲目錄」，這時按「瀏覽…」自己選。
+本程式不需要安裝，也沒有安裝程式。照這個順序做（詳細步驟見 zip 裡的 `INSTALL.txt`）：
 
-也可以用一鍵安裝（會順便處理系統的下載封鎖、Windows 的 Visual C++ 可轉散發套件）：
-
-- **Windows**：按兩下 `INSTALL.bat`。
-- **macOS**：打開「終端機」，輸入 `bash ` 再把資料夾裡的 `install.sh` 拖進視窗，按 Return。
-
-一鍵安裝會從 GOG 版取出 UW1、UW2 的遊戲檔案、寫好設定（繁體中文），然後打開遊戲。詳細步驟與手動安裝方式見 zip 裡的 `INSTALL.txt`。
+1. **安裝遊戲本體**：在 GOG 裝好《Ultima Underworld》或《II》（裝一個就有兩代）。不用自己取出遊戲檔案。
+2. **（選用，只有 Windows 的 MT-32 配樂需要）安裝 [Microsoft Visual C++ 可轉散發套件（x64）](https://aka.ms/vs/17/release/vc_redist.x64.exe)**。沒裝時選 MT-32 會自動改用 OPL 配樂。
+3. **解壓縮本程式**到可以寫入的資料夾（例如「文件」裡），不要放在 Program Files 或「應用程式」：遊戲檔案、存檔與高清素材都放在程式旁邊。Windows 建議解壓縮前先在 zip 的「內容」勾選「解除封鎖」。
+4. **第一次打開**：
+   - Windows：出現「Windows 已保護您的電腦」時，按「其他資訊」>「仍要執行」。
+   - macOS：程式沒有 Apple 公證，第一次會說「無法打開」或「已損毀」。這不是程式壞了：在終端機執行 `xattr -dr com.apple.quarantine`（後面接 Underworld.app 的路徑），或到「系統設定」>「隱私權與安全性」按「強制打開」，見 `INSTALL.txt`「步驟 3」。
+5. **在啟動畫面依序設定**：
+   1. 「Language」選「繁體中文」。
+   2. 確認兩代遊戲都顯示綠色「已找到遊戲」：啟動畫面會**自動尋找遊戲**（程式旁的 `UW1`、`UW2`、舊版一鍵安裝的 `Games/UWGOG`、GOG 版的安裝），只找到 GOG 的光碟映像（`game.gog`）時會自動取出到程式旁。沒找到時按「瀏覽…」自己選。
+   3. 「操作」選原版操作或優化操作。
+   4. 「配樂」、「美術」（想要高清就按「產生像素高清素材」）、「視窗大小」。
+   5. 按「開始遊戲」。設定都會記住，之後打開程式按「開始遊戲」就好。
 
 ### 需要特別注意
 
-- **macOS 第一次打開會被擋下**：本程式沒有 Apple 公證（需要付費開發者帳號），macOS 會說「無法打開」或「已損毀」。這不是程式壞了：一鍵安裝會自動解除；手動解除方式見 `INSTALL.txt`「三、第一次執行」。
-- **Windows 可能出現「Windows 已保護您的電腦」**：程式沒有數位簽章，按「其他資訊」>「仍要執行」。
-- **Windows 的 MT-32 配樂**需要「Microsoft Visual C++ 可轉散發套件」：一鍵安裝會自動安裝。沒裝時選 MT-32 會自動改用 OPL 配樂，其他功能都不受影響。
-- **高清美術素材**不隨程式附上（那是原版美術的衍生物）：裝好遊戲後在啟動畫面按「產生像素高清素材」即可，約一分鐘。素材放在程式旁邊的 `HD` 資料夾（跟 `ROMS` 一樣，整個資料夾搬家也找得到；程式旁邊寫不進去時，例如放在「應用程式」或 Program Files，改放在使用者資料夾）。刪掉 `HD` 就會回到原版美術。
+- **顯示卡**：需要支援 Vulkan 或 DirectX 12（Windows）。Parallels 等虛擬機的虛擬顯示卡不支援，會黑畫面後關閉。
+- **高清美術素材**不隨程式附上（那是原版美術的衍生物）：裝好遊戲後在啟動畫面按「產生像素高清素材」即可，約一分鐘。素材放在程式旁邊的 `HD` 資料夾（跟 `ROMS` 一樣，整個資料夾搬家也找得到；程式旁邊寫不進去時改放在使用者資料夾）。刪掉 `HD` 就會回到原版美術。
 
 ## 冒險小提示
 
-- 啟動畫面左邊是兩代遊戲的卡片：按「瀏覽…」選遊戲目錄，出現綠色「已找到遊戲」後按「開始遊戲」。右邊可以切換語言、視窗大小、美術與配樂。
+- 啟動畫面左邊是兩代遊戲的卡片：按「瀏覽…」選遊戲目錄，出現綠色「已找到遊戲」後按「開始遊戲」。右邊可以切換語言、視窗大小、操作、美術與配樂。
 - 需要**打字**的地方（對話中輸入關鍵字、祭壇咒語、存檔說明）請輸入**英文**，例如咒語仍是原文。
 - UW2 的存檔放在遊戲目錄的 `SAVE1`～`SAVE4`。把 GOG 原版的存檔資料夾複製過來就能接著玩，反過來也可以。
 - 設定檔位置：Windows 是 `%APPDATA%\Godot\app_userdata\Underworld\settings.json`，macOS 是 `~/Library/Application Support/Godot/app_userdata/Underworld/settings.json`。設定亂掉時，關閉遊戲後刪除它即可恢復預設。
@@ -105,11 +112,15 @@ export PATH="$(brew --prefix dotnet@9)/bin:$PATH"
 | `resolution` | `寬x高` 或 `fullscreen`，預設 `1280x800` |
 | `synthpath` | `soundfont` 用的 `.sf2` 檔，空白時用內建的 |
 | `rompath` | MT-32／CM-32L ROM 資料夾，空白時用程式旁邊的 `ROMS` |
+| `controls` | `classic`（原版操作，預設）或 `modern`（優化操作） |
+| `mousesensitivity` | 優化操作的滑鼠視角速度，1～10，預設 5 |
+| `invertmouse` | 優化操作的滑鼠視角上下反轉 |
+| `keys` | 優化操作改過的按鍵（動作名稱對應按鍵名稱），在啟動畫面「按鍵設定…」修改 |
 
 ### 自行打包
 
 ```sh
-GODOT=/path/to/Godot sh packaging/package.sh 0.2.0
+GODOT=/path/to/Godot sh packaging/package.sh 0.3.0
 ```
 
 需要 Godot 4.3 .NET 匯出範本（`4.3.stable.mono`）、**微軟官方的 .NET 9 SDK**（預設找 `~/.dotnet`，可用 [dotnet-install.sh](https://dot.net/v1/dotnet-install.sh) 安裝；不能用 Homebrew 的 .NET，它會把依賴 Homebrew 的執行環境打包進去），並且要在 macOS 上執行（`codesign` 做 ad-hoc 簽章）。輸出在 `build/release/`。
@@ -139,6 +150,7 @@ GODOT=/path/to/Godot sh packaging/package.sh 0.2.0
 - 支援整數倍率（2×、4×…）的「索引色」HD 素材：牆面、地板、怪物、物件、介面、武器、全畫面圖、字型。素材保留調色盤索引。
 - 啟動畫面的「產生像素高清素材」（`src/loaders/hdartgenerator.cs`、`hdartfonts.cs`）用玩家的遊戲檔案產生 RotSprite 2×、4× 或 8× 素材組：圖片部分與 upscale-lab 的 `export_hd.py rotsprite2x`／`4x`／`8x` 逐位元組相同（`HdArtGeneratorTests`）；三種小字型用 jf open 粉圓的英文字母重畫，過場字幕的 FONTBIG 保留原字形、以高斯加權平滑放大。其他自行產生的素材組（放在 `hdartroot` 底下）也照樣能選用。
 - 過場動畫在顯示時用著色器放大。
+- 使用高清美術時，十字游標與遠程武器的瞄準圈改用平滑的高清圖重畫（`src/ui/hdcursors.cs`）。
 
 ### 音效與配樂
 
@@ -151,17 +163,23 @@ GODOT=/path/to/Godot sh packaging/package.sh 0.2.0
 
 - UW2 開放存讀檔（上游原本擋掉），關卡區塊照原版長度寫入、動畫清單照原版整理、物品欄照原版串列寫入，原版 UW2.EXE 可以讀取。
 
+### 操作
+
+- 可選的優化操作（`src/ui/controls.cs`）：智慧點擊、滑鼠視角、自訂按鍵、游標旁的動作提示；原版操作維持不變。
+- 對話回答改依文字實際排版的位置判斷點到哪一個（原本假設每行等高、每個回答一行），滑鼠下的回答顯示成金色。
+
 ### 其他
 
 - 新的啟動畫面：遊戲卡片、「瀏覽…」與「開始遊戲」按鈕、分組設定，跟著語言顯示中文或英文。
 - 解析度選項：1280×800、1600×1000、1920×1200、2560×1600（都是原版 320×200 的 16:10）或全螢幕。
 - 修正中文模式下關閉遊戲會當機（Godot 4.3 .NET 的綁定問題）。
+- 中文版打開系統設定選單變快（8 倍高清素材時原本要等 40 秒）。
 
 </details>
 
-## English summary
+## English
 
-A Traditional Chinese (zh-TW) edition of [hankmorgan/UnderworldGodot](https://github.com/hankmorgan/UnderworldGodot), the Godot 4.3 .NET engine recreation of *Ultima Underworld I* and *II*. It adds full Chinese translations of both games, a Pixel HD (RotSprite 2x, 4x or 8x) art style the launcher makes from your own game files, MT-32/OPL/SoundFont music, UW2 saves that load in the original DOS UW2.EXE, and a new launcher. No game data is included: you need your own copy (for example from GOG). Builds run on Windows 10/11 x64 and macOS 12+ (Apple Silicon and Intel) without installing .NET. The upstream English README is kept in [README.upstream.md](README.upstream.md).
+The English README is [README.en.md](README.en.md). The upstream project's original README is kept in [README.upstream.md](README.upstream.md).
 
 ## 致謝與授權
 

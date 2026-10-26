@@ -77,7 +77,40 @@ namespace Underworld
                 Lines[i].SetLine("");
             }
             LinePtr = 0;
+            HighlightOption = 0;
             UpdateMessageDisplay();
+        }
+
+        /// <summary>The conversation answer drawn highlighted (the one under the mouse), 0 for none.</summary>
+        public int HighlightOption = 0;
+
+        /// <summary>The highlight: a bright gold, so the answer that a click would pick stands out.</summary>
+        const string HighlightColour = "#f8d860";
+
+        static readonly System.Text.RegularExpressions.Regex Tags = new(@"\[[^\]]*\]");
+        static readonly System.Text.RegularExpressions.Regex AnswerStart = new(@"^\s*(\d+)\.\s");
+
+        /// <summary>The answer number a line starts ("2. ..." gives 2), 0 for any other line.</summary>
+        static int AnswerNumber(string lineText)
+        {
+            var m = AnswerStart.Match(Tags.Replace(lineText ?? "", ""));
+            return m.Success ? int.Parse(m.Groups[1].Value) : 0;
+        }
+
+        /// <summary>
+        /// The answer line <paramref name="line"/> belongs to while a conversation menu is shown: the
+        /// last answer number at or above it, as a long answer goes on over the lines below its number.
+        /// </summary>
+        public int AnswerOfLine(int line)
+        {
+            int answer = 0;
+            for (int i = 0; i <= line && i <= Lines.GetUpperBound(0); i++)
+            {
+                int n = AnswerNumber(Lines[i].LineText);
+                if (n > 0) { answer = n; }
+                else if (string.IsNullOrWhiteSpace(Tags.Replace(Lines[i].LineText ?? "", ""))) { answer = 0; }
+            }
+            return answer;
         }
 
         private IEnumerator AddLineWithMore(string newText, int Option, int Colour = 0)
@@ -159,7 +192,12 @@ namespace Underworld
                 {
                     output += "\n";
                 }
-                output += Lines[i].LineText;
+                var line = Lines[i].LineText;
+                if (HighlightOption > 0 && AnswerOfLine(i) == HighlightOption)
+                {
+                    line = System.Text.RegularExpressions.Regex.Replace(line, @"\[color=[^\]]*\]", $"[color={HighlightColour}]");
+                }
+                output += line;
             }
             //Replace special characters
             if (MessageDisplay.WaitingForYesOrNo)

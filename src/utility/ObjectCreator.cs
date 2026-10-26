@@ -79,7 +79,7 @@ namespace Underworld
                 uimanager.instance.mousecursor.SetCursorToObject(obj.item_id);
                 // playerdat.WeightCarried += (short)(commonObjDat.mass(obj.item_id) * weightmultiplier);//assumed any weight checks have occurred elsewhere...
                 // uimanager.RefreshWeightDisplay();
-                if (changeInteractionmode)
+                if (changeInteractionmode && !Controls.Modern)//modern controls stay on context clicks, which drop or throw what is in hand all the same
                 {
                     uimanager.InteractionModeToggle(uimanager.InteractionModes.ModePickup);
                 }

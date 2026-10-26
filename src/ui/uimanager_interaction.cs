@@ -118,13 +118,14 @@ namespace Underworld
         /// Handles interacting with objects in the world
         /// </summary>
         /// <param name="index"></param>
-        public static void InteractWithObjectCollider(int index, bool LeftClick)
+        /// <param name="mode">The interaction to do, when not the selected icon's (modern controls' context clicks).</param>
+        public static void InteractWithObjectCollider(int index, bool LeftClick, InteractionModes? mode = null)
         {
             if (playerdat.ParalyseTimer > 0)
             {
                 return;//stop interaction while player is paralysed
             }
-            switch (InteractionMode)
+            switch (mode ?? InteractionMode)
             {
                 case InteractionModes.ModeTalk:
                     talk.Talk(
@@ -181,6 +182,30 @@ namespace Underworld
                         }
                     }
                     break;
+            }
+        }
+
+        /// <summary>
+        /// Modern controls' shift + click: the object just picked up goes from the hand into the first
+        /// free slot of the backpack (or of the container open in it), as if dropped there. Stays in the
+        /// hand when there is none.
+        /// </summary>
+        static void PutHeldObjectInBackpack()
+        {
+            if (playerdat.ObjectInHand == -1)
+            {
+                return;//nothing picked up, or a quantity is being asked for
+            }
+            for (int slot = 11; slot <= 18; slot++)
+            {
+                if (BackPackIndices[slot - 11] <= 0)//-1, or 0 before the backpack is first drawn: no object has index 0
+                {
+                    var previous = CurrentSlot;
+                    CurrentSlot = slot;
+                    PickupToEmptySlot(playerdat.ObjectInHand);
+                    CurrentSlot = previous;
+                    return;
+                }
             }
         }
 
@@ -386,6 +411,20 @@ namespace Underworld
                     combat.currentweapon = obj; break;
                 default:
                     combat.currentweapon = null; break;
+            }
+        }
+
+        /// <summary>Puts the weapon away from the paperdoll: back to Use, or under modern controls to context clicks.</summary>
+        public static void PutAwayWeapon()
+        {
+            if (Controls.Modern)
+            {
+                ToggleWeaponAnimationState(false);
+                EnterInteractionModeNone();
+            }
+            else
+            {
+                InteractionModeToggle(InteractionModes.ModeUse);
             }
         }
 

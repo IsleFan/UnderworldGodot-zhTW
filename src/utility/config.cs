@@ -121,6 +121,13 @@ public class uwsettings
     public string i18npath { get; set; } = "";
     // Window size as "WIDTHxHEIGHT", or "fullscreen". The game draws at 1280x800 and is scaled to it.
     public string resolution { get; set; } = "1280x800";
+    // "classic", the original's controls, or "modern": context clicks, mouse look and the keys below (see Controls).
+    public string controls { get; set; } = "classic";
+    // Mouse look speed, 1 to 10.
+    public int mousesensitivity { get; set; } = 5;
+    public bool invertmouse { get; set; }
+    // Modern controls' key for each Controls.Action that is not its default, as Godot names keys ("W", "Space").
+    public System.Collections.Generic.Dictionary<string, string> keys { get; set; } = new();
 
     /// <summary>The MT-32 ROM folder: rompath, else DefaultRomDir.</summary>
     public string RomDir() => string.IsNullOrWhiteSpace(rompath) ? DefaultRomDir() : rompath;

@@ -206,7 +206,7 @@ namespace Underworld
         }
 
 
-        static bool CanBePickedUpOverrides(int item_id)
+        public static bool CanBePickedUpOverrides(int item_id)
         {
             if (_RES != GAME_UW2)
             {

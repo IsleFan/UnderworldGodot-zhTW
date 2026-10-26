@@ -45,6 +45,9 @@ namespace Underworld
             }
         }
 
+        /// <summary>Whether an HD art set is in use for this game.</summary>
+        public static bool Active => GameFolder != null && Directory.Exists(GameFolder);
+
         static bool TryRead(string kind, string name, out byte[] data, out int width, out int height)
         {
             data = null; width = 0; height = 0;

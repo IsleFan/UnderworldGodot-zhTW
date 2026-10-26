@@ -167,6 +167,10 @@ namespace Underworld
 		/// <returns></returns>
 		public static bool IsMouseInViewPort()
         {
+            if (Controls.MouseLookActive)
+            {
+                return true;//aiming at the middle of the view
+            }
             var viewportmouspos = instance.uwviewport.GetLocalMousePosition();
             if (
                 (viewportmouspos.X >= 0) && (viewportmouspos.Y >= 0)
@@ -187,20 +191,23 @@ namespace Underworld
         {
             if (!InGame) { return; }
             //store these values for use in throw and spell casting events
-            ViewPortMouseXPos = eventMouseButton.Position.X;
-            ViewPortMouseYPos = eventMouseButton.Position.Y;
-            if (uimanager.InteractionMode == InteractionModes.ModeAttack)
+            var screenPoint = Controls.ScreenPoint(eventMouseButton.Position);
+            ViewPortMouseXPos = screenPoint.X;
+            ViewPortMouseYPos = screenPoint.Y;
+            bool LeftClick = (eventMouseButton.ButtonIndex == MouseButton.Left);
+            //modern controls: right click looks, whatever the icon
+            bool look = Controls.Modern && !LeftClick;
+            if (uimanager.InteractionMode == InteractionModes.ModeAttack && !look)
             {
                 return;//no more needs to be done.
             }
 
-            bool LeftClick = (eventMouseButton.ButtonIndex == MouseButton.Left);
             //Debug.Print($"{eventMouseButton.Position.X},{eventMouseButton.Position.Y}");
             //Dictionary result = DoRayCast(eventMouseButton.Position, RayDistance, out Vector3 rayOrigin);
             var text = (Texture2D)uimanager.instance.uwsubviewport_objectinfo.GetTexture();
             //text.GetImage().SavePng("c:\\temp\\testobjectinfo.png");
             //var vi = new Vector2I((int)(ViewPortMouseXPos / text.GetWidth()), (int)(ViewPortMouseYPos / text.GetHeight()));
-            var mouse = uimanager.instance.uwviewport.GetLocalMousePosition();
+            var mouse = Controls.ViewportPoint();
             var pixel = text.GetImage().GetPixel((int)mouse.X, (int)mouse.Y);//
 
 
@@ -241,7 +248,20 @@ namespace Underworld
                     Debug.Print($"{pixel} , {pitemindex}, {itemname} Object position is x:{obj.xpos}, y:{obj.ypos}, z:{obj.zpos}, h:{obj.heading}");
                     if (SpellCasting.currentSpell == null)
                     {
-                        InteractWithObjectCollider(index: obj.index, LeftClick: LeftClick);
+                        var mode = InteractionMode;
+                        if (look)
+                        {
+                            mode = InteractionModes.ModeLook;
+                        }
+                        else if (Controls.ContextClicks)
+                        {
+                            mode = UsageMode == 1 ? InteractionModes.ModeUse : Controls.ContextMode(obj);
+                        }
+                        InteractWithObjectCollider(index: obj.index, LeftClick: LeftClick, mode: mode);
+                        if (mode == InteractionModes.ModePickup && Input.IsKeyPressed(Key.Shift) && Controls.Modern)
+                        {
+                            PutHeldObjectInBackpack();
+                        }
                     }
                     else
                     {
@@ -264,7 +284,7 @@ namespace Underworld
                 if (UWTileMap.ValidTile(tileX, tileY))
                 {
                     var tile = UWTileMap.current_tilemap.Tiles[tileX, tileY];
-                    if (InteractionMode == InteractionModes.ModeLook)
+                    if (InteractionMode == InteractionModes.ModeLook || look)
                     {
                         LookAtTile(pixel.R8, tileX, tileY);//there needs to be a distance check to see if the player sees something or nothing. I think it should be based on the shading.
                     }

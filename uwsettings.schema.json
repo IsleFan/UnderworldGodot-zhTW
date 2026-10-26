@@ -117,6 +117,30 @@
             "description": "Window size as WIDTHxHEIGHT (shrunk to fit the screen, keeping its shape), or \"fullscreen\". The game draws at 1280x800 and is scaled to the window.",
             "type": "string",
             "default": "1280x800"
+        },
+        "controls": {
+            "description": "\"classic\", the original's controls, or \"modern\": with no interaction icon selected a left click talks, picks up or uses by what it is on and a right click looks, shift + click puts what is picked up in the backpack, the mouse look key turns the view with the mouse, the weapon key draws the weapon (left button swings), the wheel steps through the icons, and the keys below.",
+            "type": "string",
+            "enum": ["classic", "modern"],
+            "default": "classic"
+        },
+        "mousesensitivity": {
+            "description": "Mouse look speed under modern controls, 1 to 10.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10,
+            "default": 5
+        },
+        "invertmouse": {
+            "description": "Under modern controls' mouse look, moving the mouse up looks down.",
+            "type": "boolean",
+            "default": false
+        },
+        "keys": {
+            "description": "Modern controls' keys that differ from the defaults, by action (Forward, Back, StrafeLeft, StrafeRight, TurnLeft, TurnRight, Jump, FlyUp, FlyDown, LookDown, LookUp, LookCentre, MouseLook, Weapon, Bash, Slash, Stab), as Godot names keys (\"W\", \"Space\", \"Tab\").",
+            "type": "object",
+            "additionalProperties": { "type": "string" },
+            "default": {}
         }
 
     }
