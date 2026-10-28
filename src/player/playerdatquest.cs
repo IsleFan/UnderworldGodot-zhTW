@@ -27,6 +27,20 @@ namespace Underworld
         /// </summary>
         /// <param name="variableno"></param>
         /// <param name="value"></param>
+        /// <summary>
+        /// UW2's numbered variables are words; the traps and schedules only ever store bytes in them, but the
+        /// q*bert puzzle keeps a tile offset in one (do_qbert).
+        /// </summary>
+        public static int GetGameVariableWord(int variableno)
+        {
+            return GetAt16(0xFA + (variableno * 2));
+        }
+
+        public static void SetGameVariableWord(int variableno, int value)
+        {
+            SetAt16(0xFA + variableno * 2, value & 0xFFFF);
+        }
+
         public static void SetGameVariable(int variableno, int value)
         {
             value = value & 0xFF;//keep value within range.

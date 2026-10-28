@@ -42,7 +42,7 @@ namespace Underworld
             ModeUse = 5
         };
 
-        public static InteractionModes InteractionMode = InteractionModes.ModeUse;
+        public static InteractionModes InteractionMode = InteractionModes.ModeNone;
         [ExportGroup("InteractionModes")]
         //Array to store the interaction mode mo
         [Export] public Godot.TextureRect[] InteractionButtonsUW1 = new Godot.TextureRect[6];
@@ -133,15 +133,19 @@ namespace Underworld
                         WorldObject: true);
                     break;
                 case InteractionModes.ModeLook:
-                    //Do a look interaction with the object
-                    look.LookAt(
-                        index: index,
-                        objList: UWTileMap.current_tilemap.LevelObjects,
-                        WorldObject: true);
+                    {//player_3dlook: lore 1 for an object in close reach (0x48) that cannot be picked up, else 0
+                        var looked = UWTileMap.current_tilemap.LevelObjects[index];
+                        var releaseable = pickup.CanBePickedUpOverrides(looked.item_id) || (commonObjDat.CanBePickedUp(looked.item_id) && looked.IsStatic);
+                        look.LookAtWorld(
+                            index: index,
+                            lore: CanReach(looked, 0x48) && !releaseable ? 1 : 0,
+                            lookMode: (InteractionMode == InteractionModes.ModeLook) || Controls.Modern);
+                    }
                     break;
                 case InteractionModes.ModeUse:
                     //do a use interaction with the object.
-                    if (CanReach(UWTileMap.current_tilemap.LevelObjects[index], playerdat.UseDistance))
+                    if (CanReach(UWTileMap.current_tilemap.LevelObjects[index], playerdat.UseDistance)
+                        && !BlockingTerrain(playerdat.UseDistance, UWTileMap.current_tilemap.LevelObjects[index]))
                     {
                         if (useon.CurrentItemBeingUsed != null)
                         {
@@ -167,18 +171,39 @@ namespace Underworld
                     break;
                 case InteractionModes.ModePickup:
                     if (playerdat.ObjectInHand == -1)//don't do pickup if holding something already.
-                    {
-                        if (CanReach(UWTileMap.current_tilemap.LevelObjects[index], playerdat.PickupDistance))
+                    {//player_3dget: in reach and not blocked by the terrain
+                        var picked = UWTileMap.current_tilemap.LevelObjects[index];
+                        var inrange = CanReach(picked, playerdat.PickupDistance);
+                        var clear = !BlockingTerrain(playerdat.PickupDistance, picked);
+                        var releaseable = pickup.CanBePickedUpOverrides(picked.item_id) || (commonObjDat.CanBePickedUp(picked.item_id) && picked.IsStatic);
+                        if ((useon.CurrentItemBeingUsed != null) || (releaseable && inrange && clear))
                         {
-                            //get weight of object being picked
-                            pickup.PickUp(
-                                index: index,
-                                objList: UWTileMap.current_tilemap.LevelObjects,
-                                WorldObject: true);
+                            if (inrange && clear)
+                            {
+                                pickup.PickUp(
+                                    index: index,
+                                    objList: UWTileMap.current_tilemap.LevelObjects,
+                                    WorldObject: true);
+                            }
+                            else
+                            {//You cannot reach that.
+                                uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, UWClass._RES == UWClass.GAME_UW2 ? 0x6B : 0x5E));
+                            }
+                        }
+                        else if (releaseable)
+                        {//That is too far away to take. / You cannot reach that.
+                            uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, (UWClass._RES == UWClass.GAME_UW2 ? 0x6A : 0x5D) + (inrange ? 1 : 0)));
+                        }
+                        else if ((UWClass._RES == UWClass.GAME_UW2) && (picked.item_id == 0x1CA))
+                        {//frost is used when in reach
+                            if (inrange && clear)
+                            {
+                                use.Use(picked, playerdat.playerObject, UWTileMap.current_tilemap.LevelObjects, true);
+                            }
                         }
                         else
-                        {
-                            uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, GameStrings.str_you_cannot_reach_that_));
+                        {//You cannot pick that up.
+                            uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, UWClass._RES == UWClass.GAME_UW2 ? 0x6D : 0x60));
                         }
                     }
                     break;
@@ -209,6 +234,87 @@ namespace Underworld
             }
         }
 
+        /// <summary>
+        /// BlockingTerrain: whether the terrain stops the player reaching obj: too low or high for him, a tile on the
+        /// straight line to it lower than he stands (normal reach only), or the line crossing another terrain class than
+        /// the one he stands on (water, lava), unless a bridge carries it. A distance of 0 is never blocked.
+        /// </summary>
+        static bool BlockingTerrain(int dist, uwObject obj)
+        {
+            if (dist == 0)
+            {
+                return false;
+            }
+            var px = playerdat.playerObject.tileX; var py = playerdat.playerObject.tileY;
+            var ox = obj.tileX; var oy = obj.tileY;
+            if ((px == ox) && (py == oy))
+            {
+                return false;
+            }
+            var terr = TileTerrainClass(UWTileMap.current_tilemap.Tiles[px, py]);
+            var xdir = System.Math.Sign(ox - px);
+            var ydir = System.Math.Sign(oy - py);
+            var pole = playerdat.usingpole ? 1 : 0;
+            var reach = (pole + 1) << 3;
+            var high = (pole + 1) << 5;
+            int pz = playerdat.playerObject.zpos;
+            pz = pz > reach ? pz - reach : 0;
+            var oz = obj.zpos;
+            if ((oz < pz) || (pz + high < oz))
+            {
+                return true;
+            }
+            var x = px; var y = py;
+            while (true)
+            {
+                x += xdir;
+                if (((xdir < 0) && (x < ox)) || ((xdir > 0) && (x > ox))) { x = ox; }
+                y += ydir;
+                if (((ydir < 0) && (y < oy)) || ((ydir > 0) && (y > oy))) { y = oy; }
+                var tile = UWTileMap.current_tilemap.Tiles[x, y];
+                //BridgeHeight: the highest bridge on the tile
+                var bridge = -1;
+                var next = tile.indexObjectList;
+                while (next != 0)
+                {
+                    var o = UWTileMap.current_tilemap.LevelObjects[next];
+                    if ((o.item_id == 0x164) && (o.zpos > bridge))
+                    {
+                        bridge = o.zpos;
+                    }
+                    next = o.next;
+                }
+                var found = (bridge >= 0) && (bridge <= oz) && (bridge >= pz);
+                if (!found && ((pz >> 3) > tile.floorHeight) && (dist == 0x90))
+                {
+                    return true;
+                }
+                if ((x == ox) && (y == oy))
+                {
+                    break;
+                }
+                var t = TileTerrainClass(tile);
+                if ((dist <= 0x90) && !found && (t != 0) && (t != terr))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// The floor's terrain (TERRAIN): UW2 its class (bits 6-7), UW1 the whole terrain value.
+        /// </summary>
+        static int TileTerrainClass(TileInfo tile)
+        {
+            if (UWClass._RES == UWClass.GAME_UW2)
+            {
+                return TerrainDatLoader.GetTerrainTypeNo(tile);
+            }
+            var floorterrain = tileMapRender.FloorTexture_MapIndex(tile);
+            return TerrainDatLoader.Terrain[46 + UWTileMap.current_tilemap.texture_map[floorterrain]];
+        }
+
         static bool CanReach(uwObject obj, int UseDistance)
         {
             if (UseDistance == 0)
@@ -227,8 +333,8 @@ namespace Underworld
                 else
                 {
                     var zDiff = playerdat.playerObject.zpos - obj.zpos;
-                    if (playerdat.SwimCounter > 0x50)
-                    {
+                    if ((UWClass._RES == UWClass.GAME_UW2) && (playerdat.SwimCounter > 0x50))
+                    {//UW2 only: swimming lowers the reach
                         zDiff -= (playerdat.SwimCounter >> 3);
                     }
                     int pole = 0;
@@ -259,6 +365,7 @@ namespace Underworld
         {
             PreviousInteractionMode = InteractionMode;
             ToggleInteractionButtonDisplay(index);
+            UpdateModeCursor();
 
             ///special handling for some modes
             switch (index)
@@ -279,8 +386,16 @@ namespace Underworld
                         break;
                     }
                 case InteractionModes.ModeAttack:
-                    {
-                        ToggleWeaponAnimationState(playerdat.play_drawn != 1);
+                    {//deal_with_icons: the weapon is drawn, but not while swimming, nor in UW2 asleep in the void or paralysed
+                        if (((playerdat.TileState & 1) != 0)
+                            || ((UWClass._RES == UWClass.GAME_UW2) && (playerdat.DreamingInVoid || playerdat.ParalyseTimer > 0)))
+                        {
+                            EnterInteractionModeNone();
+                        }
+                        else if (playerdat.play_drawn != 1)
+                        {
+                            ToggleWeaponAnimationState(true);
+                        }
                         break;
                     }
                 default:
@@ -298,6 +413,27 @@ namespace Underworld
         }
 
         /// <summary>
+        /// toggle_fightmode, a click on the empty weapon hand: sheathes (punt_fightmode) or draws (pick_fightmode, refused
+        /// only while swimming).
+        /// </summary>
+        public static void ToggleFightModeFromWeaponHand()
+        {
+            if (playerdat.play_drawn == 1)
+            {
+                PutAwayWeapon();
+                return;
+            }
+            if ((playerdat.TileState & 1) != 0)
+            {
+                return;
+            }
+            PreviousInteractionMode = InteractionMode;
+            ToggleInteractionButtonDisplay(InteractionModes.ModeAttack);
+            UpdateModeCursor();
+            ToggleWeaponAnimationState(true);
+        }
+
+        /// <summary>
         /// DOS "no mode": no interaction button selected. Inventory uses L=Use, R=Look.
         /// </summary>
         public static void EnterInteractionModeNone()
@@ -305,9 +441,19 @@ namespace Underworld
             PreviousInteractionMode = InteractionMode;
             InteractionMode = InteractionModes.ModeNone;
             SetAllInteractionButtonsOff();
+            UpdateModeCursor();
             if (playerdat.play_drawn == 1)
             {
                 ToggleWeaponAnimationState(false);
+            }
+        }
+
+        /// <summary>The pointer follows the selected icon, unless an object or a spell is on the cursor.</summary>
+        static void UpdateModeCursor()
+        {
+            if ((playerdat.ObjectInHand == -1) && (UsageMode == 0))
+            {
+                instance.mousecursor.SetCursorToCursor();
             }
         }
 
@@ -378,10 +524,14 @@ namespace Underworld
         {
             //PreviousWeaponAnimation = -1; //force redraw.
             //combat.stage = combat.CombatStages.OutOfCombat;
+            //the armed music, unless a combat theme (foe hurt, combat, danger) is playing; back to walking music
+            //only from the armed one (deal_with_icons)
+            var theme = XMIMusic.CurrentlyPlayingThemeNo;
+            var combatTheme = UWClass._RES == UWClass.GAME_UW2 ? (theme >= 2 && theme <= 4) : (theme >= 5 && theme <= 7);
             if (drawWeapon)     //(playerdat.play_drawn != 1)
             {
                 playerdat.play_drawn = 1;//draw the weapon 
-                if (updateThemes)
+                if (updateThemes && !combatTheme)
                 {
                     XMIMusic.ChangeThemeMusic(XMIMusic.Armed);
                 }
@@ -389,7 +539,7 @@ namespace Underworld
             else
             {
                 playerdat.play_drawn = 0; //ensure weapon is not drawn.
-                if (updateThemes)
+                if (updateThemes && theme == XMIMusic.Armed)
                 {
                     XMIMusic.PickLevelThemeMusic(0);
                 }
@@ -414,18 +564,15 @@ namespace Underworld
             }
         }
 
-        /// <summary>Puts the weapon away from the paperdoll: back to Use, or under modern controls to context clicks.</summary>
+        /// <summary>
+        /// Puts the weapon away from the paperdoll (punt_fightmode): no icon selected (the default mode, or context clicks
+        /// under modern controls) and the walking music.
+        /// </summary>
         public static void PutAwayWeapon()
         {
-            if (Controls.Modern)
-            {
-                ToggleWeaponAnimationState(false);
-                EnterInteractionModeNone();
-            }
-            else
-            {
-                InteractionModeToggle(InteractionModes.ModeUse);
-            }
+            ToggleWeaponAnimationState(false, updateThemes: false);
+            XMIMusic.PickLevelThemeMusic(0);
+            EnterInteractionModeNone();
         }
 
         public static void InteractionModeShowHide(bool state)

@@ -11,7 +11,7 @@ namespace Underworld
             var di_arg1 = GetConvoStackValueAtPtr(stack + stackptr-2);
             var si_arg0 = GetConvoStackValueAtPtr(stack + stackptr-1);
 
-            if ((si_arg0 >=0) && (di_arg1<0x3FF))
+            if ((si_arg0 >= 0) && (si_arg0 <= 0x3FF))//the value is checked, 0 to 0x3FF (x_traps)
             {
                 //sets variable di to value in si
                 a_set_variable_trap.VariableOperationUW2(

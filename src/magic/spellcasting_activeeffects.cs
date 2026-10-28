@@ -16,10 +16,10 @@ namespace Underworld
                 //calc stability
                 switch (stabilityclass)
                 {
-                    case 0x80:
-                        stability = Rng.DiceRoll(3, 24); break;
+                    case 0x80://set_curmagic
+                        stability = Rng.DiceRoll(3, 20) + 24; break;
                     case 0x40:
-                        stability = Rng.DiceRoll(2, 8); break;
+                        stability = Rng.DiceRoll(2, 8) + 6; break;
                     case 1:
                         stability = 1; break;
                     case 0:

@@ -84,113 +84,82 @@ namespace Underworld
         /// <param name="ItemInHand">object in hand</param>
         public static bool TryObjectCombination(uwObject ItemInInventory, uwObject ItemInHand)
         {
-            if (_RES != GAME_UW2)
+            //ObjsBeCombinable: neither may be a stack of more than one or hold anything
+            if (HoldsOrStacks(ItemInInventory) || HoldsOrStacks(ItemInHand))
             {
-                //special case for uw1, incense and torch, in game data the torch is configured to be destroyed. In game however both are preserved.
-                if (
-                    ((ItemInInventory.item_id == 278) && (ItemInHand.item_id == 149))
-                    ||
-                    ((ItemInInventory.item_id == 149) && (ItemInHand.item_id == 278))
-                )
-                {
-                    //using incence and a lit torch   
-                    if (ItemInInventory.item_id == 278)
-                    {
-                        //incense is in inventory
-                        ItemInInventory.item_id = 277;
-                        uimanager.UpdateInventoryDisplay();
-                        return true;
-                    }
-                    if (ItemInHand.item_id == 278)
-                    {
-                        ItemInHand.item_id = 277;
-                        uimanager.instance.mousecursor.SetCursorToObject(ItemInHand.item_id);
-                        return true;
-                    }
-                }
+                return false;
             }
             var combo = GetCombination(ItemInHand.item_id, ItemInInventory.item_id);
-            if (combo != null)
+            if (combo == null)
             {
-                if (combo.DestroyA == combo.DestroyB)
-                {//make sure destroy is always mutually exclusive
-                    combo.DestroyA = !combo.DestroyA;
-                }
-
-                if (combo.DestroyA)
-                {//change B to out
-                    if (ItemInInventory.item_id == combo.Obj_A)//item in inventory is the one to destroy;
-                    {
-                        //destroy object in inventory
-                        playerdat.RemoveFromInventory(ItemInInventory.index, true);
-                    }
-                    else
-                    {
-                        //assumtion here that item_id is different.
-                        if (ItemInInventory.item_id == combo.Obj_B)
-                        {
-                            //inventory changes to new object
-                            ItemInInventory.item_id = combo.Obj_Out;
-                            uimanager.UpdateInventoryDisplay();
-                        }
-                    }
-
-                    if (ItemInHand.item_id == combo.Obj_A) //item in hand is the one to destroy
-                    {
-                        playerdat.ObjectInHand = -1;
-                        uimanager.instance.mousecursor.SetCursorToCursor();
-                        ObjectFreeLists.ReleaseFreeObject(ItemInHand);
-                    }
-                    else
-                    {
-                        if (ItemInHand.item_id == combo.Obj_B)
-                        {
-                            //object in hand changes
-                            ItemInHand.item_id = combo.Obj_Out;
-                            uimanager.instance.mousecursor.SetCursorToObject(ItemInHand.item_id);
-                        }
-                    }
-                }
-
-
-                if (combo.DestroyB)
-                {//change B to out
-                    if (ItemInInventory.item_id == combo.Obj_B)//item in inventory is the one to destroy;
-                    {
-                        //destroy object in inventory
-                        playerdat.RemoveFromInventory(ItemInInventory.index, true);
-                    }
-                    else
-                    {
-                        //assumtion here that item_id is different.
-                        if (ItemInInventory.item_id == combo.Obj_A)
-                        {
-                            //inventory changes to new object
-                            ItemInInventory.item_id = combo.Obj_Out;
-                            uimanager.UpdateInventoryDisplay();
-                        }
-                    }
-
-                    if (ItemInHand.item_id == combo.Obj_B) //item in hand is the one to destroy
-                    {
-                        playerdat.ObjectInHand = -1;
-                        uimanager.instance.mousecursor.SetCursorToCursor();
-                        ObjectFreeLists.ReleaseFreeObject(ItemInHand);
-                    }
-                    else
-                    {
-                        if (ItemInHand.item_id == combo.Obj_A)
-                        {
-                            //object in hand changes
-                            ItemInHand.item_id = combo.Obj_Out;
-                            uimanager.instance.mousecursor.SetCursorToObject(ItemInHand.item_id);
-                        }
-                    }
-                }
-
-                return true;//combo has worked
+                return false;
             }
-            return false;
+            //RemoveAfterCombine: bit 15 of the source word that names the object. The output is a new object: on the cursor
+            //when the held object is used up, else in the inventory object's slot when that one is; a source that is not used
+            //up stays as it is.
+            var handUsed = (ItemInHand.item_id == combo.Obj_A) ? combo.DestroyA : combo.DestroyB;
+            var invUsed = (ItemInInventory.item_id == combo.Obj_A) ? combo.DestroyA : combo.DestroyB;
+            if (handUsed)
+            {
+                playerdat.ObjectInHand = -1;
+                ObjectFreeLists.ReleaseFreeObject(ItemInHand);
+                ObjectCreator.SpawnObjectInHand(combo.Obj_Out);
+            }
+            if (invUsed)
+            {
+                if (!handUsed)
+                {//the new object takes the inventory object's place
+                    playerdat.WeightCarried -= (short)(commonObjDat.mass(ItemInInventory.item_id) * ItemInInventory.ObjectQuantity);
+                    MakeFreshObject(ItemInInventory, combo.Obj_Out);
+                    playerdat.WeightCarried += (short)commonObjDat.mass(ItemInInventory.item_id);
+                    uimanager.RefreshWeightDisplay();
+                }
+                else
+                {
+                    playerdat.RemoveFromInventory(ItemInInventory.index, true);
+                }
+            }
+            uimanager.UpdateInventoryDisplay();
+            if (playerdat.ObjectInHand > 0)
+            {
+                uimanager.instance.mousecursor.SetCursorToObject(UWTileMap.current_tilemap.LevelObjects[playerdat.ObjectInHand].item_id);
+            }
+            else
+            {
+                uimanager.instance.mousecursor.SetCursorToCursor();
+            }
+            return true;//combo has worked
+        }
+
+        static bool HoldsOrStacks(uwObject obj)
+        {
+            return ((obj.is_quant == 1) && (obj.link > 1)) || ((obj.is_quant == 0) && (obj.link > 0));
+        }
+
+        /// <summary>
+        /// Turns obj into a new object of item_id with the defaults a created object has (CreateObj).
+        /// </summary>
+        static void MakeFreshObject(uwObject obj, int item_id)
+        {
+            obj.item_id = item_id;
+            obj.quality = 0x28;
+            obj.owner = 0;
+            obj.doordir = 0;
+            obj.invis = 0;
+            obj.enchantment = 0;
+            obj.flags = 0;
+            obj.heading = 0;
+            var stackable = commonObjDat.stackable(item_id);
+            if ((stackable == 0) || (stackable == 2))
+            {
+                obj.is_quant = 1;
+                obj.link = 1;
+            }
+            else
+            {
+                obj.is_quant = 0;
+                obj.link = 0;
+            }
         }
 
     }//end class

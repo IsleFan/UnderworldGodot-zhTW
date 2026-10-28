@@ -38,76 +38,66 @@ namespace Underworld
             var Critter_var_5 = critterObjectDat.valuable_multipleprobability(critter.item_id);
             var valuableDropProbability = critterObjectDat.valuable_loot_probability(critter.item_id);
 
-            var r = new Random();
-            if (r.Next(0, 16) >= valuableDropProbability)
+            //generate_treasure
+            if (Rng.r.Next(16) >= valuableDropProbability)
             {//Do not spawn a valuable.
                 return;
             }
+            //the treasure type: deeper (UW1 the level, UW2 the world) gives better treasure more often
+            int valuable_type_var_1;
+            if (_RES == GAME_UW2)
+            {
+                var w = (playerdat.dungeon_level - 1) / 8;
+                valuable_type_var_1 = Rng.r.Next(37 - w * 3) - (30 - w * 3);
+            }
             else
-            { //spawn valuable
-                int offset = 0; if (_RES != GAME_UW2) { offset = 3; }
-                var valuable_type_var_1 = r.Next(0, 37 + offset - world * 3) - (30 + offset - world * 3);
-                if (valuable_type_var_1 < 0) { valuable_type_var_1 = 0; }
-                if ((valuable_type_var_1 == 1) && (_RES == GAME_UW2)) { valuable_type_var_1 = 0; }//make sure no storage crystal is dropped in UW2
+            {
+                valuable_type_var_1 = Rng.r.Next(40 - playerdat.dungeon_level * 3) - (33 - playerdat.dungeon_level * 3);
+            }
+            if (valuable_type_var_1 < 0) { valuable_type_var_1 = 0; }
+            if ((valuable_type_var_1 == 1) && (_RES == GAME_UW2)) { valuable_type_var_1 = 0; }//make sure no storage crystal is dropped in UW2
 
-                //now use var_1 to look up the objects monetary value within objects.dat (starting at coin)
-                var coinitemid = 0xA0;
-                var base_objectvalue_var_2 = commonObjDat.monetaryvalue(coinitemid + valuable_type_var_1);
+            //the type's value, stretched above 4, in a signed char as the original's (gems of 25 and more go negative)
+            var coinitemid = 0xA0;
+            sbyte value = (sbyte)commonObjDat.monetaryvalue(coinitemid + valuable_type_var_1);
+            if (value == 0) { value = 1; }
+            if (value >= 12)
+            {
+                value = (sbyte)(value * 8 - 68);
+            }
+            else if (value >= 8)
+            {
+                value = (sbyte)(value * 4 - 20);
+            }
+            else if (value >= 4)
+            {
+                value = (sbyte)(value * 2 - 4);
+            }
 
-                if (base_objectvalue_var_2 == 0) { base_objectvalue_var_2 = 1; }
-
-                //Adjust the base value based on ranges, presumably to create a probability
-                if (base_objectvalue_var_2 >= 12)
+            int var_3_qty;
+            if ((Critter_var_5 << 2) < value)
+            {//one, at a chance
+                if (Rng.r.Next(value) >= (Critter_var_5 << 2))
                 {
-                    base_objectvalue_var_2 = 0xBC + (base_objectvalue_var_2 << 3);
+                    return;
                 }
-                else
+                var_3_qty = 1;
+            }
+            else
+            {//4d(2 * (4 * prob / value)) / 4
+                var dice = value == 0 ? 0 : ((Critter_var_5 << 2) / value) << 1;
+                var_3_qty = (sbyte)(Rng.DiceRoll(4, dice) >> 2);
+            }
+
+            if (var_3_qty > 0)
+            {
+                //Create obj
+                uwObject obj = spawnLootObject(critter, valuable_type_var_1 + coinitemid);
+                if (obj != null)
                 {
-                    if ((base_objectvalue_var_2 >= 8) && base_objectvalue_var_2 < 12)
-                    {
-                        base_objectvalue_var_2 = 0xEC + base_objectvalue_var_2 << 2;
-                    }
-                    else
-                    {
-                        if ((base_objectvalue_var_2 >= 4) && (base_objectvalue_var_2 < 8))
-                        {
-                            base_objectvalue_var_2 = 0xFC + (valuable_type_var_1 << 1);
-                        }
-                    }
-                }
-
-                var var_3_qty = 0;
-
-                if (Critter_var_5 < base_objectvalue_var_2)
-                {
-                    //do a rng roll to check if a single instance of the valuable is spawned.
-                    if ((Critter_var_5 << 2) < r.Next(0, base_objectvalue_var_2))
-                    {
-                        var_3_qty = 1;
-                    }
-                }
-                else
-                {
-                    // spawn a qty of the object based on a 4Dx dice roll.
-                    var qty_range_var_4 = ((Critter_var_5 << 2) / base_objectvalue_var_2) << 1;
-
-                    //do 4D dice roll.
-
-                    qty_range_var_4 = Rng.DiceRoll(4, qty_range_var_4);
-
-                    var_3_qty = qty_range_var_4 >> 2;
-                }
-
-                if (var_3_qty > 0)
-                {
-                    //Create obj
-                    uwObject obj = spawnLootObject(critter, valuable_type_var_1 + coinitemid);
-                    if (obj != null)
-                    {
-                        //Apply the new qty of valuables to the result
-                        obj.link = (short)var_3_qty;
-                        Debug.Print($"Spawning {var_3_qty} {GameStrings.GetObjectNounUW(coinitemid + valuable_type_var_1)}");
-                    }
+                    //Apply the new qty of valuables to the result
+                    obj.link = (short)var_3_qty;
+                    Debug.Print($"Spawning {var_3_qty} {GameStrings.GetObjectNounUW(coinitemid + valuable_type_var_1)}");
                 }
             }
         }
@@ -178,6 +168,7 @@ namespace Underworld
                     var obj = spawnLootObject(critter, item_id);
                     if (obj != null)
                     {
+                        obj.quality = (short)(quality & 0x3F);//the rolled quality (a 6-bit field)
                         if (qty > 0)
                         {
                             obj.link = (short)qty;
@@ -195,14 +186,13 @@ namespace Underworld
         private static int RandomLootQuality()
         {
             int quality;
-            if (Rng.r.Next(0, 2) == 0)
-            {
-                quality = Rng.r.Next(1, 0x40);
+            if (Rng.r.Next(2) == 0)
+            {//4 to 8 times the level (the 6-bit field wraps it on deep levels)
+                quality = (playerdat.dungeon_level << 2) + Rng.r.Next(playerdat.dungeon_level << 2);
             }
             else
             {
-                quality = Rng.r.Next(0, playerdat.dungeon_level << 2) + (playerdat.dungeon_level << 2);
-                quality = quality & 0x3F;
+                quality = Rng.r.Next(64);
             }
 
             return quality;
@@ -220,13 +210,14 @@ namespace Underworld
                 {
                     var item_id = critterObjectDat.otherloot_item(critter.item_id, i);
                     var quality = RandomLootQuality();
-                    if (commonObjDat.qualitytype(item_id) == 0xF)
-                    {
-                        quality = 0x40;
+                    if ((_RES == GAME_UW2) && (commonObjDat.qualitytype(item_id) == 0xF))
+                    {//UW2: these are always 40
+                        quality = 40;
                     }
                     var obj = spawnLootObject(critter, item_id);
                     if (obj!=null)
                     {
+                        obj.quality = (short)(quality & 0x3F);
                         Debug.Print($"Spawning {GameStrings.GetObjectNounUW(item_id)} of quality {quality}");
                     }                    
                 }

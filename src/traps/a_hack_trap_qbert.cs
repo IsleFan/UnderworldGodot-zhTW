@@ -140,10 +140,10 @@ namespace Underworld
             }
 
             //not tile 49,51 or after handling tile 49,51
-            if (currentTile.Ptr / 4 != playerdat.GetGameVariable(0x1D1))
+            if (currentTile.Ptr / 4 != playerdat.GetGameVariableWord(108))
             {
-                //a new tile has been stood on
-                playerdat.SetGameVariable(0x1D1, (int)(currentTile.Ptr / 4));
+                //a new tile has been stood on: its offset is kept in the word variable 108 (seq + 8)
+                playerdat.SetGameVariableWord(108, (int)(currentTile.Ptr / 4));
                 var var6 = 0xFF;
                 var di = currentTile.floorTexture;
                 var si = 0;
@@ -357,8 +357,10 @@ namespace Underworld
             var newLevel = 69;
             var randomrange = (int)tile_a.wallTexture;
 
-            //ovr110_4480:
-            while (counter <= 4)
+            //ovr110_4480: up to four picks while the destination is within 3 squares of the player both ways
+            int teleportX, teleportY;
+            TileInfo tile_b, tile_c;
+            do
             {
                 var tmpRngRange = (randomrange * 3) >> 1;
                 var RngResult_var14 = Rng.r.Next(tmpRngRange);
@@ -366,40 +368,21 @@ namespace Underworld
                 {
                     RngResult_var14 = 1;
                 }
-                //Debug.Print($"Rng for qbert is {RngResult_var14}");
-                var tile_b = UWTileMap.current_tilemap.Tiles[owner + 46, RngResult_var14 + 32];
-                var tile_c = UWTileMap.current_tilemap.Tiles[owner + 46, RngResult_var14 + 2];
-                var teleportX = tile_b.wallTexture;
-                var teleportY = tile_c.wallTexture;
+                tile_b = UWTileMap.current_tilemap.Tiles[owner + 46, RngResult_var14 + 32];
+                tile_c = UWTileMap.current_tilemap.Tiles[owner + 46, RngResult_var14 + 2];
+                teleportX = tile_b.wallTexture;
+                teleportY = tile_c.wallTexture;
+            } while ((++counter < 4)
+                && (Math.Abs(teleportX - playerdat.playerObject.tileX) < 3)
+                && (Math.Abs(teleportY - playerdat.playerObject.tileY) < 3));
 
-                var heading = ((tile_c.floorTexture + 8) << 2) + ((tile_b.floorTexture & 0x8) >> 3);
-                //if ((tile_b.floorTexture & 0x7) != 0)
-                //{
-                newLevel -= (tile_b.floorTexture & 0x7);
-                //}
-                counter++;
-                if (counter >= 4)
-                {//after 4 to find a faraway teleport destination give up and just teleport to the found locaiton.
-                    DoTeleport(
-                        teleportX: teleportX,
-                        teleportY: teleportY,
-                        newLevel: newLevel,
-                        heading: heading);
-                    return;
-                }
-                else
-                {
-                    if ((Math.Abs(teleportX - playerdat.playerObject.tileX) >= 3) || (Math.Abs(teleportY - playerdat.playerObject.tileY) >= 3))
-                    {//only teleport if destination is away from the current location.
-                        DoTeleport(
-                            teleportX: teleportX,
-                            teleportY: teleportY,
-                            newLevel: newLevel,
-                            heading: heading);
-                        return;
-                    }
-                }
-            }
+            var heading = ((tile_c.floorTexture + 8) << 2) + ((tile_b.floorTexture & 0x8) >> 3);
+            newLevel -= (tile_b.floorTexture & 0x7);//once, from the pick used
+            DoTeleport(
+                teleportX: teleportX,
+                teleportY: teleportY,
+                newLevel: newLevel,
+                heading: heading);
         }
 
         /// <summary>

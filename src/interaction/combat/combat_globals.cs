@@ -28,12 +28,12 @@ namespace Underworld
             get
             {
                 switch (WeaponSwingTypePlayer)
-                {
-                    case 0: //stab
+                {//the middle ninth of the swing's row: stab low, slash level, bash high
+                    case 2: //stab
                         return 2;
-                    case 2: //bash
+                    case 1: //bash
                         return 8;
-                    case 1:
+                    case 0:
                     default:
                         return 5; //slash
 

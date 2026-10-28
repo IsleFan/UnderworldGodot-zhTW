@@ -35,18 +35,29 @@ namespace Underworld
         {
             if (@event is InputEventMouseButton eventMouseButton && eventMouseButton.Pressed)
             {
+                if (SpellCasting.currentSpell != null || playerdat.ObjectInHand != -1 || useon.CurrentItemBeingUsed != null)
+                {
+                    return;//mous_in_rune: nothing while another input mode is active
+                }
                 bool LeftClick = (eventMouseButton.ButtonIndex == MouseButton.Left);
                 if (extra_arg_0 >= 0)
                 {
                     if (playerdat.GetRune((int)extra_arg_0))
                     {
-                        if ((InteractionMode == InteractionModes.ModeLook) || (!LeftClick))
-                        {
-                            look.GenericLookDescription((int)(232 + extra_arg_0));
+                        if (!LeftClick)
+                        {//mous_in_rune looks on the right button whatever the interaction mode: LookAt(a runestone with no link or owner, 0)
+                            var runestone = new uwObject { IsStatic = true, index = 1, PTR = 0, DataBuffer = new byte[8] };
+                            runestone.item_id = (int)(232 + extra_arg_0);
+                            look.LookAt(runestone, new[] { null, runestone }, 0);
                         }
                         else
                         {
                             //use action
+                            if (RunicMagic.ClearShelfOnNextRune)
+                            {//the first rune after a cast attempt starts a new shelf
+                                ClearSelectedRunes();
+                            }
+                            RunicMagic.ClearShelfOnNextRune = false;
                             SelectRune((int)extra_arg_0);
                         }
                     }
@@ -58,14 +69,23 @@ namespace Underworld
                 else
                 {
                     //clear runes  
-                    for (int i = 0; i < 3; i++)
-                    {
-                        playerdat.SetSelectedRune(i, 24);
-                    }
-                    playerdat.NoOfSelectedRunes = 0;
-                    RedrawSelectedRuneSlots();
+                    ClearSelectedRunes();
                 }
             }
+        }
+
+
+        /// <summary>
+        /// Empties the shelf of runes to cast (clear_shelf).
+        /// </summary>
+        static void ClearSelectedRunes()
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                playerdat.SetSelectedRune(i, 24);
+            }
+            playerdat.NoOfSelectedRunes = 0;
+            RedrawSelectedRuneSlots();
         }
 
 

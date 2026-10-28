@@ -48,6 +48,8 @@ namespace Underworld
 		static int TeleportToLevel = -1;
 		static int TeleportTileX = -1;
 		static int TeleportTileY = -1;
+		static int TeleportTalkerX = -1;//teleport_talker: done when the conversation ends, as do_babl_teleport
+		static int TeleportTalkerY = -1;
 
 		public static IEnumerator RunConversationVM(uwObject talker)
 		{
@@ -101,20 +103,10 @@ namespace Underworld
 
 					case cnv_OPDIV:
 						{
-							if (at(stack + stackptr) == 0)
-							{
-								Debug.Print($"Divide by Zero Error at OPDIV {instrp}");
-								Push(0x7FFF);
-							}
-							else
-							{
-								int arg1 = Pop();
-								int arg2 = Pop();
-								//if (arg1==0)
-								//	throw ua_ex_div_by_zero;
-								if (testing) { Debug.Print($"{instrp}:Div {arg2},{arg1}"); }
-								Push(arg2 / arg1);
-							}
+							int arg1 = Pop();
+							int arg2 = Pop();
+							if (testing) { Debug.Print($"{instrp}:Div {arg2},{arg1}"); }
+							Push(arg1 == 0 ? 0x7FFF : arg2 / arg1);//division by zero gives 0x7FFF, the operands still go (BABL_DIV)
 							break;
 						}
 
@@ -124,9 +116,7 @@ namespace Underworld
 							int arg1 = Pop();
 							int arg2 = Pop();
 							if (testing) { Debug.Print($"{instrp}:Mod {arg1},{arg2}"); }
-							//if (arg1==0)
-							//	throw ua_ex_div_by_zero;
-							Push(arg2 % arg1);
+							Push(arg1 == 0 ? 0x7FFF : arg2 % arg1);//so does the remainder (BablMod)
 							break;
 						}
 
@@ -136,7 +126,7 @@ namespace Underworld
 							var arg1 = Pop();
 							var arg2 = Pop();
 							if (testing) { Debug.Print($"{instrp}:Or {arg1},{arg2}"); }
-							Push(arg1 | arg2);
+							Push(((arg1 != 0) || (arg2 != 0)) ? 1 : 0);//logical, 0 or 1
 						}
 						break;
 
@@ -145,7 +135,7 @@ namespace Underworld
 							var arg1 = Pop();
 							var arg2 = Pop();
 							if (testing) { Debug.Print($"{instrp}:AND {arg1},{arg2}"); }
-							Push(arg1 & arg2);
+							Push(((arg1 != 0) && (arg2 != 0)) ? 1 : 0);//logical, 0 or 1
 						}
 						break;
 
@@ -553,9 +543,21 @@ namespace Underworld
 						}
 
 					case cnv_RESPOND_OP:
-						{// do nothing
-							if (testing) { Debug.Print($"{instrp}:RESPOND"); }
-							Debug.Print("Respond_Op");
+						{//pops a string and shows it as the player's line (babl_respond, play_respond)
+							int arg1 = Pop();
+							if (testing) { Debug.Print($"{instrp}:RESPOND {arg1}"); }
+							yield return say_op(arg1, PC_SAY);
+							break;
+						}
+
+					case cnv_STRCMP:
+						{//pops two strings and pushes 1 when they match after substitution, case and all (vm_strcmp)
+							int arg1 = Pop();
+							int arg2 = Pop();
+							var s1 = TextSubstitute(getString(arg1));
+							var s2 = TextSubstitute(getString(arg2));
+							if (testing) { Debug.Print($"{instrp}:STRCMP {s2} {s1}"); }
+							Push(string.Equals(s2, s1, System.StringComparison.Ordinal) ? 1 : 0);
 							break;
 						}
 
@@ -567,9 +569,9 @@ namespace Underworld
 						}
 
 
-					default: // unknown opcode
+					default: // unknown opcode: the interpreter stops (babl_run)
 						if (testing) { Debug.Print($"{instrp}:UNKNOWN"); }
-						//throw ua_ex_unk_opcode;
+						finished = true;
 						break;
 				} //end switch
 
@@ -582,9 +584,16 @@ namespace Underworld
 				}
 			} //end loop            
 
-			//wait one second and then wait until player input
-			yield return new WaitForSeconds(1);
-			yield return pause();
+			//the variables go back at once; then the scroll waits 0x1F4 ticks or a key, with no time limit when the NPC
+			//was left hostile or had the last word
+			if (ExportVariables(talker) || !LastLineWasPlayers)
+			{
+				yield return pause();
+			}
+			else
+			{
+				yield return MessageDisplay.ScrollWait(0x1F4);
+			}
 
 			ExitConversation(talker, currentConversation);
 			yield return null;
@@ -593,19 +602,9 @@ namespace Underworld
 		private static void ExitConversation(uwObject talker, Conversation conv)
 		{
 
-			if (_RES != GAME_UW2)
-			{
-				XMIMusic.PickLevelThemeMusic(0);
-			}
-			else
-			{
-				if (playerdat.play_drawn == 1)
-				{
-					XMIMusic.ChangeThemeMusic(XMIMusic.Armed);
-				}
-			}
+			//free_converse: the level's music again (UW2 set_random_walking_music(-1))
+			XMIMusic.PickLevelThemeMusic(_RES != GAME_UW2 ? 0 : -1);
 
-			ExportVariables(talker);
 			uimanager.EnableDisable(uimanager.instance.ConversationPanelUW1, false);
 			uimanager.EnableDisable(uimanager.instance.ConversationPanelUW2, false);
 			if (_RES == GAME_UW2)
@@ -639,29 +638,8 @@ namespace Underworld
 				ObjectRemover_OLD.DeleteObjectFromTile_DEPRECIATED(talker.tileX, talker.tileY, talker.index, true);
 			}
 			TemporaryTalker = false;
-			for (int i = 0; i < uimanager.NoOfTradeSlots; i++)
-			{//move remaining objects in the trade area to the players tile.
-				var objindex = uimanager.GetPlayerTradeSlot(i, true);
-				if (objindex != -1)
-				{
-					var tile = UWTileMap.current_tilemap.Tiles[playerdat.playerObject.tileX, playerdat.playerObject.tileY];
-					UWTileMap.GetRandomXYZForTile(tile, out int newxpos, out int newypos, out int newzpos);
-					var tradeObject = UWTileMap.current_tilemap.LevelObjects[objindex];
-					tradeObject.tileX = tile.tileX; tradeObject.tileY = tile.tileY;
-					tradeObject.xpos = (short)newxpos; tradeObject.ypos = (short)newypos; tradeObject.zpos = (short)newzpos;
-					tradeObject.next = tile.indexObjectList;
-					tile.indexObjectList = tradeObject.index;
-					objectInstance.RedrawFull(tradeObject);
-					// var dropcoordinate = uwObject.XYZToVector3(x: (newxpos << 5) + (playerdat.playerObject.tileX << 8), y: tile.floorHeight << 3, z: (newypos << 5) + (playerdat.playerObject.tileY << 8)); //uwObject.GetCoordinate_OBSOLETE(playerdat.playerObject.tileX, playerdat.playerObject.tileY, newxpos, newypos, newzpos);
+			end_barter();//anything left in the trade area goes back
 
-					// pickup.Drop_old(
-					// 	index: objindex,
-					// 	objList: UWTileMap.current_tilemap.LevelObjects,
-					// 	dropPosition: dropcoordinate,
-					// 	tileX: playerdat.playerObject.tileX,
-					// 	tileY: playerdat.playerObject.tileY);
-				}
-			}
 			uimanager.instance.convo.Clear();
 			uimanager.CurrentGameMode = uimanager.GameModes.GAME;
 
@@ -686,6 +664,11 @@ namespace Underworld
 				scd.ProcessSCDArk(mode: 1);
 			}
 
+			if (TeleportTalkerX >= 0)
+			{//(the original moves the talker after the player, to the player's new level; here it moves on its own level first)
+				npc.moveNPCToTile(critter: talker, destTileX: TeleportTalkerX, destTileY: TeleportTalkerY);
+				TeleportTalkerX = -1;
+			}
 			if (DoTeleport)
 			{
 				if (UWTileMap.ValidTile(TeleportTileX, TeleportTileY))

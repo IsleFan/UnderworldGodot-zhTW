@@ -84,6 +84,8 @@ namespace Underworld
 			 musicalinstrument.PlayingInstrument
 			 ||
 			 uimanager.CurrentGameMode == GameModes.OPTIONS
+			 ||
+			 Teleportation.Fading
 			 ;
 		}
 	}

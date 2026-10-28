@@ -158,6 +158,8 @@ namespace Underworld
 				// exists to let the server collect a playback that Stop() has detached, and
 				// a producer that missed its join has not detached one yet. Retry first,
 				// then drain, so the two never collapse into the same frame.
+				var digital = main.instance?.DigitalAudioPlayer;
+				DigitalEffectPlayback.BeginShutdown(digital);
 				bool stopped = Stop(music) & Stop(sfx);
 				for (int attempt = 0; !stopped && attempt < 3; attempt++)
 				{
@@ -191,6 +193,7 @@ namespace Underworld
 					{
 						sfx.ReleaseGodotAudioBindings();
 					}
+					DigitalEffectPlayback.ReleaseBindings();
 				}
 
 				await ToSignal(tree, SceneTree.SignalName.ProcessFrame);

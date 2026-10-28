@@ -160,11 +160,11 @@ namespace Underworld
             }
         }
 
-        public static ushort CollisionZposHeightRelated_dseg_67d6_419
-        {//0x1D
+        public static short CollisionZposHeightRelated_dseg_67d6_419
+        {//0x1D, MP.targz: a signed 16-bit int (below an object it can be negative)
             get
             {
-                return (ushort)DataLoader.getAt(data_3FC, 0x1D, 16);
+                return (short)DataLoader.getAt(data_3FC, 0x1D, 16);
             }
             set
             {
@@ -409,15 +409,15 @@ namespace Underworld
                 DataLoader.setAt(data, 0x10, 16, value);
             }
         }
-        public sbyte speed_12
-        {
+        public short speed_12
+        {//the time units left to move (Phys.time, a 16-bit int)
             get
             {
-                return (sbyte)DataLoader.getAt(data, 0x12, 8);
+                return (short)DataLoader.getAt(data, 0x12, 16);
             }
             set
             {
-                DataLoader.setAt(data, 0x12, 8, value);
+                DataLoader.setAt(data, 0x12, 16, value);
             }
         }
 
@@ -1176,12 +1176,12 @@ namespace Underworld
         public int UnkF//2571
         {
             get
-            {//to confirm is this a byte or a word?
-                return (int)DataLoader.getAt(dseg_2562, 0xF, 8);
+            {//the flags word of the third corner (pnt[2].flags), as the other three corners' flags
+                return (int)DataLoader.getAt(dseg_2562, 0xF, 16);
             }
             set
             {
-                DataLoader.setAt(dseg_2562, 0xF, 8, value);
+                DataLoader.setAt(dseg_2562, 0xF, 16, value);
             }
         }
 

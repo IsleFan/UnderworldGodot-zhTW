@@ -18,29 +18,42 @@ namespace Underworld
     /// </summary>
     public static class Controls
     {
+        /// <summary>The button that drags objects, in both games: the right one unless the settings choose the left.</summary>
+        public static MouseButton DragButton => uwsettings.instance?.dragwithleft == true ? MouseButton.Left : MouseButton.Right;
+
         public enum Action
         {
             Forward, Back, StrafeLeft, StrafeRight, TurnLeft, TurnRight, Jump, FlyUp, FlyDown,
-            LookDown, LookUp, LookCentre, MouseLook, Weapon, Bash, Slash, Stab
+            LookDown, LookUp, LookCentre, MouseLook, Weapon, Bash, Slash, Stab, Walk
         }
 
-        /// <summary>The original's keys; MouseLook and Weapon are modern only.</summary>
+        /// <summary>
+        /// The original's keys (PLAYER.C, PLAYMOVE.C's move_keys): w run, s walk, x back, a and d turn, z and c slide,
+        /// e and q fly up and down; MouseLook and Weapon are modern only. Walk is classic only.
+        /// </summary>
         static readonly Dictionary<Action, Key> ClassicKeys = new()
         {
+            { Action.Forward, Key.W }, { Action.Walk, Key.S }, { Action.Back, Key.X }, { Action.StrafeLeft, Key.Z },
+            { Action.StrafeRight, Key.C }, { Action.TurnLeft, Key.A }, { Action.TurnRight, Key.D }, { Action.Jump, Key.J },
+            { Action.FlyUp, Key.E }, { Action.FlyDown, Key.Q }, { Action.LookDown, Key.Key1 }, { Action.LookUp, Key.Key3 },
+            { Action.LookCentre, Key.Key2 }, { Action.Bash, Key.P }, { Action.Slash, Key.Semicolon }, { Action.Stab, Key.Period },
+        };
+
+        /// <summary>Modern defaults: W/S forward and back, A/D slide, Q/E turn, R/F fly, Space to jump, Tab for mouse look, X for the weapon (Shift walks).</summary>
+        static readonly Dictionary<Action, Key> ModernKeys = new()
+        {
             { Action.Forward, Key.W }, { Action.Back, Key.S }, { Action.StrafeLeft, Key.A }, { Action.StrafeRight, Key.D },
-            { Action.TurnLeft, Key.Q }, { Action.TurnRight, Key.E }, { Action.Jump, Key.J }, { Action.FlyUp, Key.R },
+            { Action.TurnLeft, Key.Q }, { Action.TurnRight, Key.E }, { Action.Jump, Key.Space }, { Action.FlyUp, Key.R },
             { Action.FlyDown, Key.F }, { Action.LookDown, Key.Key1 }, { Action.LookUp, Key.Key3 }, { Action.LookCentre, Key.Key2 },
+            { Action.MouseLook, Key.Tab }, { Action.Weapon, Key.X },
             { Action.Bash, Key.P }, { Action.Slash, Key.Semicolon }, { Action.Stab, Key.Period },
         };
 
-        /// <summary>Modern defaults: the classic keys, Space to jump, Tab for mouse look, X for the weapon.</summary>
-        public static Key DefaultKey(Action action) => action switch
-        {
-            Action.Jump => Key.Space,
-            Action.MouseLook => Key.Tab,
-            Action.Weapon => Key.X,
-            _ => ClassicKeys[action],
-        };
+        /// <summary>The classic key of <paramref name="action"/>, none for the modern-only ones.</summary>
+        public static Key ClassicKey(Action action) => ClassicKeys.TryGetValue(action, out var k) ? k : Key.None;
+
+        /// <summary>The modern default key of <paramref name="action"/>, none for the classic-only Walk.</summary>
+        public static Key DefaultKey(Action action) => ModernKeys.TryGetValue(action, out var k) ? k : Key.None;
 
         /// <summary>Further keys modern controls accept, while nothing else is bound to them.</summary>
         static readonly (Key Key, Action Action)[] ExtraKeys =
@@ -55,7 +68,7 @@ namespace Underworld
         {
             if (!Modern)
             {
-                return ClassicKeys.TryGetValue(action, out var k) ? k : Key.None;
+                return ClassicKey(action);
             }
             if (uwsettings.instance.keys != null && uwsettings.instance.keys.TryGetValue(action.ToString(), out var name))
             {
@@ -102,6 +115,27 @@ namespace Underworld
                 if (KeyFor(a) == key) { return true; }
             }
             return false;
+        }
+
+        /// <summary>
+        /// The icon of function key F1 + n (PLAYER.C's key table, deal_with_icons): UW1 options, talk, get, look, fight,
+        /// use; UW2 fight, use, get, talk, look, options.
+        /// </summary>
+        public static uimanager.InteractionModes FunctionKeyIcon(int n)
+        {
+            if (UWClass._RES != UWClass.GAME_UW2)
+            {
+                return (uimanager.InteractionModes)n;
+            }
+            return n switch
+            {
+                0 => uimanager.InteractionModes.ModeAttack,
+                1 => uimanager.InteractionModes.ModeUse,
+                2 => uimanager.InteractionModes.ModePickup,
+                3 => uimanager.InteractionModes.ModeTalk,
+                4 => uimanager.InteractionModes.ModeLook,
+                _ => uimanager.InteractionModes.ModeOptions,
+            };
         }
 
         // ---- mouse look ----

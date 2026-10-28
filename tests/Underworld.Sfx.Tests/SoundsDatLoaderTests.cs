@@ -51,6 +51,31 @@ public class SoundsDatLoaderTests
     }
 
     [Fact]
+    public void Uw2_digi_byte_says_whether_the_effect_has_a_voc()
+    {
+        // UW2's 8-byte entries keep a digi byte at 5 (SOUND.C struct Effect): 0 plays the MIDI patch even
+        // where an SPnn.VOC exists, as entry 40 does in the shipped SOUNDS.DAT. UW1's 5-byte entries have none.
+        var origRes = UWClass._RES;
+        var tmp = System.IO.Path.GetTempFileName();
+        try
+        {
+            UWClass._RES = UWClass.GAME_UW2;
+            System.IO.File.WriteAllBytes(tmp, new byte[] {
+                2,
+                0x20, 0x3C, 0x60, 0x00, 0x40, 0, 0, 1,
+                0x21, 0x3C, 0x60, 0x00, 0x40, 1, 0, 1 });
+            var entries = SoundsDatLoader.Load(tmp);
+            Assert.False(entries[0].Digi);
+            Assert.True(entries[1].Digi);
+        }
+        finally
+        {
+            UWClass._RES = origRes;
+            System.IO.File.Delete(tmp);
+        }
+    }
+
+    [Fact]
     public void Uw1_duration_word_is_big_endian()
     {
         // A 1-entry UW1 file (5-byte entries) whose duration bytes are 0x01 0x80: the

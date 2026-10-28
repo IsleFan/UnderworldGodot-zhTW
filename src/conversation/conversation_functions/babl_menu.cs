@@ -47,11 +47,7 @@ namespace Underworld
                 }
             }
             uimanager.AddToMessageScroll(finaltext);
-            WaitingForInput=true;
-            while(WaitingForInput)
-            {
-                yield return new WaitOneFrame();     
-            }
+            yield return WaitForMenuAnswer(finaltext);
             uimanager.instance.scroll.Clear();
             int AnswerIndex = at(Start + PlayerNumericAnswer - 1);
             yield return say_op(AnswerIndex, PC_SAY);            

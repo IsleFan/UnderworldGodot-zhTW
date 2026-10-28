@@ -106,7 +106,9 @@ re-reads unmutated blocks from disk at save time.
 ## Known limitations
 
 **UW2 save is enabled.** The Options menu's Save writes UW2 slots through the same
-`SaveGame.Save` orchestrator as UW1. Level blocks are stored uncompressed (flag 0), which
+`SaveGame.Save` orchestrator as UW1. Level blocks are stored uncompressed (the source's flag with bit 1, compressed,
+cleared; bits 0 and 2 kept as DOS's put_arc keeps them), each reserving exactly its own length so DOS rewrites it in
+place instead of rebuilding the file around a wrong allocation, which
 the port's loader reads; per @AlistairBrown (PR #33 review) DOS UW2 also accepts
 uncompressed level blocks when the flag says so. Each level block is written at 0x7E08
 bytes, the length every level block in the shipped LEV.ARK and in DOS saves decompresses
@@ -141,10 +143,10 @@ permission loss), `SAVE{n}/` is left in a partial state that the loader may
 crash on. Mitigation: write all files to `SAVE{n}.tmp/` then
 `Directory.Move` on success. Not implemented.
 
-**Automap visited-tile state passes through from source ARK.** Map notes
-ARE now persisted (see `LevArkWriter` automap-notes reconstruction), but
-visited-tile shading is not: requires serialising `automap.automaps[i]`
-back into ARK blocks `i+27` (UW1) or `i+160` (UW2). Noted as follow-up.
+**Automap visited tiles and notes are persisted.** `LevArkWriter` writes
+`automap.automaps[i]` (every level loaded this session) back into ARK blocks
+`i+27` (UW1) or `i+160` (UW2, the original's `0x9F + level`), and the notes into
+`i+36` / `i+240`. Levels not loaded keep the source ARK's blocks.
 
 **UI polish.** Description fallback is `"Save {slot}"`; no text-input prompt
 for custom descriptions. Existing slot DESC is reused on overwrite. Save-menu

@@ -6,21 +6,19 @@ namespace Underworld
     public class a_hack_trap_coward : trap
     {
         public static bool Activate(int character)
-        {   
-            if (character == 0)
-            {//Avatar has fled.
-                if (playerdat.IsFightingInPit)
-                {
+        {//hack 30: only while the avatar is fighting in the pits; the chain goes on either way
+            if (playerdat.IsFightingInPit)
+            {
+                if (character == playerdat.playerObject.index)
+                {//Avatar has fled.
                     pitsofcarnage.AvatarIsACoward();
                 }
-                return true;
+                else
+                {
+                    pitsofcarnage.DefeatLivingPitFighter(character);
+                }
             }
-            else
-            {
-                //NPC. Not yet implemented.
-                pitsofcarnage.DefeatLivingPitFighter(character);
-                return false;
-            }
+            return true;
         }
     }//end class
 }//end namespace

@@ -355,7 +355,7 @@ namespace Underworld
             }
             else
             {
-                return playerdat.Defense;
+                return playerdat.DefenceScore;
             }
         }
 

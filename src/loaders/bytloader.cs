@@ -130,6 +130,47 @@ namespace Underworld
             return LoadImageAt(index, false);
         }
 
+        /// <summary>
+        /// A 320x200 screen's palette indices as they are on disk (no HD art), for drawing on it the way the original
+        /// does (the automap). Null when it cannot be read.
+        /// </summary>
+        public byte[] RawScreen(int index)
+        {
+            if (_RES == GAME_UW2)
+            {
+                if (!ReadStreamFile(Path.Combine(BasePath, "DATA", "BYT.ARK"), out byte[] ark))
+                {
+                    return null;
+                }
+                long count = getAt(ark, 0, 8);
+                int offset = (int)getAt(ark, (index * 4) + 6, 32);
+                if (offset == 0)
+                {
+                    return null;
+                }
+                int flags = (int)getAt(ark, ((index * 4) + 6) + (count * 4), 32);
+                if (((flags >> 1) & 1) == 1)
+                {
+                    int datalen = 0;
+                    return DataLoader.unpackUW2(tmpBuffer: ark, address_pointer: offset, datalen: ref datalen);
+                }
+                var raw = new byte[320 * 200];
+                System.Array.Copy(ark, offset, raw, 0, System.Math.Min(raw.Length, ark.Length - offset));
+                return raw;
+            }
+            if (!ReadStreamFile(Path.Combine(BasePath, "DATA", FilePaths[index]), out byte[] data))
+            {
+                return null;
+            }
+            return data;
+        }
+
+        /// <summary>The palette a screen is shown with.</summary>
+        public Palette ScreenPalette(int index)
+        {
+            return PaletteLoader.Palettes[_RES == GAME_UW2 ? PaletteIndicesUW2[index] : PaletteIndices[index]];
+        }
+
         public override ImageTexture LoadImageAt(int index, bool UseAlphaChannel)
         {
             switch (_RES)

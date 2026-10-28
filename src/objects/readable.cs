@@ -6,170 +6,101 @@ namespace Underworld
     {
 
         /// <summary>
-        /// The use interaction. Reads the object unless there is a special effect or magic to be cast
+        /// UseBook (the maps are map.Use and a_bit_of_a_map.Use): only from the inventory. A plain one (or a decal's)
+        /// plays cutscene 0x100 + its text with id bit 10, reads a text below 0x100 after 'You read the <name>...', and
+        /// above that is UW1's stew recipe (UW2's make_stew does nothing). An enchanted one casts its spell, used up when it casts.
         /// </summary>
-        /// <param name="obj"></param>
-        /// <returns></returns>
         public static bool Use(uwObject ObjectUsed, bool WorldObject)
         {
-            uwObject[] objList;
             if (WorldObject)
             {
-                objList = UWTileMap.current_tilemap.LevelObjects;
-            }
-            else
-            {
-                objList = playerdat.InventoryObjects;
-            }
-            if (_RES == GAME_UW2)
-            {
-                var magicenchantment = MagicEnchantment.GetSpellEnchantment(ObjectUsed, objList);
-                if ((magicenchantment != null) && (!WorldObject))
-                {
-                    //uimanager.AddToMessageScroll($"Cast a spell from this object", colour: 2);
-                    MagicEnchantment.CastObjectSpell(ObjectUsed, magicenchantment);
-                    ObjectCreator.Consume(ObjectUsed, true);
-                    return true;
-                }
-                else
-                {
-                    return LookAt(ObjectUsed, WorldObject);
-                }
-            }
-            else
-            {
-                if (ObjectUsed.enchantment == 0 || (ObjectUsed.enchantment == 1 && ObjectUsed.majorclass == 5))
-                {
-                    if (ObjectUsed.flags1 == 0)
-                    {
-                        if ((ObjectUsed.link & 0x1FF) < 0x100)
-                        {
-                            return LookAt(ObjectUsed, WorldObject);//default read
-                        }
-                        else
-                        {
-                            //rotworm stew and only rotworm stew
-                            return rotwormstew.MixRotwormStew();
-                        }
-                    }
-                    else
-                    {
-                        var cutsno = (ObjectUsed.link & 0x1ff) + 0x100;
-                        //uimanager.AddToMessageScroll($"Display Cutscene {cutsno}", colour: 2);
-                        uimanager.EnableDisable(uimanager.instance.uwviewport,false); 
-                        cutsplayer.PlayCutscene(CutsceneNo: 0x100 + (ObjectUsed.link & 0x1FF), callBackMethod: cutsplayer.RestoreViewPort, useSingleRedChannel: true);
-                        return true;
-                    }
-                }
-                else
-                {
-                    var magicenchantment = MagicEnchantment.GetSpellEnchantment(ObjectUsed, objList);
-                    if (magicenchantment != null)
-                    {
-                        //uimanager.AddToMessageScroll($"Cast a spell from this object", colour: 2);
-                        MagicEnchantment.CastObjectSpell(ObjectUsed, magicenchantment);
-                        ObjectCreator.Consume(ObjectUsed, true);
-                    }
-                    return true;
-                }
-            }
-        }
-
-        /// <summary>
-        /// The read interation.
-        /// </summary>
-        /// <param name="obj"></param>
-        /// <returns></returns>
-        public static bool LookAt(uwObject ObjectUsed, bool WorldObject)
-        {
-            if (WorldObject)
-            {
-                look.GenericLookDescription(ObjectUsed.item_id, 1);
                 return true;
             }
-            else
+            if ((ObjectUsed.enchantment == 0) || (ObjectUsed.majorclass == 5))
             {
-                if (ObjectUsed.is_quant == 1)
+                var text = ObjectUsed.link & 0x1FF;
+                if (ObjectUsed.flags1 == 1)
                 {
-                    uwObject[] objList;
-                    if (WorldObject)
-                    {
-                        objList = UWTileMap.current_tilemap.LevelObjects;
-                    }
-                    else
-                    {
-                        objList = playerdat.InventoryObjects;
-                    }
-
-                    var magicenchantment = MagicEnchantment.GetSpellEnchantment(ObjectUsed, objList);
-                    if (magicenchantment == null)
-                    {
-                        if (_RES != GAME_UW2)
-                        {
-                            //check if has special flags. If not then read it
-                            ReadObject(ObjectUsed);
-                        }
-                        else
-                        {
-                            if (ObjectUsed.item_id == 0x139)//map piece
-                            {
-                                //TODO
-                                Debug.Print("MAP PIECE LOOKAT");//I think this is already done?
-                            }
-                            else
-                            {
-                                if ((ObjectUsed.enchantment == 1) && (ObjectUsed.majorclass == 5))
-                                {
-                                    return false;
-                                }
-                                else
-                                {
-                                    if ((ObjectUsed.link & 0x1FF) == 6)
-                                    {
-                                        playerdat.SetQuest(106,1);//You have looked at Mors Gothris spellbook.
-                                    }
-                                    ReadObject(ObjectUsed);
-                                }
-                            }
-                        }                        
-                    }
-                    else
-                    {
-                        look.PrintLookDescription(obj: ObjectUsed, objList: objList, lorecheckresult: look.LoreCheck(ObjectUsed));
-                    }
+                    uimanager.EnableDisable(uimanager.instance.uwviewport, false);
+                    cutsplayer.PlayCutscene(CutsceneNo: 0x100 + text, callBackMethod: cutsplayer.RestoreViewPort, useSingleRedChannel: true);
+                }
+                else if (text < 0x100)
+                {
+                    ReadWithName(ObjectUsed, text);
+                }
+                else if (_RES != GAME_UW2)
+                {
+                    return rotwormstew.MixRotwormStew();
                 }
                 return true;
             }
+            var magicenchantment = MagicEnchantment.GetSpellEnchantment(ObjectUsed, playerdat.InventoryObjects);
+            if ((magicenchantment != null) && MagicEnchantment.CastObjectSpell(ObjectUsed, magicenchantment))
+            {//a scroll is used up only when it casts
+                ObjectCreator.Consume(ObjectUsed, true);
+            }
+            return true;
         }
 
-
         /// <summary>
-        /// Look at the flags on the object and read it's contents as appropiate.
+        /// 'You read the <name>...' (UW1 'UNNAMED' without a name) and text from block 3; UW2 text 6 sets quest 26 bit 2.
         /// </summary>
-        /// <param name="ObjectUsed"></param>
-        private static void ReadObject(uwObject ObjectUsed)
+        static void ReadWithName(uwObject obj, int text)
         {
-            if (ObjectUsed.flags1 == 0)
+            if (ZhText.Enabled)
             {
-                if (ObjectUsed.link > 512)
-                {
-                    //just display the text
-                    uimanager.AddToMessageScroll(GameStrings.GetDisplayString(3, ObjectUsed.link & 0x1FF));
-                }
-                else
-                {
-                    //display the text with the prefix You read the item name
-                    uimanager.AddToMessageScroll(ZhText.Enabled
-                        ? ZhText.YouRead(ObjectUsed.item_id)
-                        : $"You read the {GameStrings.GetSimpleObjectNameUW(ObjectUsed.item_id)}");
-                    uimanager.AddToMessageScroll(GameStrings.GetDisplayString(3, ObjectUsed.link & 0x1FF));
-                }
+                look.Print(ZhText.YouRead(obj.item_id));
             }
             else
             {
-                uimanager.EnableDisable(uimanager.instance.uwviewport,false); 
-                cutsplayer.PlayCutscene(CutsceneNo: 0x100 + (ObjectUsed.link & 0x1FF), callBackMethod: cutsplayer.RestoreViewPort, useSingleRedChannel: true);
+                var name = GameStrings.GetName(obj.item_id, article: false, plural: false);
+                look.Print($"You read the {((name == "") && (_RES != GAME_UW2) ? "UNNAMED" : name)}...");
             }
+            if ((_RES == GAME_UW2) && (text == 6))
+            {
+                playerdat.SetQuest(106, 1);//You have looked at Mors Gothris spellbook.
+            }
+            look.Print(GameStrings.GetDisplayString(3, text));
+        }
+
+        /// <summary>
+        /// BookLook, the second line of a look at a book or scroll (print 1 or more): the map says 'Enscribed upon the
+        /// scroll is your map.' (UW1 0x97, UW2 0xA5), a UW2 bit of a map and an enchanted one nothing, one with id bit 10
+        /// plays cutscene 0x100 + its text; a text number above 0xFF is printed alone, a lower one after 'You read the
+        /// <name>...'. UW2 text 6 sets quest 26 bit 2.
+        /// </summary>
+        public static void BookLook(uwObject obj, int print)
+        {
+            if (print < 1)
+            {
+                return;
+            }
+            if (obj.item_id == (_RES == GAME_UW2 ? 0x13A : 0x13B))
+            {
+                look.Print(GameStrings.GetDisplayString(1, _RES == GAME_UW2 ? 0xA5 : 0x97));
+                return;
+            }
+            if ((_RES == GAME_UW2) && (obj.item_id == 0x139))
+            {
+                return;
+            }
+            if ((obj.enchantment == 1) && (obj.majorclass != 5))
+            {
+                return;
+            }
+            var text = obj.link & 0x1FF;
+            if (obj.flags1 == 1)
+            {
+                uimanager.EnableDisable(uimanager.instance.uwviewport, false);
+                cutsplayer.PlayCutscene(CutsceneNo: 0x100 + text, callBackMethod: cutsplayer.RestoreViewPort, useSingleRedChannel: true);
+                return;
+            }
+            if (text > 0xFF)
+            {
+                look.Print(GameStrings.GetDisplayString(3, text));
+                return;
+            }
+            ReadWithName(obj, text);
         }
 
     }//end class

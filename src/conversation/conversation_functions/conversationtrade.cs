@@ -70,7 +70,7 @@ namespace Underworld
                         obj: obj);
                 }
             }
-            return result;
+            return (short)result;//a 16-bit sum, which wraps as DOS's does (total_offering)
         }
 
 
@@ -98,7 +98,7 @@ namespace Underworld
                         obj: obj);
                 }
             }
-            return result;
+            return (short)result;//a 16-bit sum, which wraps as DOS's does (total_offering)
         }
 
         // private static int GetTrueItemValue(bool ApplyLikeDislike, int appraise_accuracy, bool applyAccuracy, int index)
@@ -150,103 +150,102 @@ namespace Underworld
         /// <param name="applyAccuracy"></param>
         /// <returns></returns>
         static int GetTradeValueOfItem(uwObject obj, bool ApplyLikeDislike = false, int appraise_accuracy = 0, bool applyAccuracy = false)
-        {
-            float multiplier = 1f;
-            int itemvalue = 0;
-            var itemCategory = obj.item_id >> 4;
-
-            var quality = obj.quality;
-            if (((obj.item_id == 160) || (obj.item_id == 161)) && (_RES != GAME_UW2))
-            {
-                quality = 63;
-            }
-            if (((obj.item_id == 160)) && (_RES == GAME_UW2))
-            {
-                quality = 63;
-            }
-
+        {//assess_value: the class value (1.5 times if liked, nothing if disliked) times the quantity times quality / 64,
+         //at least 1 while the quality is above 0, blurred by up to the accuracy %, the same each time for the object
+            int itemvalue = commonObjDat.monetaryvalue(obj.item_id);
             if (ApplyLikeDislike)
             {
-                //return the value adjusted for the npc likes dislikes.
-                if (Likes != 0)
-                {//loop the stack starting at Likes until value 0xFF is hit.
-                 //if value is >=1000 then liked is a class of object
-                 //if value < 1000 then liked is an exact object match
-                 //if liked value is 1.5 times
-                 //itemvalue = (commonObjDat.monetaryvalue(obj.item_id) / 3) * 2;
-                 //Debug.Print($"Likes are {Likes}");                   
-
-                    var arrayindex = Likes;
-                    var entry = at(arrayindex);
-                    while (entry != -1)
-                    {
-                        if (entry >= 1000)
-                        {
-                            if (itemCategory == entry - 1000)
-                            {
-                                multiplier = 1.5f;
-                                Debug.Print($"NPC likes item category of {GameStrings.GetSimpleObjectNameUW(obj.item_id)}");
-                            }
-                        }
-                        else
-                        {
-
-                            if (entry == obj.item_id)
-                            {
-                                multiplier = 1.5f;
-                                Debug.Print($"NPC likes item {GameStrings.GetSimpleObjectNameUW(obj.item_id)}");
-                            }
-                        }
-                        arrayindex++;
-                        entry = at(arrayindex);
-                    }
-                }
-                if (Dislikes != 0)
+                var disposition = DoesNPCLike(obj);
+                if (disposition == -1)
                 {
-                    //if unliked no value
-                    //itemvalue = 0;
-                    Debug.Print($"Dislikes are {Dislikes}");
-
-                    var arrayindex = Dislikes;
-                    var entry = at(arrayindex);
-                    while (entry != -1)
+                    return 0;
+                }
+                if (disposition == 1)
+                {
+                    itemvalue = (short)(itemvalue * 3) >> 1;
+                }
+            }
+            var quantity = ((obj.is_quant == 1) && ((obj.link & 0x200) == 0)) ? obj.link : 1;
+            itemvalue = (short)(itemvalue * quantity);//16-bit, as Turbo C's
+            var quality = obj.quality;
+            if ((_RES == GAME_UW2) && (obj.item_id == 160))
+            {//UW2 counts coins as quality 63
+                quality = 63;
+            }
+            if (itemvalue > 0)
+            {
+                if (quality > 0)
+                {
+                    itemvalue = _RES == GAME_UW2 ? (int)(((long)itemvalue * quality) >> 6) : (short)(itemvalue * quality) >> 6;
+                    if (itemvalue == 0)
                     {
-                        if (entry >= 1000)
-                        {
-                            if (itemCategory == entry - 1000)
-                            {
-                                multiplier = 0f;
-                                Debug.Print($"NPC dislikes item category of {GameStrings.GetSimpleObjectNameUW(obj.item_id)}");
-                                return 0;
-                            }
-                        }
-                        else
-                        {
-                            if (obj.item_id == entry)
-                            {
-                                multiplier = 0f;
-                                Debug.Print($"NPC dislikes item {GameStrings.GetSimpleObjectNameUW(obj.item_id)}");
-                                return 0;
-                            }
-                        }
-                        arrayindex++;
-                        entry = at(arrayindex);
+                        itemvalue = 1;
                     }
                 }
-
-                itemvalue = (int)(commonObjDat.monetaryvalue(obj.item_id) * multiplier);
-                itemvalue = (itemvalue * quality) >> 6;
+                else
+                {
+                    itemvalue = 0;
+                }
             }
-            else
+            if (applyAccuracy)
             {
-                //return the true base value adjusted for quality.
-                itemvalue = commonObjDat.monetaryvalue(obj.item_id);
-                itemvalue = (itemvalue * quality) >> 6;
+                Rng.Seed = (uint)obj.index;
+                itemvalue = Rng.RandomOffset(itemvalue, -appraise_accuracy, appraise_accuracy);
+                Rng.InitRng();
             }
-
-            //Adjust the value of the item based on the players/npcs appraisal accuracy score
-            var offset = Rng.RandomOffset(itemvalue, -appraise_accuracy, +appraise_accuracy);
             return itemvalue;
+        }
+
+        /// <summary>
+        /// 1 when the NPC likes the object, -1 when it dislikes it or it is worthless, else 0 (does_npc_like). An exact
+        /// item on the likes list wins at once; a class entry (item >> 4) + 1000 only counts if no exact match comes, and a
+        /// dislike, exact or by class, overrides a liked class.
+        /// </summary>
+        static int DoesNPCLike(uwObject obj)
+        {
+            if (commonObjDat.monetaryvalue(obj.item_id) == 0)
+            {
+                return -1;
+            }
+            var cls = (obj.item_id >> 4) + 1000;
+            var liked = 0;
+            if (Likes != 0)
+            {
+                for (var index = Likes; at(index) > -1; index++)
+                {
+                    var entry = at(index);
+                    if (entry < 1000)
+                    {
+                        if (entry == obj.item_id)
+                        {
+                            return 1;
+                        }
+                    }
+                    else if (entry == cls)
+                    {
+                        liked = 1;
+                    }
+                }
+            }
+            if (Dislikes != 0)
+            {
+                for (var index = Dislikes; at(index) > -1; index++)
+                {
+                    var entry = at(index);
+                    if (entry < 1000)
+                    {
+                        if (entry == obj.item_id)
+                        {
+                            return -1;
+                        }
+                    }
+                    else if (entry == cls)
+                    {
+                        liked = -1;
+                    }
+                }
+            }
+            return liked;
         }
 
         /// <summary>
@@ -323,14 +322,37 @@ namespace Underworld
                     var obj = UWTileMap.current_tilemap.LevelObjects[x];
                     if (obj.index == itemindex)
                     {
-                        //insert to talkers object list
-                        obj.next = talker.link;
-                        talker.link = obj.index;
+                        NPCInventoryAdd(talker, obj);//player_barter_give
                         uimanager.SetPlayerTradeSlot(i, -1, false);
                         return;
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// Gives the NPC an object (npc_inv_add): coins join a pile of coins it already has while the two come to less
+        /// than 999, otherwise the object goes to the head of its inventory.
+        /// </summary>
+        static void NPCInventoryAdd(uwObject talker, uwObject obj)
+        {
+            if ((obj.item_id == 160) && (obj.is_quant == 1) && ((obj.link & 0x200) == 0))
+            {
+                var next = talker.link;
+                while (next != 0)
+                {
+                    var other = UWTileMap.current_tilemap.LevelObjects[next];
+                    if ((other.item_id == obj.item_id) && (other.is_quant == 1) && ((other.link & 0x200) == 0) && (obj.link + other.link < 0x3E7))
+                    {
+                        other.link = (short)(other.link + obj.link);
+                        ObjectFreeLists.ReleaseFreeObject(obj);
+                        return;
+                    }
+                    next = other.next;
+                }
+            }
+            obj.next = talker.link;
+            talker.link = obj.index;
         }
 
         /// <summary>
@@ -342,14 +364,16 @@ namespace Underworld
             //transfer trade item
             //player(world) to Npc
             for (int i = 0; i < uimanager.NoOfTradeSlots; i++)
-            {
+            {//probablyTradeObjects: the player's selected items the NPC does not dislike go to it; the others stay in the slots
                 var objindex = uimanager.GetPlayerTradeSlot(i);
                 if (objindex != -1)
                 {
                     var tradedobject = UWTileMap.current_tilemap.LevelObjects[objindex];
-                    //insert at head of npcs object list
-                    tradedobject.next = talker.link;
-                    talker.link = tradedobject.index;
+                    if (DoesNPCLike(tradedobject) == -1)
+                    {
+                        continue;
+                    }
+                    NPCInventoryAdd(talker, tradedobject);
                     uimanager.SetPlayerTradeSlot(i, -1, false);
                 }
             }

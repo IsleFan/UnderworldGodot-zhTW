@@ -16,7 +16,7 @@ namespace Underworld
                     motion.playerMotionParams.gravity_10_Z = 0;
                 }
             }
-            if ((_RES == GAME_UW2) && (majorclass == 2) && ((minorclass & 0x3F) == 5))
+            if ((_RES == GAME_UW2) && (majorclass == 2) && ((minorclass & 0x3F) == 5) && (caster.index == playerdat.playerObject.index))
             {
                 //iron flesh.
                 if (playerdat.GetXClock(3)==4)
@@ -27,7 +27,11 @@ namespace Underworld
                 
             }
 
-            //Apply the active effect if possible.
+            //Apply the active effect if possible: only the player takes active spells (do_spell).
+            if (caster.index != playerdat.playerObject.index)
+            {
+                return;
+            }
             PlayerActiveStatusEffectSpells(
                 major: majorclass,
                 minor: minorclass & 0x3F,
@@ -58,6 +62,10 @@ namespace Underworld
                 case 4://stealth
                     {   //set the bit field of stealth bonuses. These are used to adjust the player stealth score which does something..
                         StealthBonus |= (1 << (minorclass-1)); //OR in this bit
+                        if ((minorclass == 4) && (_RES == GAME_UW2))
+                        {//UW2's 4 also quietens, as 2 does (player_affected_by)
+                            StealthBonus |= 2;
+                        }
                         break;
                     }
                 case 5:
@@ -71,9 +79,9 @@ namespace Underworld
                         playerdat.PlayerDamageTypeScale |= bit;//set the relevant x-proof
                         break;
                     }
-                case 0x10:
+                case 10:
                     {
-                        //Valour spell. This spell is unique to UW2.
+                        //Valour spell (minor 10; this was 0x10, so it never applied). This spell is unique to UW2.
                         if (_RES==GAME_UW2)
                         {
                             playerdat.ValourBonus = 10 + playerdat.Casting/5;

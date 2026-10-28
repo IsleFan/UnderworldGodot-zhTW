@@ -61,12 +61,7 @@ namespace Underworld
                 }
             }
             uimanager.AddToMessageScroll(finaltext);
-            WaitingForInput = true;
-            while (WaitingForInput)
-            {
-                //Debug.Print("Waiting!");
-                yield return new WaitOneFrame();
-            }
+            yield return WaitForMenuAnswer(finaltext);
             usingBablF=false;
             uimanager.instance.scroll.Clear();
             yield return say_op(bablf_array[PlayerNumericAnswer - 1], PC_SAY);

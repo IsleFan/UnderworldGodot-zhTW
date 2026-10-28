@@ -7,8 +7,12 @@ namespace Underworld
     public class a_teleport_trap : trap
     {
 
-        public static int Activate(uwObject trapObj, uwObject[] objList)
+        public static int Activate(int character, uwObject trapObj, uwObject[] objList)
         {
+            if (character != playerdat.playerObject.index)
+            {//only the player is teleported; for anyone else the trap does nothing (do_teleport)
+                return trapObj.link;
+            }
             int NewHeadingHeightTeleportFlag = 0;
             if (_RES == GAME_UW2)
             {
@@ -17,6 +21,14 @@ namespace Underworld
                 {
                     NewHeadingHeightTeleportFlag = NewHeadingHeightTeleportFlag | ((trapObj.heading + 8)<<2);
                 }
+            }
+            if ((_RES == GAME_UW2) && ((trapObj.xpos & 0x4) != 0))
+            {//fine x bit 2 gets the player lost: the automap goes off and map_scrap remembers the level (TRAP_TELEPORT)
+                if (playerdat.AutomapEnabled)
+                {
+                    playerdat.map_scrap = (byte)playerdat.dungeon_level;
+                }
+                playerdat.AutomapEnabled = false;
             }
                 Teleportation.Teleport(
                     character: 0, 

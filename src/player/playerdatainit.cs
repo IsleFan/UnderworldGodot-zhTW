@@ -88,7 +88,6 @@ namespace Underworld
             useon.CurrentItemBeingUsed = null;
             usingpole = false;
             musicalinstrument.PlayingInstrument = false;
-            previousMazeNavigation = false;
             Teleportation.CodeToRunOnTeleport = null;
             pitsofcarnage.IsAvatarInPitFightGlobal = false;
 
@@ -149,7 +148,7 @@ namespace Underworld
             armageddon = false;
             intoxication = 0;
             shrooms = 0;
-            play_fatigue = 0x30;
+            play_fatigue = (byte)(_RES == GAME_UW2 ? 0x30 : 0x40);//init_char
             for (int r = 0; r < 24; r++)
             {
                 SetRune(r, false);
@@ -163,7 +162,7 @@ namespace Underworld
             dungeon_level = 1;
 
             Unknown0x3DValue = 0;//unknown purpose. 
-            foodhealthbonus = 0;
+            foodhealthbonus = (byte)(_RES == GAME_UW2 ? 0x30 : 0x40);//food_heal starts with the fatigue
             //Unimplemented common items
             //Tilestate CLEAR GROUNDED, SWIMING and ON LAVA FLAGS
             //SWIMDAMAGECOUNTER = 0

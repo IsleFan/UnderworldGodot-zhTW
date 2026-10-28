@@ -195,18 +195,21 @@ namespace Underworld
             }
 
             //seg030_2BB7_83E:
-            if (MotionParams.unk_26_falldamage > 0x180)
-            {//seg030_2BB7_848:
+            if (MotionParams.unk_26_falldamage > (_RES == GAME_UW2 ? 0x180 : 0x100))
+            {//seg030_2BB7_848: (UW1 above 0x100, and no scaling by kind)
                 var var6FallDamage = MotionParams.unk_26_falldamage >> 8;
-                if (projectile.majorclass == 1)
+                if (_RES == GAME_UW2)
                 {
-                    var6FallDamage = var6FallDamage >> 2;
-                }
-                else
-                {
-                    if (projectile.npc_hp < 0x20)
+                    if (projectile.majorclass == 1)
                     {
-                        var6FallDamage = var6FallDamage << 2;
+                        var6FallDamage = var6FallDamage >> 2;
+                    }
+                    else
+                    {
+                        if (projectile.npc_hp < 0x20)
+                        {
+                            var6FallDamage = var6FallDamage << 2;
+                        }
                     }
                 }
                 var var4_mass = commonObjDat.mass(projectile.item_id);
@@ -229,9 +232,20 @@ namespace Underworld
                 }
 
             }
+            if (_RES != GAME_UW2)
+            {//UW1 stores the hit points again after the impact
+                if (projectile.IsStatic)
+                {
+                    projectile.quality = MotionParams.hp_1b;
+                }
+                else
+                {
+                    projectile.npc_hp = MotionParams.hp_1b;
+                }
+            }
             //seg030_2BB7_8E1:
-            if ((MotionParams.tilestate25 & 4) != 0)
-            {//on lava, apply fire damage.
+            if (((MotionParams.tilestate25 & 4) != 0) && (Rng.r.Next(5) == 0))
+            {//on lava, one fire damage one time in five.
                 //seg030_2BB7_90C:
                 damage.DamageObject(
                     objToDamage: projectile,
@@ -246,10 +260,14 @@ namespace Underworld
             {//seg030_2BB7_928:
                 if (projectile.IsStatic)
                 {//seg030_2BB7_937
-                    if ((MotionParams.momentum_14 | MotionParams.unk_a_pitch) != 0)
+                    if ((MotionParams.momentum_14 | MotionParams.unk_a_pitch | (int)MotionParams.gravity_10_Z) != 0)
                     {
                         Debug.Print("Object should become mobile");
                         projectile = MoveObjectToMobileObjectList_seg030_2BB7_B0C(projectile);
+                        if (projectile == null)
+                        {
+                            return false;
+                        }
                     }
                 }
                 else
@@ -302,13 +320,13 @@ namespace Underworld
                 projectile.ProjectileHeading = (ushort)(MotionParams.heading_1E >> 8);
                 projectile.npc_xhome = (short)projectile.tileX;
                 projectile.npc_yhome = (short)projectile.tileY;
-                if (MotionParams.gravity_10_Z == 0)
-                {
-                    projectile.UnkBit_0X13_Bit7 = 0;
+                if ((_RES == GAME_UW2) ? (MotionParams.gravity_10_Z != 0) : (MotionParams.gravity_10_Z == -4))
+                {//the gravity bit: UW1 only for gravity of exactly -4
+                    projectile.UnkBit_0X13_Bit7 = 1;
                 }
                 else
                 {
-                    projectile.UnkBit_0X13_Bit7 = 1;
+                    projectile.UnkBit_0X13_Bit7 = 0;
                 }
                 var cx = 0x10 + (MotionParams.unk_a_pitch / 0x40);
                 if (cx < 0)
@@ -380,6 +398,14 @@ namespace Underworld
             var next = tile.indexObjectList;
 
             var slot = ObjectFreeLists.GetAvailableObjectSlot(ObjectFreeLists.ObjectListType.MobileList);
+            if (toMove.tileX == 99)
+            {//the garbage collect run by a full mobile list took the object itself: nothing is left to move
+                if (slot != 0)
+                {
+                    ObjectFreeLists.ReleaseFreeObject(UWTileMap.current_tilemap.LevelObjects[slot]);
+                }
+                return null;
+            }
             if (slot != 0)
             {
                 var newObj = UWTileMap.current_tilemap.LevelObjects[slot];    
@@ -398,8 +424,8 @@ namespace Underworld
                     }
                 }
                 if (newObj.majorclass == 7)
-                {
-                    Debug.Print("moving an animation overaly. Change it's links");
+                {//static_to_mob: the animation follows the object
+                    animo.ChangeAnimPtr(newObj, toMove);
                 }
                 ObjectRemover_OLD.DeleteObjectFromTile_DEPRECIATED(toMove.tileX, toMove.tileY, toMove.index, true);
 
@@ -465,8 +491,9 @@ namespace Underworld
                                                 projectile.item_id = 0x1C2;
                                                 var counter = 8;
                                                 while (playerdat.GetQuest(36) <= counter)
-                                                {
-                                                    animo.SpawnAnimoCopies(projectile, projectile.tileX, projectile.tileY);
+                                                {//each fireball higher, on the square or one beside it
+                                                    projectile.zpos = (short)Math.Min(127, projectile.zpos + (Rng.r.Next(0x8000) & 7) + 4);
+                                                    animo.SpawnAnimoCopies(projectile, projectile.tileX + Rng.r.Next(0x8000) % 3 - 1, projectile.tileY + Rng.r.Next(0x8000) % 3 - 1);
                                                     counter--;
                                                 }
                                             }
@@ -485,7 +512,7 @@ namespace Underworld
 
             if ((si_cull > 0) && (si_cull <= 8))
             {
-                if ((Rng.r.Next(0x7FFF) & 0x7) < si_cull)
+                if ((Rng.r.Next(0x8000) & 0x7) < si_cull)
                 {
                     if (ObjectRemover_OLD.ObjectCullingTest(projectile, 0xA))
                     {
@@ -493,13 +520,26 @@ namespace Underworld
                     }
                 }
             }
+            if ((_RES != GAME_UW2) && (playerdat.dungeon_level == 9))
+            {//mob_to_static: nothing that lands in the UW1 Ethereal Void is kept
+                haltobject = false;
+            }
 
             //seg_030_2bb7_e7c
             var tile = UWTileMap.current_tilemap.Tiles[projectile.tileX, projectile.tileY];
             if (haltobject)
             {
                 var newSlot = ObjectFreeLists.GetAvailableObjectSlot(ObjectFreeLists.ObjectListType.StaticList);
-                haltedObject = UWTileMap.current_tilemap.LevelObjects[newSlot];
+                if (projectile.tileX == 99)
+                {//the garbage collect run by a full static list took the projectile itself: nothing is left to settle
+                    if (newSlot != 0)
+                    {
+                        ObjectFreeLists.ReleaseFreeObject(UWTileMap.current_tilemap.LevelObjects[newSlot]);
+                    }
+                    return null;
+                }
+                //no free static object: the object is lost (mob_to_static returns 0)
+                haltedObject = newSlot != 0 ? UWTileMap.current_tilemap.LevelObjects[newSlot] : null;
                 if (haltedObject != null)
                 {
                     for (int i = 0; i < 8; i++)
@@ -512,25 +552,25 @@ namespace Underworld
                     {
                         if (haltedObject.OneF0Class == 9)
                         {   //light sources
-                            if ((haltedObject.classindex >= 4) && (haltedObject.classindex <= 7))
-                            {   //lit light sources
+                            if ((haltedObject.classindex >= 4) && (haltedObject.classindex <= 6))
+                            {   //lit light sources (in-class 7 stays as it is)
                                 haltedObject.item_id -= 4;//turn off the light.
                             }
                         }
                     }
                     else
-                    {
-                        Debug.Print("TODO Handle halted animo");
+                    {//mob_to_static: the animation follows the object
+                        animo.ChangeAnimPtr(haltedObject, projectile);
                     }
-                }
-                //seg030_2BB7_F43:
-                haltedObject.quality = projectile.npc_hp;
+                    //seg030_2BB7_F43:
+                    haltedObject.quality = projectile.npc_hp;
 
-                if ((projectile.majorclass != 5) && (projectile.majorclass != 6))
-                {   //not a 3d model or not a trap/trigger
-                    if (commonObjDat.rendertype(haltedObject.item_id) != 2)
-                    {
-                        haltedObject.heading = projectile.npc_whoami;//yes. whoami is temp storage for heading.
+                    if ((projectile.majorclass != 5) && (projectile.majorclass != 6))
+                    {   //not a 3d model or not a trap/trigger
+                        if (commonObjDat.rendertype(haltedObject.item_id) != 2)
+                        {
+                            haltedObject.heading = projectile.npc_whoami;//yes. whoami is temp storage for heading.
+                        }
                     }
                 }
             }
@@ -568,9 +608,9 @@ namespace Underworld
                         triggerType: (int)triggerObjectDat.triggertypes.PRESSURE);
                 }
             }
-            if (si_cull == 9)
+            if ((si_cull == 9) && (haltedObject != null))
             {
-                //detonate
+                //detonate. With nothing kept (no free static object, or the UW1 Ethereal Void) there is nothing to animate
                 if (DetonateProjectile(haltedObject, varE) == false)
                 {
                     if (ObjectRemover_OLD.DeleteObjectFromTile_DEPRECIATED(haltedObject.tileX, haltedObject.tileY, haltedObject.index, true))

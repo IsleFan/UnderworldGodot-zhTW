@@ -14,11 +14,16 @@ namespace Underworld
 
             motion.MissileLauncherHeadingBase = 0;
 
+            motion.MissileFlagB = true;//using_bow: not the thrown object's sound
             var arrow = motion.PrepareProjectileObject(trapObj);
+            motion.MissileFlagB = false;
             if (arrow!=null)
             {
                 ObjectCreator.RenderObject(arrow,UWTileMap.current_tilemap);
-                //make a sound                
+                if (_RES == GAME_UW2)
+                {//trap_fire's launch sound; UW1 only has missile_fire's
+                    UWsoundeffects.PlaySoundEffectAtObject(0xA, arrow, 0x14);
+                }
             }
         }
     }//end class

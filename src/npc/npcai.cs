@@ -176,13 +176,55 @@ namespace Underworld
         public static short dseg_2636;
 
         public static bool IsNPCActive_dseg_67d6_2234;
-        static bool dseg_67d6_225E;
+        public static bool dseg_67d6_225E;//hitwall: the flier's handler met a floor too high
         static bool HasCurrobjHeadingChanged_dseg_67d6_2242;
         public static bool dseg_67d6_2269;
         public static bool RelatedToColliding_dseg_67d6_226F;
         static bool FlyingPitchingRelated_dseg_67d6_2246;
 
         static int BitFieldForPathing_dseg_67d6_B4 = 0xFFFF;
+
+        /// <summary>
+        /// clear_paths (the critters' B15_7 bits are cleared by the caller): all 16 path slots free again.
+        /// </summary>
+        public static void ClearPaths()
+        {
+            BitFieldForPathing_dseg_67d6_B4 = 0xFFFF;
+        }
+
+        /// <summary>
+        /// The critter's own collision handler (set_critter_vars): flying, swimming or walking.
+        /// </summary>
+        static void SelectMotionHandler(uwObject critter)
+        {
+            if (critterObjectDat.isFlier(critter.item_id))
+            {
+                //special setup for flying ai    
+                SpecialMotionHandler = MotionHandler.FlierNPCMotionHandler; //UWMotionParamArray.DSEG_26C6_FlyingNPCMotionHandler;
+            }
+            else
+            {
+                if (critterObjectDat.isSwimmer(critter.item_id))
+                {
+                    //special setup for swimming ai
+                    SpecialMotionHandler = MotionHandler.SwimmerNPCMotionHandler; //UWMotionParamArray.DSEG_26DE_SwimmingNPCMotionHandler;
+                }
+                else
+                {
+                    //default ai (26ba in uw2,  285C in uw1 ) //seg007_17A2_2207
+                    SpecialMotionHandler = MotionHandler.LandNPCMotionHandler; //UWMotionParamArray.DSEG_26BA_LandNPCMotionHandler;
+                }
+            }
+        }
+
+        /// <summary>
+        /// set_critter_vars for a flood outside the AI update (wander_that_monster): the critter's handler and height.
+        /// </summary>
+        public static void SetCritterVarsForPathing(uwObject critter)
+        {
+            SelectMotionHandler(critter);
+            currObjHeight = commonObjDat.height(critter.item_id);
+        }
 
         static bool dseg_67d6_226E;
 
@@ -236,24 +278,7 @@ namespace Underworld
                 //seg007_17A2_21C9:
                 //var CalcedFacing = GetCritterAnimationGlobalsForCurrObj(critter);
 
-                if (critterObjectDat.isFlier(critter.item_id))
-                {
-                    //special setup for flying ai    
-                    SpecialMotionHandler = MotionHandler.FlierNPCMotionHandler; //UWMotionParamArray.DSEG_26C6_FlyingNPCMotionHandler;
-                }
-                else
-                {
-                    if (critterObjectDat.isSwimmer(critter.item_id))
-                    {
-                        //special setup for swimming ai
-                        SpecialMotionHandler = MotionHandler.SwimmerNPCMotionHandler; //UWMotionParamArray.DSEG_26DE_SwimmingNPCMotionHandler;
-                    }
-                    else
-                    {
-                        //default ai (26ba in uw2,  285C in uw1 ) //seg007_17A2_2207
-                        SpecialMotionHandler = MotionHandler.LandNPCMotionHandler; //UWMotionParamArray.DSEG_26BA_LandNPCMotionHandler;
-                    }
-                }
+                SelectMotionHandler(critter);
 
                 if ((commonObjDat.scaleresistances(critter.item_id) & 8) != 0)
                 {
@@ -395,14 +420,14 @@ namespace Underworld
                                 {
                                     if (_RES == GAME_UW2)
                                     {
-                                        if (XMIMusic.CurrentlyPlayingThemeNo <= 2 || XMIMusic.CurrentlyPlayingThemeNo > 4)
+                                        if (XMIMusic.CurrentlyPlayingThemeNo < 2 || XMIMusic.CurrentlyPlayingThemeNo > 4)
                                         {
                                             XMIMusic.ChangeThemeMusic(3);
                                         }
                                     }
                                     else
                                     {
-                                        if (XMIMusic.CurrentlyPlayingThemeNo <= 5 || XMIMusic.CurrentlyPlayingThemeNo > 7)
+                                        if (XMIMusic.CurrentlyPlayingThemeNo < 5 || XMIMusic.CurrentlyPlayingThemeNo > 7)
                                         {
                                             XMIMusic.ChangeThemeMusic(6);
                                         }
@@ -603,39 +628,13 @@ namespace Underworld
                 //seg007_17A2_29A5:  passive test?
                 if (critterObjectDat.unkPassivenessProperty(critter.item_id) == false)
                 {
-                    //seg007_17A2_29B8:
-                    if (critter.IsAlly != 0)
-                    {
-                        goto seg007_17A2_2AEA;
-                    }
-                    if (critter.index == playerdat.LastDamagedNPCIndex)
-                    {
-                        goto Seg007_17A2_29F6;
-                    }
-                    if (critterObjectDat.generaltype(critter.item_id) != playerdat.LastDamagedNPCType)
-                    {
-                        goto Seg007_17A2_29F6;
-                    }
-                    if (critter.UnkBit_0XA_Bit7 == 0)
-                    {
-                        goto Seg007_17A2_2A0D;
-                    }
-
-
-
-                Seg007_17A2_29F6:
-                    if (critter.IsAlly == 1)
-                    {
-                        goto Seg007_17A2_2A0D;
-                    }
-                    else
-                    {
-                        goto seg007_17A2_2AEA;
-                    }
-
-                Seg007_17A2_2A0D:
-
-                    if (playerdat.LastDamagedNPCTime + 512 >= playerdat.ClockValue)
+                    //seg007_17A2_29B8: it joins a fight the player started nearby: an ally always, anyone else
+                    //when the player hit one of its own race (not itself) and it is not a loner
+                    var joinsFight = (critter.IsAlly != 0)
+                        || ((critter.index != playerdat.LastDamagedNPCIndex)
+                            && (critterObjectDat.generaltype(critter.item_id) == playerdat.LastDamagedNPCType)
+                            && (critter.UnkBit_0XA_Bit7 == 0));
+                    if (joinsFight && (playerdat.LastDamagedNPCTime + 0x200 > playerdat.ClockValue))
                     {
                         //seg007_17A2_2A0D:
                         //do detection
@@ -768,6 +767,15 @@ namespace Underworld
                     NPCWanderUpdate(critter);
                     break;
                 case 3://move/follow (skip to NPC_Move below)
+                    if (_RES != GAME_UW2)
+                    {//UW1: keep close to the target (critter_ai goal 3)
+                        if (!gtargFound && !GetDistancesToGTarg(critter))
+                        {
+                            ResetGoalAndTarget(critter);
+                            break;
+                        }
+                        NPC_Goal3_KeepCloseUW1(critter);
+                    }
                     break;
                 case 4:
                     StandStillGoal(critter);
@@ -853,6 +861,38 @@ namespace Underworld
             NPC_Move(critter);
         }
 
+
+        /// <summary>
+        /// UW1's goal 3 (seg007_1798_3E4): within about 1.4 tiles of the target the critter faces it in its first attack
+        /// stance; more than 8 tiles away it jumps to the target's side, a quarter of the way back along the line to
+        /// itself; in between it heads for the target's tile.
+        /// </summary>
+        static void NPC_Goal3_KeepCloseUW1(uwObject critter)
+        {
+            if (currentGTargSquaredDistanceByTiles <= 2)
+            {
+                critter.npc_animation = 1;//SEQ_ATTACK1, without a blow
+                critter.AnimationFrame = (byte)((critter.AnimationFrame + 1) % 4);
+                critter.UnkBit_0X13_Bit0to6 = 0;//speed 0
+                critter.Projectile_Speed = 4;//rate 4
+                ChangeNpcHeadings(critter, Pathfind.GetVectorHeading(currentGTargXVector, currentGTargYVector));
+            }
+            else if (currentGTargSquaredDistanceByTiles > 0x40)
+            {
+                var dist = (int)Math.Sqrt(currentGTargSquaredDistanceByTiles);
+                var x = currentGTargXHome + (currObj_XHome - currentGTargXHome) * 4 / dist;
+                var y = currentGTargYHome + (currObj_YHome - currentGTargYHome) * 4 / dist;
+                if (npc.moveNPCToTile(critter: critter, destTileX: x, destTileY: y))
+                {
+                    critter.xpos = 4; critter.ypos = 4;
+                    critter.zpos = (short)(UWTileMap.current_tilemap.Tiles[x, y].floorHeight << 3);
+                }
+            }
+            else
+            {
+                NPC_Goto(critter: critter, targetX: currentGTargXHome, targetY: currentGTargYHome, targetZ: currentGTargFloorHeight);
+            }
+        }
 
         static void ResetGoalAndTarget(uwObject critter)
         {
@@ -1087,8 +1127,8 @@ namespace Underworld
                                 if (result == 2)
                                 {
                                     critter.UnkBit_0x19_1 = 1;
-                                    if (Rng.r.Next(0, 2) == 1)
-                                    {
+                                    if (Rng.r.Next(0, 2) == 0)
+                                    {//half the time it walks towards the sound
                                         NPC_Goto(critter, gtarg_x, gtarg_y, currentGTargFloorHeight);
                                         return;
                                     }
@@ -1125,8 +1165,8 @@ namespace Underworld
 
         static void AttackGoalSearchForTarget(uwObject critter, ref int xhome, ref int yhome, int arg4_dist)
         {
-            if ((xhome != critter.TargetTileX) && (yhome != critter.TargetTileY))
-            {
+            if ((xhome != critter.TargetTileX) || (yhome != critter.TargetTileY))
+            {//crit_offense_find_target: once in eight, when the target is not where it was heading
                 if (Rng.r.Next(8) == 0)
                 {
                     var result = SearchForGoalTarget(critter, ref xhome, ref yhome);
@@ -1138,23 +1178,36 @@ namespace Underworld
                                 break;
                             }
                         case 1:
-                            {//npc loses target?
+                            {//npc loses target: UW2 keeps listening (b19 bit 1), UW1 forgets it and stops here
                                 critter.UnkBit_0x19_0_likelyincombat = 0;
-                                critter.UnkBit_0x19_1 = 1;
+                                critter.UnkBit_0x19_1 = (short)(_RES == GAME_UW2 ? 1 : 0);
                                 ResetGoalAndTarget(critter);
+                                if (_RES != GAME_UW2)
+                                {
+                                    return;
+                                }
                                 break;
                             }
                         case 2:
-                            {//no change to detection.
-                                if (Rng.r.Next(2) == 1)
+                            {//heard faintly: half the time it heads there, else gives up (UW1 the other way round, listening on)
+                                var headsThere = Rng.r.Next(2) == 0;
+                                if (_RES != GAME_UW2)
+                                {
+                                    headsThere = !headsThere;
+                                }
+                                if (headsThere)
                                 {
                                     SetNPCTargetDestination(critter, xhome, yhome, currentGTargFloorHeight);
                                 }
                                 else
                                 {
                                     critter.UnkBit_0x19_0_likelyincombat = 0;
-                                    critter.UnkBit_0x19_1 = 0;
+                                    critter.UnkBit_0x19_1 = (short)(_RES == GAME_UW2 ? 0 : 1);
                                     ResetGoalAndTarget(critter);
+                                    if (_RES != GAME_UW2)
+                                    {
+                                        return;
+                                    }
                                 }
                                 break;
                             }
@@ -1166,7 +1219,7 @@ namespace Underworld
                 }
             }
             //seg007_17A2_D3D:
-            if ((xhome == currObj_YHome) && (yhome == currObj_YHome) && (Math.Abs(currObj_FloorHeight - currentGTargFloorHeight) < 4))
+            if ((xhome == currObj_XHome) && (yhome == currObj_YHome) && (Math.Abs(currObj_FloorHeight - currentGTargFloorHeight) < 4))
             {
                 //close to target
                 return;
@@ -1195,7 +1248,8 @@ namespace Underworld
                 //seg007_17A2_DBD:
                 NPC_Goto(critter, xhome, yhome, currentGTargFloorHeight);
                 if (critter.UnkBit_0x18_6 != 0)
-                {
+                {//gave up on getting there: it gives up the chase
+                    ResetGoalAndTarget(critter);
                     critter.UnkBit_0x19_1 = 0;
                 }
             }
@@ -1218,14 +1272,16 @@ namespace Underworld
             var xvector = currentGTargXHome - currObj_XHome;
             var yvector = currentGTargYHome - currObj_YHome;
 
-            var si_dist = (int)Math.Pow(xvector, 2) + Math.Pow(yvector, 2);
-            var score = (int)Math.Pow((critterObjectDat.noisedetectionrange(critter.item_id) * critterObjectDat.StealthQuietness(gtargObject.item_id)) / 16, 2);
+            var si_dist = xvector * xvector + yvector * yvector;
+            var heard = (critterObjectDat.noisedetectionrange(critter.item_id) * critterObjectDat.StealthQuietness(gtargObject.item_id)) / 16;
+            var score = heard * heard;
 
-            if (score / 4 < si_dist)
-            {
-                var var8 = (int)Math.Pow((critterObjectDat.sightdetectionrange(critter.item_id) * critterObjectDat.StealthVisibility(gtargObject.item_id)) / 16, 2);
+            if (score / 4 <= si_dist)
+            {//target_found: closer than half the hearing range is always perceived
+                var seen = (critterObjectDat.sightdetectionrange(critter.item_id) * critterObjectDat.StealthVisibility(gtargObject.item_id)) / 16;
+                var var8 = seen * seen;
 
-                if (si_dist < var8)
+                if (si_dist <= var8)
                 {
                     var HeadingToTarget_var3 = Pathfind.GetVectorHeading(xvector, yvector);
                     var var5 = (8 + (HeadingToTarget_var3 - critter.heading)) % 8;
@@ -1243,7 +1299,7 @@ namespace Underworld
                     }
                 }
 
-                if ((score << 2) < si_dist)
+                if ((score << 2) <= si_dist)
                 {
                     critter.UnkBit_0x19_0_likelyincombat = 0;
                     return 1;
@@ -1406,9 +1462,9 @@ namespace Underworld
         {
             if (IsNPCActive_dseg_67d6_2234)
             {
-                if ((critter.npc_attitude == 0) && (critter.npc_goal != 4))
-                {
-                    SetGoalAndGtarg(critter, 4, 1);//critter becomes hostile
+                if ((_RES == GAME_UW2) && (critter.npc_attitude == 0) && (critter.npc_goal != 4))
+                {//UW2 only: a hostile talker turns to guarding the player
+                    SetGoalAndGtarg(critter, 4, 1);
                 }
                 else
                 {
@@ -1524,11 +1580,14 @@ namespace Underworld
                     //seg006_1413_30DD:
                     if (IsNPCActive_dseg_67d6_2234)
                     {
-                        //seg006_1413_30F6:
-                        critter.UnkBit_0X13_Bit7 = 1;
+                        //seg006_1413_30F6: arrived, it stops (speed 0) and stands
+                        critter.UnkBit_0X13_Bit0to6 = 0;
                         critter.UnkBit_0X15_6 = 1;
                         critter.npc_animation = ANIMATION_IDLE;
-                        critter.AnimationFrame = 0;
+                        if (_RES == GAME_UW2)
+                        {//UW1 keeps the frame
+                            critter.AnimationFrame = 0;
+                        }
                         return;
                     }
                 }
@@ -1541,9 +1600,9 @@ namespace Underworld
                 {
                     //seg006_1413_3155:
                     //table look up into seg057_625F (possibly a path list)
-                    var tmpSeg57_x = -1;
-                    var tmpSeg57_y = -1;
                     var indexSeg57 = critter.PathFindIndex_0x16_0_F;
+                    var tmpSeg57_x = PathFind57_Turning.PathFind57Records[indexSeg57].X0;//the path's current square
+                    var tmpSeg57_y = PathFind57_Turning.PathFind57Records[indexSeg57].Y1;
                     if (tmpSeg57_x == critter.npc_xhome)
                     {
                         if (tmpSeg57_y == critter.npc_yhome)
@@ -1580,14 +1639,16 @@ namespace Underworld
                                             (!(
                                             (collisionObject.majorclass == 1)
                                             &&
-                                            (collisionObject.item_id == 0x7F)
+                                            (collisionObject.item_id != 0x7F)
                                             &&
                                             (critter.npc_goal == 5)
+                                            &&
+                                            (collisionObject.npc_goal == 5)
                                             )
                                             )
                                         {
                                             //seg006_1413_3290:
-                                            //when not colliding with the avatar with a goal of 5.
+                                            //two attacking critters (not the player) ignore each other; anything else is handled here.
                                             if (
                                                 (collisionObject.item_id >> 4 == 0x14)
                                                 && (collisionObject.classindex >= 8)
@@ -1599,6 +1660,7 @@ namespace Underworld
                                                 critter.Projectile_Pitch = 14;
                                                 RelatedToMotionCollision_dseg_67d6_224E = false;
                                                 FlyingPitchingRelated_dseg_67d6_2246 = true;
+                                                MaybeIsFlier_Var6 = true;//passing the door it does not move on this turn (speed 0)
                                             }
                                             else
                                             {
@@ -1614,9 +1676,12 @@ namespace Underworld
                                 {
                                     //seg006_1413:3210
                                     critter.npc_animation = ANIMATION_IDLE;
-                                    critter.AnimationFrame = 0;
-                                    if (Rng.r.Next(4) == 0)
-                                    {
+                                    if (_RES == GAME_UW2)
+                                    {//UW1 keeps the frame
+                                        critter.AnimationFrame = 0;
+                                    }
+                                    if ((Rng.r.Next(4) == 0) || ((_RES != GAME_UW2) && (critter.npc_attitude != 0)))
+                                    {//UW1: a critter not hostile to the player never opens the door
                                         //seg006_1413_32D5: (again)
                                         critter.UnkBit_0x18_6 = 1;
                                     }
@@ -1762,21 +1827,27 @@ namespace Underworld
                 {//THis is probably uw2 logic. Todo check if the same happens in uw1
                     //seg006_1413_35CD:
                     critter.UnkBit_0X15_6 = 0;
-                    if (critter.npc_animation != ANIMATION_WALK)
+                    if (_RES != GAME_UW2)
+                    {//UW1: a fixed walking sequence of four frames, the frame always stepped on
+                        critter.npc_animation = ANIMATION_WALK;
+                        GetCritterAnimationGlobalsForCurrObj(critter);
+                        critter.AnimationFrame = (byte)((critter.AnimationFrame + 1) % 4);
+                    }
+                    else if (critter.npc_animation != ANIMATION_WALK)
                     {
                         critter.npc_animation = ANIMATION_WALK;
                         GetCritterAnimationGlobalsForCurrObj(critter);
-                        if (critter.AnimationFrame > MaxAnimFrame)
-                        {
+                        if (critter.AnimationFrame >= MaxAnimFrame)
+                        {//past the second last frame of the new sequence it starts over
                             critter.AnimationFrame = 0;
                         }
                     }
                     else
                     {
                         //already in walk animation;
-                        //seg006_1413_3620:
+                        //seg006_1413_3620: MaxAnimFrame is the last frame, so the sequence is one longer
                         var tmp = critter.AnimationFrame + 1;
-                        critter.AnimationFrame = (byte)(tmp % MaxAnimFrame);
+                        critter.AnimationFrame = (byte)(tmp % (MaxAnimFrame + 1));
                     }
                     //seg006_1413_3657:
                     //set frames as in above branches   
@@ -1819,6 +1890,8 @@ namespace Underworld
                 (critterObjectDat.avghit(critter.item_id) != 0)
                 &&
                 (critter.doordir == 0)
+                &&
+                !((_RES != GAME_UW2) && (playerdat.dungeon_level == 6) && (critter.npc_whoami == 0x16))//UW1: none for conversation 0x16 on level 6
                 )
             {
                 //seg007_17A2_3105: 
@@ -1949,6 +2022,23 @@ namespace Underworld
 
                     var CurrObjZ_var9 = critter.zpos;
                     var destinationTileZ_varA = 0x14 + (DestinationTile.floorHeight << 3);
+                    if (_RES != GAME_UW2)
+                    {//UW1 adjust_height: only the destination's floor counts, and the pitch is set outright
+                        var destination = System.Math.Min(destinationTileZ_varA, 0x78);
+                        if ((dseg_67d6_225E && CurrObjZ_var9 < 0x78) || (CurrObjZ_var9 < destination - 8))
+                        {
+                            critter.Projectile_Pitch = 0x12;
+                        }
+                        else if ((CurrObjZ_var9 > 0x78) || (CurrObjZ_var9 > destination + 8))
+                        {
+                            critter.Projectile_Pitch = 0xE;
+                        }
+                        else
+                        {
+                            critter.Projectile_Pitch = (short)(Rng.r.Next(0x8000) % 3 + 0xF);
+                        }
+                        return;
+                    }
                     var CurrObjTileZ_varB = 0x14 + (CurrObjTile.floorHeight << 3);
 
                     if (destinationTileZ_varA > 0x78)
@@ -2050,14 +2140,15 @@ namespace Underworld
             else
             {
                 //seg006_1413_2DCD:
-                //This may be buggy.
+                //do_that_jump_kinda_thing: towards the square after the path's square, from the critter's own square
                 var offset = path57Record.PathingOffsetIndex4;
-                xVar2 += Pathfind.PathXOffsetTable[offset];
-                yvar4 += Pathfind.PathYOffsetTable[offset];
+                var jumpX = path57Record.X0 + Pathfind.PathXOffsetTable[offset];
+                var jumpY = path57Record.Y1 + Pathfind.PathYOffsetTable[offset];
 
-                var heading = Pathfind.GetVectorHeading(critter.npc_xhome - xVar2, critter.npc_yhome - yvar4);
+                var heading = Pathfind.GetVectorHeading((sbyte)jumpX - (sbyte)critter.npc_xhome, (sbyte)jumpY - (sbyte)critter.npc_yhome);
+                dseg_67d6_226E = true;//didmove: the walking speed is not put back at the end
                 critter.Projectile_Speed = 1;
-                critter.Projectile_Pitch = 16;
+                critter.Projectile_Pitch = 0x16;
                 critter.UnkBit_0X13_Bit0to6 = 0xB;
 
                 ChangeNpcHeadings(critter, heading);
@@ -2147,8 +2238,8 @@ namespace Underworld
 
         static void NPCTryToOpenDoor(uwObject critter, uwObject doorobject)
         {
-            if (doorobject.classindex != 7)
-            {
+            if ((doorobject.item_id & 7) != 7)
+            {//try_to_open_door leaves secret doors, open or closed, alone
                 if ((_RES == GAME_UW2) && (playerdat.dungeon_level == 0xA))
                 {
                     return;//stops goblins from opening doors in the prison tower.
@@ -2165,7 +2256,7 @@ namespace Underworld
                         if ((critterObjectDat.dooropenskill(critter.item_id) != 0) && (Rng.r.Next(2) != 0))
                         {
                             //seg006_1413_3887: 
-                            door.CharacterDoorLockAndKeyInteraction(critter, doorobject, -critterObjectDat.dooropenskill(critter.item_id));
+                            a_lock.CheckLock(critter, doorobject, -critterObjectDat.dooropenskill(critter.item_id));
                         }
                         else
                         {
@@ -2192,6 +2283,7 @@ namespace Underworld
             int NewHeading = critter.ProjectileHeading;//not sure if it is initialised to this value. possibly vanilla behaviour was to use uninitialised memory in certain circumstances
             int PitchVarA;
             int si;
+            var keepFineHeading = false;
             if (critter.UnkBit_0X15_Bit7 == 1)
             {//seg007_17A2_E4:
                 var tmp = 1 << critter.PathFindIndex_0x16_0_F;
@@ -2213,7 +2305,7 @@ namespace Underworld
                 }
                 //seg007_17A2_15D
                 if (critterObjectDat.isFlier(critter.item_id))
-                {//POSSIBLY this if else is wrong!
+                {//a flier always picks a new pitch: up to 2 above 0xE when high, 0x10 to 0x12 near the floor, else 0xE to 0x12
                     PitchVarA = 0xE;
                     si = 3;
                     if (currObj_FloorHeight <= 0xE)
@@ -2226,23 +2318,16 @@ namespace Underworld
                         {
                             si = 5;
                         }
-                        critter.Projectile_Pitch = (short)(Rng.r.Next(0, si) + PitchVarA);
                     }
+                    critter.Projectile_Pitch = (short)(Rng.r.Next(0, si) + PitchVarA);
                 }
                 //seg007_17A2_1C2://TODO include UW1 logic
                 if (_RES == GAME_UW2)
                 {
                     if (critter.npc_animation == ANIMATION_IDLE)
                     {//Seg007_17A2_1CD:
-                        if (critterObjectDat.unk_1F_lowernibble(critter.item_id) <= Rng.r.Next(0, 0x10))
-                        {//seg007_17A2:01EA
-                            if (critter.AnimationFrame != MaxAnimFrame)
-                            {
-                                newAnim_var2 = -1;
-                            }
-                        }
-                        else
-                        {//seg007_17A2_202
+                        if ((critterObjectDat.unk_1F_lowernibble(critter.item_id) <= Rng.r.Next(0, 0x10)) || (critter.AnimationFrame != MaxAnimFrame))
+                        {//seg007_17A2:01EA: starts walking only when lazy is above the roll, at the end of the sequence
                             newAnim_var2 = -1;
                         }
                         //seg007_17A2_202:
@@ -2315,9 +2400,7 @@ namespace Underworld
                     {
 
                         //seg007_17A2_2D1
-                        var deflection = Rng.r.Next(0, 2);
-                        deflection--;
-                        deflection = deflection << 6;
+                        var deflection = (Rng.r.Next(0, 2) * 2 - 1) << 6;//a quarter turn left or right
 
                         var newheading = critter.ProjectileHeading;
                         newheading = (ushort)(newheading + deflection);
@@ -2325,6 +2408,7 @@ namespace Underworld
                         newheading = (ushort)(newheading % 256);
                         critter.ProjectileHeading = newheading;
                         critter.heading = (short)((newheading >> 5) & 7);
+                        critter.npc_heading = (short)(newheading & 0x1F);
                         critter.UnkBit_0X13_Bit0to6 = 0;
                         return;
                     }
@@ -2360,8 +2444,9 @@ namespace Underworld
                         NewHeading = tmp;
                     }
                     else
-                    {
-                        //uninitialised heading here???
+                    {//UW1 keeps its heading; UW2 sets one it never initialised (here also the current one)
+                        NewHeading = critter.ProjectileHeading;
+                        keepFineHeading = true;
                     }
 
                 }
@@ -2369,7 +2454,10 @@ namespace Underworld
                 //seg007_17A2_3FF:
                 critter.ProjectileHeading = (ushort)NewHeading;
                 critter.heading = (short)((NewHeading >> 5) & 7);
-                critter.npc_heading = ((short)(NewHeading & 0x1F));
+                if (!keepFineHeading)
+                {
+                    critter.npc_heading = ((short)(NewHeading & 0x1F));
+                }
                 bool frameadvance = false;
                 if (critter.npc_animation == ANIMATION_IDLE)
                 {//seg007_17A2:044E
@@ -2446,6 +2534,7 @@ namespace Underworld
             if (IsNPCActive_dseg_67d6_2234)
             {
                 var RangeAttackStarted = false;
+                var meleeAttacked = false;
                 var var4_dist = 4;
 
                 if (_RES != GAME_UW2)
@@ -2474,42 +2563,40 @@ namespace Underworld
                 if ((siDist < 0x64) || ((siDist >= 0x64) && (currObj_XHome == currentGTargXHome) && (currObj_YHome == currentGTargYHome)))
                 {
                     //seg007_17A2_81D: 
-                    if (Math.Abs(currObj_FloorHeight - currentGTargFloorHeight) < 4)
+                    if ((Math.Abs(currObj_FloorHeight - currentGTargFloorHeight) < 4) || critterObjectDat.isFlier(critter.item_id))
                     {
                         //seg007_17A2_844:
                         ChooseMeleeAttackToMake(critter, siDist);
-                        return;
-                    }
-                    else
-                    {
-                        if (critterObjectDat.isFlier(critter.item_id))
+                        if (_RES == GAME_UW2)
                         {
-                            //seg007_17A2_844:
-                            ChooseMeleeAttackToMake(critter, siDist);
                             return;
                         }
+                        meleeAttacked = true;//UW1 goes on to the give-up test and the chase
                     }
                 }
 
                 //seg007_17A2_84F:
-                if (critterObjectDat.NPCPower_0x2DBits1To7(critter.item_id) <= 0)
+                if (!meleeAttacked)
                 {
-                    //Check if NPC Weapon loot is a ranged weapon
-                    //seg007_17A2_87F:
-                    if ((critterObjectDat.weaponloot(critter.item_id, 0) >> 4) == 1)
+                    if (critterObjectDat.NPCPower_0x2DBits1To7(critter.item_id) <= 0)
                     {
-                        //seg007_17A2_895:
-                        RangeAttackStarted = NPCStartRangedAttack(critter);
-                    }
-                }
-                else
-                {
-                    if (!TryToDoMagicAttack(critter))
-                    {
-                        //seg007_17A2_86E
-                        if (critterObjectDat.isCaster(critter.item_id))
+                        //Check if NPC Weapon loot is a ranged weapon
+                        //seg007_17A2_87F:
+                        if ((critterObjectDat.weaponloot(critter.item_id, 0) >> 4) == 1)
                         {
-                            RangeAttackStarted = NPCStartMagicAttack(critter);
+                            //seg007_17A2_895:
+                            RangeAttackStarted = NPCStartRangedAttack(critter);
+                        }
+                    }
+                    else
+                    {
+                        if (!TryToDoMagicAttack(critter))
+                        {
+                            //seg007_17A2_86E
+                            if (critterObjectDat.isCaster(critter.item_id))
+                            {
+                                RangeAttackStarted = NPCStartMagicAttack(critter);
+                            }
                         }
                     }
                 }
@@ -2544,8 +2631,9 @@ namespace Underworld
                         {
                             if (critter.UnkBit_0x19_5 == 0)
                             {
-                                if (Math.Pow(critterObjectDat.maybemorale(critter.item_id), 2) < diDistFromHome)
-                                {
+                                var range = critterObjectDat.TravelRange(critter.item_id);
+                                if (range * range * 4 < diDistFromHome)
+                                {//more than twice its range from home
                                     //seg007_17A2_953:
                                     //NPC Gives up.
                                     critter.UnkBit_0x19_0_likelyincombat = 0;
@@ -2596,7 +2684,7 @@ namespace Underworld
                     critter.Projectile_Pitch = (short)(var6 + Rng.r.Next(5) + 13);
                 }
 
-                if (currentGTargSquaredDistanceByTiles <= 3 && zDiffVar4 < 0x10)
+                if (currentGTargSquaredDistanceByTiles <= 3 && Math.Abs(zDiffVar4) < 0x10)
                 {
                     //seg007_17A2_1214:
                     if (Rng.r.Next(0x100) >= (critterObjectDat.maybemorale(critter.item_id) >> 3))
@@ -2627,7 +2715,9 @@ namespace Underworld
                         if (currentGTargSquaredDistanceByTiles >= 9)
                         {
                             //seg007_17A2_137D
-                            HeadingVar3 = Rng.r.Next(0x20) + (((critter.ProjectileHeading >> 5) + ((Rng.r.Next(2) << 1) - 1) + 8) % 5) << 5;
+                            //stuck further off: a quarter turn either way, plus up to an eighth at random
+                            var quarterTurn = ((Rng.r.Next(2) * 2) - 1) * 2;
+                            HeadingVar3 = ((((critter.ProjectileHeading >> 5) + quarterTurn + 8) % 8) << 5) + Rng.r.Next(0x20);
                             //goto 17a2:1444
                         }
                         else
@@ -2802,51 +2892,37 @@ namespace Underworld
         /// <param name="maybedist"></param>
         /// <returns></returns>
         static int VectorsToPlayer(int headingArg0, int maybedist)
-        {
-            var playerXCoordinate = playerdat.playerObject.xpos + (playerdat.playerObject.npc_xhome << 3);
-            var playerYCoordinate = playerdat.playerObject.ypos + (playerdat.playerObject.npc_yhome << 3);
-            var xvector = playerXCoordinate - currentGTargXCoord;
-            var yvector = playerYCoordinate - currentGTargYCoord;
-            if (Math.Pow(xvector, 2) + Math.Pow(yvector, 2) > Math.Pow(maybedist, 2))
+        {//crit_avoid_player: within maybedist fine units of the player, a heading towards the player is bent 45 degrees away
+            var playerXCoordinate = playerdat.playerObject.xpos + (playerdat.playerObject.tileX << 3);
+            var playerYCoordinate = playerdat.playerObject.ypos + (playerdat.playerObject.tileY << 3);
+            var xvector = playerXCoordinate - currObjXCoordinate;
+            var yvector = playerYCoordinate - currObjYCoordinate;
+            if (maybedist * maybedist > xvector * xvector + yvector * yvector)
             {
-                var HeadingVarB = ((Pathfind.GetVectorHeading(xvector, yvector) + 4) % 8) << 5;
-                HeadingVarB += 0x100;
-                HeadingVarB -= headingArg0;
-                var varD = HeadingVarB % 0x100;
-                if ((varD >= 0x40) || (varD <= 0xC0))
+                var awayHeading = ((Pathfind.GetVectorHeading(xvector, yvector) + 4) % 8) << 5;
+                var diff = (awayHeading + 0x100 - headingArg0) % 0x100;
+                if ((diff < 0x40) || (diff > 0xC0))
+                {//already more than 90 degrees from the player
+                    return headingArg0;
+                }
+                else if (diff < 0x60)
                 {
-                    if (varD >= 0x60)
-                    {
-                        if (varD >= 0x80)
-                        {
-                            if (varD <= 0xA0)
-                            {
-                                return (headingArg0 + 0xE0) % 0x100;
-                            }
-                            else
-                            {
-                                return (HeadingVarB + 0x20) % 0x100;
-                            }
-                        }
-                        else
-                        {
-                            return (HeadingVarB + 0x20) % 0x100;
-                        }
-                    }
-                    else
-                    {
-                        return (HeadingVarB + 0xE0) % 0x100;
-                    }
+                    return (awayHeading + 0xE0) % 0x100;
+                }
+                else if (diff < 0x80)
+                {
+                    return (headingArg0 + 0x20) % 0x100;
+                }
+                else if (diff > 0xA0)
+                {
+                    return (awayHeading + 0x20) % 0x100;
                 }
                 else
                 {
-                    return headingArg0;
+                    return (headingArg0 + 0xE0) % 0x100;
                 }
             }
-            else
-            {
-                return headingArg0;
-            }
+            return headingArg0;
         }
 
 
@@ -2899,6 +2975,7 @@ namespace Underworld
             ChangeNpcHeadings(critter, headingvar2);
             critter.UnkBit_0X15_6 = 0;
 
+            var SeqCombat = _RES == GAME_UW2 ? 2 : 0;//the combat stance (UW1 SEQ_COMBAT is 0)
             var animVar4 = 0x20;
             var AttackTypeVar6 = 0;
 
@@ -2909,20 +2986,20 @@ namespace Underworld
                     //seg007_17A2_A61:
                     if (Rng.r.Next(0x40) >= critterObjectDat.dexterity(critter.item_id))
                     {
-                        animVar4 = 2;
+                        animVar4 = SeqCombat;
                         AttackTypeVar6 = 0;
                     }
                     else
                     {
                         headingvar2 = Rng.r.Next(8);
-                        animVar4 = 2;
+                        animVar4 = SeqCombat;
                         AttackTypeVar6 = 1;
                     }
                 }
                 else
                 {
                     //seg007_17A2_A55:
-                    animVar4 = 1;
+                    animVar4 = _RES == GAME_UW2 ? 1 : 0x2C;//UW1 walks
                     AttackTypeVar6 = 2;
                 }
             }
@@ -2932,14 +3009,14 @@ namespace Underworld
                 {
                     //seg007_17A2_A33:
                     headingvar2 = (headingvar2 + 4) % 8;
-                    animVar4 = 1;
+                    animVar4 = _RES == GAME_UW2 ? 1 : 7;//UW1 backs off
                     AttackTypeVar6 = 2;
                 }
                 else
                 {
                     //seg007_17A2_9F5:
-                    headingvar2 = ((headingvar2 + (Rng.r.Next(2) << 1) - 1) + 8) % 8;
-                    animVar4 = 2;
+                    headingvar2 = ((headingvar2 + ((Rng.r.Next(2) << 1) - 1) * 2) + 8) % 8;//a quarter turn either way (crit_attack)
+                    animVar4 = SeqCombat;
                     AttackTypeVar6 = (critterObjectDat.unk_b(critter.item_id) << 1) / 3;
                 }
             }
@@ -2947,7 +3024,11 @@ namespace Underworld
             //seg007_17A2_A9D:
             critter.ProjectileHeading = (ushort)(headingvar2 << 5);
             critter.UnkBit_0X13_Bit0to6 = (short)AttackTypeVar6;
-            if (critter.npc_animation != animVar4)
+            if (_RES != GAME_UW2)
+            {//UW1 sets the sequence and steps the frame at the end, unless an attack starts
+                critter.npc_animation = (short)animVar4;
+            }
+            else if (critter.npc_animation != animVar4)
             {
                 critter.npc_animation = (short)animVar4;
                 critter.AnimationFrame = 0;
@@ -2980,7 +3061,8 @@ namespace Underworld
             }
 
             //seg007_17A2_BA8: 
-            if (DistArg0 <= 0x100)
+            var attackStarted = false;
+            if (DistArg0 <= 0x64)
             {
                 if (Rng.r.Next(4) != 0)
                 {
@@ -2994,7 +3076,7 @@ namespace Underworld
                 {
                     var rngSI = Rng.r.Next(0x64);
                     var attackNoVar8 = 0;
-                    while ((critterObjectDat.attackprobability(critter.item_id, attackNoVar8) >= rngSI) && (attackNoVar8 < 2))
+                    while ((critterObjectDat.attackprobability(critter.item_id, attackNoVar8) <= rngSI) && (attackNoVar8 < 2))
                     {
                         rngSI -= critterObjectDat.attackprobability(critter.item_id, attackNoVar8);//reduce probability threshold for next check.
                         attackNoVar8++;
@@ -3009,7 +3091,12 @@ namespace Underworld
                     }
 
                     critter.AnimationFrame = 0;
+                    attackStarted = true;
                 }
+            }
+            if (_RES != GAME_UW2 && !attackStarted)
+            {
+                critter.AnimationFrame = (byte)((critter.AnimationFrame + 1) % 4);
             }
 
             //seg007_17A2_C68:

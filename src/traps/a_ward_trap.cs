@@ -27,8 +27,8 @@ namespace Underworld
             uimanager.AddToMessageScroll(ZhText.Enabled
                 ? ZhText.Compose(GameStrings.GetDisplayString(1, GameStrings.str_your_rune_of_warding_has_been_set_off_), GameStrings.GetDisplayString(1, 36 + GameStrings.GetDirectionStringToTile(sourceObject: playerdat.playerObject, targetX: triggeringCharacter.tileX, targetY: triggeringCharacter.tileY)), "。")
                 : $"{GameStrings.GetString(1,GameStrings.str_your_rune_of_warding_has_been_set_off_)}{direction}");
-            a_damage_trap.ApplyDamageTrap(triggeringCharacter: triggeringCharacter, Poison: false, basedamage: 3 + Rng.r.Next(playerdat.Casting));
-            return triggernext;
+            a_damage_trap.ApplyDamageTrap(triggeringCharacter: triggeringCharacter, Poison: false, basedamage: 3 + Rng.r.NextScaled(playerdat.Casting));//rand() * Casting / 0x8000 + 3
+            return 0;//a rune of warding ends the chain (UseTrap TRAP_WARD)
         }
     }
 }

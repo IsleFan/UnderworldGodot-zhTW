@@ -11,11 +11,6 @@ namespace Underworld
         public static UWBlock[] scd_data;//15 blocks of scd data
 
         /// <summary>
-        /// Set to true when the ark file has been modified (eg row removal) and has to be resaved to the SAVEx game folder
-        /// </summary>
-        static bool ArkHasBeenModified = false;
-
-        /// <summary>
         /// Loads the specified SCD.ARK block no into scd_data.
         /// </summary>
         /// <param name="blockno"></param>
@@ -63,20 +58,21 @@ namespace Underworld
         /// <param name="eventOffset"></param>
         static void DeleteRow(byte[] currentblock, int eventOffset)
         {
-            var TotalnoOfEvents = currentblock[0];
+            var TotalnoOfEvents = Rows(currentblock);
             var di_eventNo = (eventOffset - 324)/16;
             var EOF = (TotalnoOfEvents - di_eventNo - 1) * 16;
 
             System.Buffer.BlockCopy(currentblock, eventOffset + 16, currentblock, eventOffset, EOF);
 
             for (int si = 0; si<80;si++)
-            {
-                if (currentblock[6 + si*4] > di_eventNo)
+            {//every level's next row after the deleted one moves back one (Sched_Delete); all words
+                var next = Word(currentblock, 6 + si * 4);
+                if (next > di_eventNo)
                 {
-                    currentblock[6 + si*4]--;
+                    SetWord(currentblock, 6 + si * 4, next - 1);
                 }
             }   
-            currentblock[0]--;
+            SetWord(currentblock, 0, TotalnoOfEvents - 1);
         }
 
         static void CopyEventRow(byte[] currentblock, int eventOffset)

@@ -1,5 +1,7 @@
 using Peaky.Coroutines;
 using System.Collections;
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 
 namespace Underworld
@@ -10,7 +12,7 @@ namespace Underworld
         //Constants for level change events
         const int EnterLevelMode = 0;
         const int ExitLevelMode = 1;
-        const int LoadSaveMode = 2;
+        const int LoadSaveMode = 3;
         /// <summary>
         /// Function to call when teleporting.
         /// </summary>
@@ -26,34 +28,66 @@ namespace Underworld
         /// </summary>
         public static TeleportCallBack CodeToRunOnTeleport;
 
+        /// <summary>
+        /// npp_func: runs once the new level is loaded and before the landing square is looked for, so it may move the
+        /// target (moveto). The arrival's music and messages stay in CodeToRunOnTeleport, which runs last.
+        /// </summary>
+        public static TeleportCallBack CodeToRunBeforeLanding;
+
+        /// <summary>
+        /// NewPlyFade: whether the view goes dark while the player moves (bit 0 fading out, bit 1 back in). A death's
+        /// resurrection clears it, the death having faded the view already; it is 3 again after each teleport.
+        /// </summary>
+        public static int NewPlyFade = 3;
+
 
         /// <summary>
         /// Processes a pending teleportation. Run only on game loop update and not during a trap chain.
         /// </summary>
         public static void HandleTeleportation()
         {
+            var pending = (TeleportLevel != -1) || ((TeleportTileX != -1) && (TeleportTileY != -1));
+            if (Fading)
+            {
+                return;
+            }
+            if (pending && ((NewPlyFade & 1) != 0) && !fadedOut)
+            {//new_player_pos: the view fades out first (fadeout3d), the game held meanwhile
+                _ = Peaky.Coroutines.Coroutine.Run(Fade3D(fadeIn: false), main.instance);
+                return;
+            }
+            fadedOut = false;
+            var fadeIn = pending && ((NewPlyFade & 2) != 0);
             if (TeleportLevel != -1)
             {
                 uimanager.WaitingForFade = true;
-                uimanager.FlashColour(1, uimanager.CutsSmall, HaltGame:true);
+
+                //ChangeLevel: fighting ends and an object waiting to be used on something is let go
+                if ((combat.stage != combat.CombatStages.OutOfCombat) && (combat.stage != combat.CombatStages.Ready))
+                {
+                    combat.EndCombatLoop();
+                }
+                if (useon.CurrentItemBeingUsed != null)
+                {
+                    useon.CurrentItemBeingUsed = null;
+                    uimanager.instance.mousecursor.SetCursorToCursor();
+                }
+
+                //handle leave level events (before the level is saved, with the cursor object still held: do_level_hacks(from, 1))
+                LevelChangeEvents(ExitLevelMode, playerdat.dungeon_level);
+
+                //The object on the cursor goes with the player, kept with the inventory while the levels change (INVSAVE.C).
+                short carriedObject = 0;
+                short carriedWeight = 0;
                 if (playerdat.ObjectInHand != -1)
                 {
-                    //handle moving an object in hand through levels. 
-                    Debug.Print("Moving an object through a level while holding it! Dropping it there.");
                     var obj = UWTileMap.current_tilemap.LevelObjects[playerdat.ObjectInHand];
-
-                    //drop objects at the player tile so they cannot be taken out of the dream 
-                    //TODO. special case for the telekinesis wand in Scintillus.
                     playerdat.ObjectInHand = -1;
-                    uimanager.instance.mousecursor.SetCursorToCursor();
-                    var tile = UWTileMap.current_tilemap.Tiles[playerdat.playerObject.tileX, playerdat.playerObject.tileY];
-                    obj.zpos = (short)(tile.floorHeight << 3);
-                    obj.xpos = 3;
-                    obj.ypos = 3;
-                    obj.next = tile.indexObjectList;
-                    tile.indexObjectList = obj.index;
-                    pickup.DropSpecialCases(obj.item_id);
-
+                    var weight = playerdat.WeightCarried;
+                    obj.next = 0;
+                    carriedObject = playerdat.AddObjectToPlayerInventory(obj.index, IncludeNext: false);
+                    carriedWeight = (short)(playerdat.WeightCarried - weight);
+                    playerdat.WeightCarried = weight;
                 }
 
                 //remove player from the level
@@ -66,9 +100,6 @@ namespace Underworld
                     playerdat.pdat[playerdat.PlayerObjectStoragePTR + i] = playerdat.playerObject.DataBuffer[playerdat.playerObject.PTR + i];
                     playerdat.playerObject.DataBuffer[playerdat.playerObject.PTR + i] = 0;
                 }
-
-                //handle leave level events
-                LevelChangeEvents(ExitLevelMode, playerdat.dungeon_level);
 
                 playerdat.dungeon_level = TeleportLevel;
 
@@ -88,8 +119,10 @@ namespace Underworld
                 //Reset the camera reference as the old reference belonged to a previous map
                 playerdat.CameraReference = playerdat.playerObject;
 
+                RunCodeBeforeLanding();
                 if ((TeleportTileX != -1) && (TeleportTileY != -1))
                 {
+                    FindLandingSquare();
                     if (_RES == GAME_UW2)
                     {
                         //move to new tile on different level
@@ -109,8 +142,61 @@ namespace Underworld
                     }
                 }
 
+                if (carriedObject != 0)
+                {//back on the cursor in the new level
+                    var weight = playerdat.WeightCarried;
+                    var held = playerdat.AddInventoryObjectToWorld(objIndex: carriedObject, updateUI: false, RemoveNext: false, DestroyInventoryObject: true, ClearLink: true);
+                    if (held != 0)
+                    {
+                        playerdat.WeightCarried = weight;
+                        UWTileMap.current_tilemap.LevelObjects[held].next = 0;
+                        playerdat.ObjectInHand = held;
+                        uimanager.instance.mousecursor.SetCursorToObject(UWTileMap.current_tilemap.LevelObjects[held].item_id);
+                    }
+                    else
+                    {//no free objects on the new level (the original does not check): keep it in an empty inventory slot, else it is lost
+                        var slot = uimanager.FreeGeneralUseSlot;
+                        if (slot != -1)
+                        {//a held object carries no weight, a carried one does
+                            playerdat.SetInventorySlotListHead(slot, carriedObject);
+                            playerdat.WeightCarried += carriedWeight;
+                        }
+                        else
+                        {//lost, with everything inside it
+                            void RemoveWithContents(int index)
+                            {
+                                var lost = playerdat.InventoryObjects[index];
+                                if ((lost.is_quant == 0) && (lost.link != 0))
+                                {
+                                    var content = (int)lost.link;
+                                    while (content != 0)
+                                    {
+                                        var next = playerdat.InventoryObjects[content].next;
+                                        RemoveWithContents(content);
+                                        content = next;
+                                    }
+                                }
+                                playerdat.RemoveFromInventory(index: index, updateUI: false, ClearLink: false);
+                            }
+                            RemoveWithContents(carriedObject);
+                            playerdat.WeightCarried = weight;
+                        }
+                        uimanager.RefreshWeightDisplay();
+                        uimanager.UpdateInventoryDisplay();
+                    }
+                }
+
                 //Handle enter level events
                 LevelChangeEvents(EnterLevelMode, playerdat.dungeon_level);
+                if (_RES == GAME_UW2)
+                {//restore_mana(ThePlayer, 0): the mana no more than its maximum, outside the Academy's no-mana levels
+                    var level = (playerdat.dungeon_level - 1) % 8 + 1;
+                    if ((worlds.GetWorldNo(playerdat.dungeon_level) != (int)worlds.world_ids.Academy) || (level <= 1)
+                        || ((level >= 8) && (playerdat.playerObject.npc_xhome >= 25)))
+                    {
+                        playerdat.play_mana = System.Math.Min(playerdat.play_mana, playerdat.max_mana);
+                    }
+                }
 
                 if (_RES == GAME_UW2)
                 {//SCD.ARK then needs to be processed in UW2
@@ -121,10 +207,11 @@ namespace Underworld
             else
             {
                 //teleport within a map
+                RunCodeBeforeLanding();
                 if ((TeleportTileX != -1) && (TeleportTileY != -1))
                 {
                     uimanager.WaitingForFade = true;
-                    uimanager.FlashColour(1, uimanager.CutsSmall, HaltGame:true);
+                    FindLandingSquare();
                     //move to new tile
                     if (_RES == GAME_UW2)
                     {
@@ -149,6 +236,15 @@ namespace Underworld
             TeleportTileX = -1;
             TeleportTileY = -1;
             HeadingHeightTeleportFlag = 0;
+            NewPlyFade = 3;
+            if (fadeIn)
+            {//and back in at the new place (fadein3d)
+                _ = Peaky.Coroutines.Coroutine.Run(Fade3D(fadeIn: true), main.instance);
+            }
+            else
+            {
+                SetViewBrightness(uimanager.instance.uwviewport, 1f);
+            }
             if (CodeToRunOnTeleport != null)
             {//handle a callback.
                 CodeToRunOnTeleport();
@@ -158,6 +254,246 @@ namespace Underworld
         }
 
 
+
+        /// <summary>A fade of the 3D view is running; the game is held (blockinput).</summary>
+        public static bool Fading { get; private set; }
+        static bool fadedOut;
+
+        /// <summary>
+        /// fadeout3d / fadein3d (out3d, in3d): steps 0 to 12 darken the view through the rows of the light table,
+        /// LIGHT.DAT (cDimFB remaps each pixel's colour through row i), one frame each, then black (colour 1); fading
+        /// in goes back up from black. The view here is in colour, not palette indices, so each row is applied as the
+        /// brightness it gives the game palette on average.
+        /// </summary>
+        static System.Collections.IEnumerator Fade3D(bool fadeIn)
+        {
+            Fading = true;
+            var view = uimanager.instance.uwviewport;
+            for (int i = fadeIn ? 12 : 0; fadeIn ? i >= 0 : i <= 12; i += fadeIn ? -1 : 1)
+            {
+                var level = LightRowBrightness(i);
+                SetViewBrightness(view, level);
+                yield return new Peaky.Coroutines.WaitOneFrame();
+            }
+            SetViewBrightness(view, fadeIn ? 1f : 0f);
+            if (!fadeIn)
+            {
+                fadedOut = true;
+            }
+            Fading = false;
+        }
+
+        /// <summary>
+        /// gruesome_door_hack (UW2): the door in square (x, y) is unlocked and opened, so the player never arrives behind
+        /// a shut door (arriving in level 1, and the jail cell).
+        /// </summary>
+        public static void GruesomeDoorHack(int x, int y)
+        {
+            if (!UWTileMap.ValidTile(x, y))
+            {
+                return;
+            }
+            var arrivalDoor = objectsearch.FindMatchInObjectChain(
+                ListHeadIndex: UWTileMap.current_tilemap.Tiles[x, y].indexObjectList,
+                majorclass: 5, minorclass: 0, classindex: -1,
+                objList: UWTileMap.current_tilemap.LevelObjects);
+            if (arrivalDoor != null)
+            {
+                if (a_lock.GetIsLocked(arrivalDoor))
+                {
+                    a_lock.SetIsLocked(parentObject: arrivalDoor, value: false, character: 0);
+                }
+                door.OpenDoor(arrivalDoor);
+            }
+        }
+
+        /// <summary>The 3D view's shader writes its colour itself, so the fade goes through its brightness.</summary>
+        static void SetViewBrightness(Godot.TextureRect view, float level)
+        {
+            (view.Material as Godot.ShaderMaterial)?.SetShaderParameter("brightness", level);
+        }
+
+        static float[] lightRowBrightness;
+
+        /// <summary>How bright row row of LIGHT.DAT leaves the game palette, on average (1 for row 0).</summary>
+        static float LightRowBrightness(int row)
+        {
+            if (lightRowBrightness == null)
+            {
+                lightRowBrightness = new float[16];
+                var pal = PaletteLoader.Palettes?[0];
+                var light = PaletteLoader.light;
+                for (int r = 0; r < 16; r++)
+                {
+                    lightRowBrightness[r] = 1f - r / 13f;
+                    if ((pal == null) || (light == null) || (r > light.GetUpperBound(0)) || (light[r] == null))
+                    {
+                        continue;
+                    }
+                    float full = 0, dimmed = 0;
+                    for (int c = 0; c < 256; c++)
+                    {
+                        var a = pal.ColorAtIndex((byte)c, false, false);
+                        var b = pal.ColorAtIndex(light[r].red[c], false, false);
+                        full += a.R + a.G + a.B;
+                        dimmed += b.R + b.G + b.B;
+                    }
+                    if (full > 0)
+                    {
+                        lightRowBrightness[r] = System.Math.Min(1f, dimmed / full);
+                    }
+                }
+            }
+            return lightRowBrightness[System.Math.Clamp(row, 0, 15)];
+        }
+
+        static void RunCodeBeforeLanding()
+        {
+            var code = CodeToRunBeforeLanding;
+            CodeToRunBeforeLanding = null;
+            code?.Invoke();
+        }
+
+        /// <summary>
+        /// moveto: the target becomes the square of the first object of that class on the level. (The original then
+        /// aims at square 0, 0 when there is none, and the player cannot land; here the target stays as it was.)
+        /// </summary>
+        public static void MoveTo(int majorclass, int minorclass, int classindex)
+        {
+            var obj = objectsearch.FindMatchInFullObjectList(majorclass, minorclass, classindex, UWTileMap.current_tilemap.LevelObjects);
+            if ((obj != null) && UWTileMap.ValidTile(obj.tileX, obj.tileY))
+            {
+                TeleportTileX = obj.tileX;
+                TeleportTileY = obj.tileY;
+            }
+        }
+
+        /// <summary>
+        /// The pending teleport's target square, for a CodeToRunBeforeLanding to move.
+        /// </summary>
+        public static int TargetX { get => TeleportTileX; set => TeleportTileX = value; }
+        public static int TargetY { get => TeleportTileY; set => TeleportTileY = value; }
+
+        /// <summary>
+        /// do_mstone: arrive at the moonstone on its level.
+        /// </summary>
+        public static void MoveToMoonstone()
+        {
+            MoveTo(4, 2, 6);
+        }
+
+        /// <summary>
+        /// move_along: moves (x, y) dist along a byte heading (256 to the turn); each nonzero step is rounded away from
+        /// zero.
+        /// </summary>
+        public static void MoveAlong(int heading, int dist, ref int x, ref int y)
+        {
+            var angle = ((0x140 - heading) & 0xFF) * System.Math.PI / 128;
+            int dy = (short)(System.Math.Sin(angle) * 0x7FFF) / 0x80 * dist / 0x100;
+            int dx = (short)(System.Math.Cos(angle) * 0x7FFF) / 0x80 * dist / 0x100;
+            y += dy + System.Math.Sign(dy);
+            x += dx + System.Math.Sign(dx);
+        }
+
+        /// <summary>
+        /// Finds where the player fits near tile (x, y) (find_good_x_and_y): a breadth first search outward through the
+        /// open sides of each tile, at most 20 tiles a ring, within the box of 10 by 10 tiles round (x, y). With clear set,
+        /// each tile searched first loses the objects with a height and the mobile objects that culling allows.
+        /// </summary>
+        static bool FindGoodXAndY(int x, int y, bool clear, out int nx, out int ny)
+        {
+            nx = x; ny = y;
+            var xmin = Math.Min(Math.Max(1, x - 4), 0x3A);
+            var ymin = Math.Min(Math.Max(1, y - 4), 0x3A);
+            var xmax = Math.Min(xmin + 9, 0x3E);
+            var ymax = Math.Min(ymin + 9, 0x3E);
+            if ((x < xmin) || (x > xmax) || (y < ymin) || (y > ymax))
+            {
+                return false;
+            }
+            var visited = new int[10];//(the original's 9 entries are one short of the box, so x - xmin = 9 writes past it)
+            var cur = new List<(int, int)> { (x, y) };
+            visited[x - xmin] |= 1 << (y - ymin);
+            while (cur.Count > 0)
+            {
+                var next = new List<(int, int)>();
+                void Visit(int vx, int vy)
+                {
+                    if ((next.Count < 20) && (vx >= xmin) && (vx <= xmax) && (vy >= ymin) && (vy <= ymax)
+                        && ((visited[vx - xmin] & (1 << (vy - ymin))) == 0))
+                    {
+                        next.Add((vx, vy));
+                        visited[vx - xmin] |= 1 << (vy - ymin);
+                    }
+                }
+                foreach (var (tx, ty) in cur)
+                {
+                    var tile = UWTileMap.current_tilemap.Tiles[tx, ty];
+                    if (clear)
+                    {
+                        var index = tile.indexObjectList;
+                        while (index != 0)
+                        {
+                            var o = UWTileMap.current_tilemap.LevelObjects[index];
+                            index = o.next;
+                            if ((o.index != 1) && ((commonObjDat.height(o.item_id) != 0) || !o.IsStatic))
+                            {//Obj_Punt: only what culling allows
+                                if (ObjectRemover_OLD.ObjectCullingTest(o, 0xA))
+                                {
+                                    ObjectRemover_OLD.ClearContents(o);
+                                    ObjectRemover_OLD.DeleteObjectFromTile_DEPRECIATED(tx, ty, o.index);
+                                }
+                            }
+                        }
+                    }
+                    var z = (tile.floorHeight << 3) + (((motion.TileTraversalFlags_dseg_67d6_1BA6[tile.tileType] & 0x20) != 0) ? 4 : 0);
+                    if (motion.CanPlace(127, 1, (tx << 3) + 3, (ty << 3) + 3, z, false, 8))
+                    {
+                        nx = tx; ny = ty;
+                        return true;
+                    }
+                    switch (tile.tileType)
+                    {
+                        case UWTileMap.TILE_SOLID:
+                            break;
+                        case UWTileMap.TILE_DIAG_SE:
+                            Visit(tx + 1, ty); Visit(tx, ty - 1);
+                            break;
+                        case UWTileMap.TILE_DIAG_SW:
+                            Visit(tx - 1, ty); Visit(tx, ty - 1);
+                            break;
+                        case UWTileMap.TILE_DIAG_NE:
+                            Visit(tx + 1, ty); Visit(tx, ty + 1);
+                            break;
+                        case UWTileMap.TILE_DIAG_NW:
+                            Visit(tx - 1, ty); Visit(tx, ty + 1);
+                            break;
+                        default:
+                            Visit(tx - 1, ty); Visit(tx, ty - 1); Visit(tx + 1, ty); Visit(tx, ty + 1);
+                            break;
+                    }
+                }
+                cur = next;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Where the player lands (new_player_pos): a free square near the target, strictly then clearing objects away.
+        /// With none the player dies. (The original then leaves the player unplaced; here the player still lands on the target.)
+        /// </summary>
+        static void FindLandingSquare()
+        {
+            if (FindGoodXAndY(TeleportTileX, TeleportTileY, false, out int nx, out int ny)
+                || FindGoodXAndY(TeleportTileX, TeleportTileY, true, out nx, out ny))
+            {
+                TeleportTileX = nx; TeleportTileY = ny;
+            }
+            else
+            {
+                playerdat.play_hp = 0;
+            }
+        }
 
         /// <summary>
         /// Handles the reseting of the player motion params when teleporting to a new tile, starting a new game or changing levels
@@ -211,9 +547,10 @@ namespace Underworld
                 }
             }
             playerdat.playerObject.zpos = (short)(motion.playerMotionParams.z_4 >> 3);
-            playerdat.playerObject.xpos = 6;
-            playerdat.playerObject.ypos = 6;
-            playerdat.playerObject.npc_animation = 1;
+            playerdat.playerObject.xpos = 3;//player_setup: fine 3, 3, the walking sequence (UW1 0x2C) and no quality
+            playerdat.playerObject.ypos = 3;
+            playerdat.playerObject.npc_animation = (short)(_RES == GAME_UW2 ? 1 : 0x2C);
+            playerdat.playerObject.quality = 0;
             playerdat.playerObject.npc_xhome = (short)tileX;
             playerdat.playerObject.npc_yhome = (short)tileY;
             playerdat.playerObject.tileX = tileX;
@@ -326,6 +663,10 @@ namespace Underworld
                         return 2;
                     }
                 }
+                if (!SameLevelSquareFound(ref tileX, ref tileY, newLevel))
+                {
+                    return 2;
+                }
 
                 //queue up the teleport.
                 if (newLevel == 0)
@@ -351,17 +692,16 @@ namespace Underworld
 
                 bool coward = false;
                 if (playerdat.IsFightingInPit)
-                {
-
-                    if (newLevel != playerdat.dungeon_level)
+                {//the avatar runs from the fight by leaving the level, landing outside the arenas or in another of them (do_teleport)
+                    var dest = newLevel == 0 ? playerdat.dungeon_level : newLevel;
+                    var oldX = playerdat.playerObject.tileX; var oldY = playerdat.playerObject.tileY;
+                    if (
+                        (dest != playerdat.dungeon_level)
+                        || !InArena(tileX, tileY)
+                        || ((Mpos(tileX - 0x1F, tileY - 0x1F) >> 1) != (Mpos(oldX - 0x1F, oldY - 0x1F) >> 1))
+                        )
                     {
-                        //avatar is a coward
                         coward = true;
-                    }
-                    else
-                    {
-                        //Check if avatar is a coward by checking if they are still in an arena, when teleporting outside the arenas but still within the level. (eg using a moonstone)
-                        Debug.Print("todo check if avatar is a coward and has left the arena!");
                     }
                 }
                 if (coward)
@@ -385,8 +725,68 @@ namespace Underworld
             playerdat.SetQuest(124, 1);//is referenced in teleport_trap in relation to quest 112 fighting in the castle. 
         }
 
+        /// <summary>
+        /// Whether square x, y is inside one of the four arenas of the Pits of Carnage, around the square at 0x1F, 0x1F (in_arena).
+        /// </summary>
+        static bool InArena(int x, int y)
+        {
+            int[] limits = { 0xF, 0x10, 0xE, 0xF };
+            x -= 0x1F;
+            y -= 0x1F;
+            var arena = Mpos(x, y) >> 1;
+            x = System.Math.Abs(x);
+            y = System.Math.Abs(y);
+            if (x < 3 || y < 3)
+            {
+                return false;
+            }
+            return limits[arena] >= x && limits[arena] >= y;
+        }
+
+        /// <summary>
+        /// The direction of the vector x, y, 0 to 7: 0 is +y, 2 +x, 4 -y, 6 -x and the odd values the diagonals
+        /// between; a component counts as zero when it is less than half the other (mpos).
+        /// </summary>
+        static int Mpos(int x, int y)
+        {
+            x = (sbyte)x; y = (sbyte)y;
+            if (System.Math.Abs(x) / 2 > System.Math.Abs(y))
+            {
+                return x > 0 ? 2 : 6;
+            }
+            if (System.Math.Abs(y) / 2 > System.Math.Abs(x))
+            {
+                return y > 0 ? 0 : 4;
+            }
+            if (x < 0)
+            {
+                return (y > 0 ? 2 : 0) + 5;
+            }
+            return (y < 0 ? 2 : 0) + 1;
+        }
+
+        /// <summary>
+        /// do_teleport: within this level (level 0 or this one, and not square 63) a free square must be found near the target.
+        /// </summary>
+        static bool SameLevelSquareFound(ref int tileX, ref int tileY, int newLevel)
+        {
+            if (((newLevel == 0) || (newLevel == playerdat.dungeon_level)) && (tileX != 0x3F) && (tileY != 0x3F))
+            {
+                if (!FindGoodXAndY(tileX, tileY, false, out int nx, out int ny))
+                {
+                    return false;
+                }
+                tileX = nx; tileY = ny;
+            }
+            return true;
+        }
+
         static int TeleportUW1(int character, int tileX, int tileY, int newLevel)
         {
+            if (!SameLevelSquareFound(ref tileX, ref tileY, newLevel))
+            {
+                return 2;
+            }
             if (newLevel != 0)
             {
                 if (newLevel == playerdat.dungeon_level)
@@ -425,9 +825,41 @@ namespace Underworld
 
 
         /// <summary>
+        /// The level's special cases when a game starts (do_level_hacks): a new game arrives on its level (MAINMENU.C, mode
+        /// 0, the arrival square the player's), a restored one runs the after-restore case (RestoreGame, mode 3: UW1 turns
+        /// the automap off in the Ethereal Void).
+        /// </summary>
+        public static void LevelEventsOnGameStart(bool newGame)
+        {
+            //reset_game's reset_times, for a new game and a restored one alike: lstime, nextSpellTime, nextstep, watertime
+            RunicMagic.ResetSpellCastInterval();
+            MagicEnchantment.ResetSpellTimer();
+            playerdat.ResetFootStepTimers();
+            if (newGame)
+            {
+                TeleportTileX = playerdat.playerObject.tileX;
+                TeleportTileY = playerdat.playerObject.tileY;
+                LevelChangeEvents(EnterLevelMode, playerdat.dungeon_level);
+                TeleportTileX = -1;
+                TeleportTileY = -1;
+            }
+            else
+            {//RestoreGame: reset_game (UW1 turns the automap back on, the object spell timer is cleared), GetLevel's
+             //init_level_creature_stuff (the last critter hit and the critters' paths forgotten), then mode 3
+                if (_RES != GAME_UW2)
+                {
+                    playerdat.AutomapEnabled = true;
+                }
+                playerdat.LastDamagedNPCIndex = 0; playerdat.LastDamagedNPCType = -1;
+                CallBacks.RunCodeOnAllMobiles(ClearUnkBit_0x15_7_OnMobiles, null); npc.ClearPaths();
+                LevelChangeEvents(LoadSaveMode, playerdat.dungeon_level);
+            }
+        }
+
+        /// <summary>
         /// Handle events that happen when player leaves and enters dungeon levels
         /// </summary>
-        /// <param name="mode">0 = new game/enter level, 1 = leave level, 2 = unused and 3 = load save game</param>
+        /// <param name="mode">0 = new game/enter level, 1 = leave level, 3 = load save game</param>
         /// <param name="dungeon">Either the new or previous dungeon.</param>
         static void LevelChangeEvents(int mode, int dungeon)
         {
@@ -444,7 +876,7 @@ namespace Underworld
         /// <summary>
         /// Handle events that happen when player leaves and enters dungeon levels in UW2
         /// </summary>
-        /// <param name="mode">0 = new game/enter level, 1 = leave level, 2 = unused and 3 = load save game</param>
+        /// <param name="mode">0 = new game/enter level, 1 = leave level, 3 = load save game</param>
         /// <param name="dungeon">Either the new or previous dungeon.</param>
         static void LevelChangeEventsUW2(int mode, int dungeon)
         {
@@ -458,16 +890,15 @@ namespace Underworld
                 if (mode == EnterLevelMode)
                 {
                     playerdat.LastDamagedNPCIndex = 0; playerdat.LastDamagedNPCType = -1;
-                    CallBacks.RunCodeOnAllMobiles(ClearUnkBit_0x15_7_OnMobiles, null);
+                    CallBacks.RunCodeOnAllMobiles(ClearUnkBit_0x15_7_OnMobiles, null); npc.ClearPaths();
                     if (playerdat.play_drawn == 0)
-                    {
-                        //reselect level theme music.
-                        Debug.Print("Todo Refresh music themes");
+                    {//the walking music of the world, if it has changed (set_random_walking_music(-2))
+                        XMIMusic.PickLevelThemeMusic(-2);
                     }
                     if (dungeon == 1)
                     {
                         playerdat.playerObject.ProjectileSourceID = 0;
-                        Debug.Print($"Reentering britannia. make sure door at {TeleportTileX},{TeleportTileY} is set to closed if moving");
+                        GruesomeDoorHack(TeleportTileX, TeleportTileY);
                     }
                 }
                 else
@@ -500,12 +931,17 @@ namespace Underworld
                         }
                     case worlds.world_ids.Killorn:
                         //handle killorn is crashing
-                        if ((playerdat.GetQuest(50) == 1) && (mode != EnterLevelMode))
+                        if ((playerdat.GetQuest(50) == 1) && (mode == ExitLevelMode))
                         {
                             if (dungeon == 17)
                             {
                                 killorn.KilornIsCrashing(isEnteringLevel: true);
                             }
+                        }
+                        //the original's case falls into the Academy's: leaving Killorn's level 3 takes the wand away too
+                        if ((dungeon == 19) && (mode == ExitLevelMode))
+                        {
+                            academy.RemoveAcademyWand();
                         }
                         break;
                     case worlds.world_ids.Academy:
@@ -545,7 +981,7 @@ namespace Underworld
         /// <summary>
         /// Handle events that happen when player leaves and enters dungeon levels in UW1
         /// </summary>
-        /// <param name="mode">0 = new game/enter level, 1 = leave level, 2 = unused and 3 = load save game</param>
+        /// <param name="mode">0 = new game/enter level, 1 = leave level, 3 = load save game</param>
         /// <param name="dungeon">Either the new or previous dungeon.</param>
         static void LevelChangeEventsUW1(int mode, int dungeon)
         {
@@ -558,7 +994,7 @@ namespace Underworld
                 if (mode == EnterLevelMode)
                 {
                     playerdat.LastDamagedNPCIndex = 0; playerdat.LastDamagedNPCType = -1;
-                    CallBacks.RunCodeOnAllMobiles(ClearUnkBit_0x15_7_OnMobiles, null);
+                    CallBacks.RunCodeOnAllMobiles(ClearUnkBit_0x15_7_OnMobiles, null); npc.ClearPaths();
                 }
                 else
                 {

@@ -549,8 +549,8 @@ namespace Underworld
                             newHeight = initialheight + 2 - HeightAdjustFlag;
                         }
 
-                        if ((newHeight >= 0) && (newHeight <= 0xE))
-                        {
+                        if ((newHeight >= 0) && (newHeight <= (_RES == GAME_UW2 ? 0xE : 0xD)))
+                        {//change_terrain: UW1 raises a floor to 13 at most
                             tileToChange.floorHeight = (short)newHeight;
 
                         }
@@ -587,8 +587,8 @@ namespace Underworld
                         // }
 
                         //wall textures
-                        if (newWallTexture < 0x3F)
-                        {
+                        if (newWallTexture < (_RES == GAME_UW2 ? 0x3F : 0x30))
+                        {//UW1 counts a wall texture of 0x30 or more as unchanged
                             tileToChange.wallTexture = (short)newWallTexture;
                             //Update NSEW of neighbours
                         }
@@ -820,7 +820,7 @@ namespace Underworld
         static int RaiseObjectInChangingTile(uwObject obj, int NewTileHeight, bool TileIsSolid)
         {
             var nextObj = obj.next;
-            if ((NewTileHeight << 3) + commonObjDat.height(obj.item_id) >= 0x7F)
+            if ((NewTileHeight << 3) + commonObjDat.height(obj.item_id) > 0x7F)
             {
                 damage.DamageObject(obj, 0xFF, 0, UWTileMap.current_tilemap.LevelObjects, true, 0); //apply raw crushing damage to the object.
             }

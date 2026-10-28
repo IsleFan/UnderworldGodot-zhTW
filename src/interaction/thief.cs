@@ -9,6 +9,21 @@ namespace Underworld
     public class thief : UWClass
     {
         /// <summary>
+        /// get_name(npc, 1, 0) for critter_get_told: the NPC's own name, or its kind with the article; UW2 capitalises it.
+        /// </summary>
+        static string ThiefWatcherName(uwObject critter)
+        {
+            var who = critter.npc_whoami;
+            var own = (who > 0 && who < 0xF0) ? GameStrings.GetString(7, who + 0x10) : "";
+            var name = own != "" ? GameStrings.FixNameString(own, article: true, plural: false) : GameStrings.GetName(critter.item_id, article: true, plural: false);
+            if ((_RES == GAME_UW2) && (name.Length > 0))
+            {
+                name = char.ToUpper(name[0]) + name.Substring(1);
+            }
+            return name;
+        }
+
+        /// <summary>
         /// Currently owner of the stolen item
         /// </summary>
         public static int StolenItemOwner;
@@ -44,14 +59,15 @@ namespace Underworld
                     yHeight: 15
                 );
 
-                if ((objectowner >= 0) && (illegallyusedobject.owner <= 29))
+                //player_grabbed: the object now belongs to nobody unless its owner is above 0x1D (UW1 0x1B)
+                if ((illegallyusedobject.owner & 0x1F) <= (_RES == GAME_UW2 ? 0x1D : 0x1B))
                 {
                     illegallyusedobject.owner = 0;
-                    //if this object is a container clear owner of it's contents
-                    if (illegallyusedobject.OneF0Class == 8)
-                    {
-                        CallBacks.RunCodeOnObjectsInChain(methodToCall: ClearOwnership, obj: illegallyusedobject, objList: UWTileMap.current_tilemap.LevelObjects);
-                    }
+                }
+                //UW2 also clears the owner of a container's contents
+                if ((_RES == GAME_UW2) && (illegallyusedobject.OneF0Class == 8))
+                {
+                    CallBacks.RunCodeOnObjectsInChain(methodToCall: ClearOwnership, obj: illegallyusedobject, objList: UWTileMap.current_tilemap.LevelObjects);
                 }
             }
         }
@@ -115,10 +131,13 @@ namespace Underworld
                     if (Pathfind.TestBetweenPoints(npc_xcoord, npc_ycoord, npc_zcoord, stolenitem_xcoord, stolenitem_ycoord, stolenitem_zcoord))
                     {
                         critter.npc_attitude = (short)Math.Max(critter.npc_attitude - 1, 0);
+                        //critter_get_told: angered, annoyed or notes your action, by the new attitude
+                        var stringno = GameStrings.str__is_angered_by_your_action_ + critter.npc_attitude;
                         var msg = ZhText.Enabled
-                            ? ZhText.Compose(ZhText.CreatureName(critter), GameStrings.GetDisplayString(1, GameStrings.str__is_angered_by_your_action_))
-                            : $"{critter.a_name}{GameStrings.GetString(1, GameStrings.str__is_angered_by_your_action_)}";
+                            ? ZhText.Compose(ZhText.CreatureName(critter), GameStrings.GetDisplayString(1, stringno))
+                            : $"{ThiefWatcherName(critter)}{GameStrings.GetString(1, stringno)}";
                         uimanager.AddToMessageScroll(msg);
+                        return true;//counts towards the 20 told
                     }
                 }
             }

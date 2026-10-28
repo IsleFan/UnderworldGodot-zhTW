@@ -78,7 +78,6 @@ namespace Underworld
                 uimanager.instance.TypedInput.Text="Yes";
                 MessageDisplay.WaitingForYesOrNo = true;
                 MessageDisplay.YesNoOption = "Yes";
-                uimanager.instance.scroll.Clear();                
                 uimanager.AddToMessageScroll($"{repairstring}{{TYPEDINPUT}}", mode: MessageDisplay.MessageDisplayMode.TypedInput);
 
                 while (MessageDisplay.WaitingForYesOrNo)
@@ -275,7 +274,7 @@ namespace Underworld
     /// </summary>
     /// <param name="index"></param>
     /// <param name="objList"></param>
-    public static void MendingSpell(int index, uwObject[] objList)
+    public static bool MendingSpell(int index, uwObject[] objList)
     {
         var objToRepair = objList[index];
 
@@ -284,13 +283,17 @@ namespace Underworld
             objToRepair.quality = 0x3F;
             uimanager.AddToMessageScroll(ZhText.Enabled
                 ? ZhText.PhraseAndName(0x12F, objToRepair.item_id)
-                : $"{GameStrings.GetString(1, 0x12F)}{GameStrings.GetObjectNounUW(objToRepair.item_id)}");
+                : _RES == GAME_UW2
+                    ? $"{GameStrings.GetString(1, 0x12F)}{look.GetObjDesc(objToRepair)}."
+                    : $"{GameStrings.GetString(1, 0x12F)}{GameStrings.GetObjectNounUW(objToRepair.item_id)}");
             uimanager.UpdateInventoryDisplay();
             playerdat.PlayerStatusUpdate();
+            return true;
         }
         else
         {
             uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1,0x142)); //Spell has no noticeable effect.           
+            return false;
         }
     }
 

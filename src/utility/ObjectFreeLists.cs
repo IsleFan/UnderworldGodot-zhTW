@@ -14,7 +14,8 @@ namespace Underworld
         };
 
         /// <summary>
-        /// Gets an object slot that can be allocated for a new object
+        /// Gets an object slot that can be allocated for a new object.
+        /// Obj_Alloc: an empty list garbage collects once (range 3, 5 mobile or 10 static objects) and returns 0 if still empty.
         /// </summary>
         /// <param name="WhichList"></param>
         /// <returns></returns>
@@ -27,7 +28,11 @@ namespace Underworld
                     //Take the object at the top of the list, then move PTR down.
                     if (UWTileMap.current_tilemap.StaticFreeListPtr < 0)
                     {
-                        return 0;
+                        ObjectRemover_OLD.GarbageCollect(range: 3, count: 10);
+                        if (UWTileMap.current_tilemap.StaticFreeListPtr < 0)
+                        {
+                            return 0;
+                        }
                     }
                     var staticslot = UWTileMap.current_tilemap.StaticFreeListObject;
                     UWTileMap.current_tilemap.StaticFreeListPtr--;
@@ -36,7 +41,11 @@ namespace Underworld
                 case ObjectListType.MobileList:
                     if (UWTileMap.current_tilemap.MobileFreeListPtr < 0)
                     {
-                        return 0;
+                        ObjectRemover_OLD.GarbageCollect(range: 3, count: 5);
+                        if (UWTileMap.current_tilemap.MobileFreeListPtr < 0)
+                        {
+                            return 0;
+                        }
                     }
                     var newslot = UWTileMap.current_tilemap.MobileFreeListObject;
                     UWTileMap.current_tilemap.MobileFreeListPtr--;

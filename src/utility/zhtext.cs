@@ -73,8 +73,9 @@ namespace Underworld
         /// <param name="qualityId">The quality's string in block 5, or -1 for none.</param>
         /// <param name="enchantment">The enchantment as MagicEnchantment.Describe found it, or null.</param>
         /// <param name="ownerRace">The owner's race (its string is 370 + race in block 1), or -1 for none.</param>
+        /// <param name="warmthString">A blackrock gem's "warm"/"cool" in block 1 (its translation ends with 的), or -1.</param>
         public static string LookObject(bool youSee, int qty, int qualityId, bool magical, bool cursed,
-            int item_id, MagicEnchantment.Description enchantment, int ownerRace)
+            int item_id, MagicEnchantment.Description enchantment, int ownerRace, int warmthString = -1)
         {
             var s = youSee ? "你看到" : "";
             if (qty > 1)
@@ -87,6 +88,7 @@ namespace Underworld
             }
             if (magical) { s += "有魔力的"; }
             if (cursed) { s += "受詛咒的"; }
+            if (warmthString >= 0) { s += GameStrings.GetDisplayString(1, warmthString); }
             s += ObjectName(item_id);
             if (enchantment != null)
             {
@@ -113,29 +115,29 @@ namespace Underworld
             return Done(s);
         }
 
-        /// <summary>A creature (npc.LookAt): its mood, what it is, and its name when it has one.</summary>
-        /// <param name="whoami">0 for none; otherwise the name is 16 + whoami in block 7.</param>
-        /// <param name="nameIsRace">The name is lower case, a kind of creature rather than a name, and replaces the race.</param>
-        public static string LookCreature(int attitude, int item_id, int whoami, string englishName, bool nameIsRace)
+        /// <summary>A creature (npc.LookAt, CritterLook): its mood, what it is, and its name, each only when it has one.</summary>
+        /// <param name="attitudeString">The mood's string in block 5, or -1 for none.</param>
+        /// <param name="kind">What it is, translated, or null when not said.</param>
+        /// <param name="name">Its name, translated, or null.</param>
+        /// <param name="named">The name follows the kind ("named"), rather than standing for it.</param>
+        public static string LookCreature(int attitudeString, string kind, string name, bool named)
         {
-            var s = $"你看到{GameStrings.GetDisplayString(5, 96 + attitude)}的";
-            var name = whoami != 0 ? Localization.Lookup(7, whoami + 16, englishName) : englishName;
-            if (whoami != 0 && nameIsRace)
+            var s = "你看到";
+            if (attitudeString >= 0)
             {
-                s += name;
+                s += $"{GameStrings.GetDisplayString(5, attitudeString)}的";
             }
-            else
+            if (kind != null)
             {
-                s += ObjectName(item_id);
-                if (whoami != 0)
-                {
-                    s += $"，名叫{name}";
-                }
+                s += kind;
+            }
+            if (name != null)
+            {
+                s += named ? $"，名叫{name}" : name;
             }
             return Done(s + "。");
         }
 
-        /// <summary>"You read the " + an object's name.</summary>
         public static string YouRead(int item_id) => Done($"你讀了{ObjectName(item_id)}……");
     }
 }

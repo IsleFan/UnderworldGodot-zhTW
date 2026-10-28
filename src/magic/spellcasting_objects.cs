@@ -21,11 +21,6 @@ namespace Underworld
                         {
                             playerdat.lightlevel = minorclass;
                         }
-                        if (minorclass == 5)
-                        {
-                            //apply mono palette for nightvision.
-                            Palette.ColourTone = 1;
-                        }
                         break;
                     }
                 case 1: //Motion abilities
@@ -56,22 +51,27 @@ namespace Underworld
                         CastClassBEnchantment(minorclass); break;
                     }
                 case 0xC: //toughness or protection.
-                    {   //toughness applies a damage resistance to a specific body part. 
-                        //Protection makes the body part harder to hit
-                        if (PaperDollSlot < 2) //appears to only work when helm and chest?
+                    {   //toughness adds armour, protection makes the body part harder to hit (player_affected_by class 12).
+                        //An armour slot covers its location, anything else the body and the hands; the original adds
+                        //the toughness to the first of those locations each time (a slip kept here).
+                        if (PaperDollSlot < 0)
                         {
-                            var slot = 0;
-                            if (PaperDollSlot == 0) { slot = 3; }
-                            if ((minorclass & 0x8) == 0)
+                            break;
+                        }
+                        int[] defenceSlotIndex = { 3, 0, 1, 2, 2 };
+                        int[] locations = PaperDollSlot > 4 ? new[] { 0, 1 } : new[] { defenceSlotIndex[PaperDollSlot] };
+                        foreach (var location in locations)
+                        {
+                            var toughness = 0;
+                            if ((minorclass & 0x8) != 0)
                             {
-                                //protection
-                                playerdat.LocationalProtectionValues[slot] += (minorclass & 0x7);
+                                toughness = (minorclass & 0x7) + 1;
                             }
                             else
                             {
-                                //toughness
-                                playerdat.LocationalProtectionValues[slot] += (minorclass & 0x7);
+                                playerdat.LocationalProtectionValues[location] += (minorclass & 0x7) + 1;
                             }
+                            playerdat.LocationalArmourValues[locations[0]] += toughness;
                         }
                         break;
                     }
@@ -101,7 +101,9 @@ namespace Underworld
         /// </summary>
         /// <param name="spellno"></param>
         /// <param name="caster"></param>
-        public static void CastSpellFromObject(int spellno, uwObject caster)
+        /// <param name="target">The spell's target, the player when null (a world object's spell is cast on its user).</param>
+        /// <param name="tileX">Where it is cast, the player's tile when -1.</param>
+        public static void CastSpellFromObject(int spellno, uwObject caster, uwObject target = null, int tileX = -1, int tileY = -1)
         {
             if (((spellno & 0xC0) == 0) && (spellno <= RunicMagic.SpellList.GetUpperBound(0)))
             {
@@ -117,9 +119,9 @@ namespace Underworld
                     majorclass: major,
                     minorclass: minor,
                     caster: caster,
-                    target: null,
-                    tileX: playerdat.playerObject.tileX,
-                    tileY: playerdat.playerObject.tileY,
+                    target: target,
+                    tileX: tileX == -1 ? playerdat.playerObject.tileX : tileX,
+                    tileY: tileY == -1 ? playerdat.playerObject.tileY : tileY,
                     CastOnEquip: false);
             }
         }

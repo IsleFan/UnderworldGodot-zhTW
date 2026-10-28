@@ -12,15 +12,35 @@ namespace Underworld.Save.Tests;
 /// halves of that were wrong: DOS writes what the player typed, and the port's own save and
 /// load lists display it.
 /// </summary>
+[Collection("UWClassState")]
 public class SaveDescriptionTests
 {
     [Fact]
-    public void Encode_EmptyDescription_IsZeroBytes()
+    public void Encode_EmptyDescription_IsZeroBytes_InUW1()
     {
-        // DOS accepts an empty description and leaves a zero length file behind, which is
+        // UW1 accepts an empty description and leaves a zero length file behind, which is
         // still an occupied slot.
-        Assert.Empty(SaveDescription.Encode(""));
-        Assert.Empty(SaveDescription.Encode(null));
+        var res = UWClass._RES;
+        try
+        {
+            UWClass._RES = UWClass.GAME_UW1;
+            Assert.Empty(SaveDescription.Encode(""));
+            Assert.Empty(SaveDescription.Encode(null));
+        }
+        finally { UWClass._RES = res; }
+    }
+
+    [Fact]
+    public void Encode_EmptyDescription_IsOneSpace_InUW2()
+    {
+        // UW2's SaveGame (GAMEWRAP.C) replaces an empty description with " " before writing it.
+        var res = UWClass._RES;
+        try
+        {
+            UWClass._RES = UWClass.GAME_UW2;
+            Assert.Equal(new byte[] { 0x20 }, SaveDescription.Encode(""));
+        }
+        finally { UWClass._RES = res; }
     }
 
     [Fact]

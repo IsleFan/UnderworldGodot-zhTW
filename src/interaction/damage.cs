@@ -10,7 +10,7 @@ namespace Underworld
         public static void DamagePlayer(int basedamage, int damagetype, int damagesource)
         {
             Debug.Print("TODO further implement this");
-            ScaleDamage(playerdat.playerObject.item_id, ref basedamage, damagetype);
+            basedamage = ScaleDamage(playerdat.playerObject.item_id, ref basedamage, damagetype);//check_res
             playerdat.playerObject.ProjectileSourceID = (short)damagesource;
 
             if (basedamage < playerdat.play_hp)
@@ -47,7 +47,7 @@ namespace Underworld
             }
             else
             {
-                if (DamageOtherObjectTypes(objToDamage, basedamage, 0))
+                if (DamageOtherObjectTypes(objToDamage, basedamage, damagesource, WorldObject))
                 {
                     //object should be destroyed
                     return ObjectDestruction(
@@ -100,65 +100,27 @@ namespace Underworld
             }
 
 
-            if ((critter.index == 1) && (damagesource > 1))
+            //The combat themes (damage_crit): the player's blow on a critter (UW1 any of his blows) picks foe hurt below a
+            //quarter of its average hit points, else combat; a blow on the player from anyone picks danger below a quarter
+            //of his maximum, else combat. Only these mark the last combat for the themes' ten seconds. A killing blow
+            //returns before them (crit_die), its victory theme comes from the experience award.
+            byte foeHurt = (byte)(_RES == GAME_UW2 ? 2 : 5);
+            var killed = (critter.npc_hp == 0) && (critter.index != 1);
+            if (!killed)
             {
-                //damage applied to player.
-                if ((playerdat.play_hp << 6 / (playerdat.max_hp + 1)) >= 0x10)
+                if ((damagesource == 1) && ((_RES != GAME_UW2) || (critter.index != 1)))
                 {
-                    //standard combat theme.
-                    if (_RES == GAME_UW2)
-                    {
-                        XMIMusic.ChangeThemeMusic(3);
-                    }
-                    else
-                    {
-                        XMIMusic.ChangeThemeMusic(6);
-                    }
+                    var ratio = (critter.npc_hp << 6) / (critterObjectDat.avghit(critter.item_id) + 1);
+                    XMIMusic.ChangeThemeMusic(ratio < 0x10 ? foeHurt : (byte)(foeHurt + 1));
+                    XMIMusic.CombatMusicTimer = main.GlobalPITTimer;
                 }
-                else
+                else if ((critter.index == 1) && (damagesource != 0))
                 {
-                    // player losing combat theme.
-                    if (_RES == GAME_UW2)
-                    {
-                        XMIMusic.ChangeThemeMusic(4);
-                    }
-                    else
-                    {
-                        XMIMusic.ChangeThemeMusic(7);
-                    }
+                    var ratio = (playerdat.play_hp << 6) / (playerdat.max_hp + 1);
+                    XMIMusic.ChangeThemeMusic(ratio < 0x10 ? (byte)(foeHurt + 2) : (byte)(foeHurt + 1));
+                    XMIMusic.CombatMusicTimer = main.GlobalPITTimer;
                 }
             }
-            else
-            {
-                if (damagesource == 1)
-                {
-                    //See how badly hurt the npc is. pick player winning music or continue combat music.
-                    if (((critter.npc_hp << 6) / (critterObjectDat.avghit(critter.item_id) + 1) >= 0x10))
-                    {
-                        if (_RES == GAME_UW2)
-                        {
-                            XMIMusic.ChangeThemeMusic(3);
-                        }
-                        else
-                        {
-                            XMIMusic.ChangeThemeMusic(6);
-                        }
-                    }
-                    else
-                    {
-                        if (_RES == GAME_UW2)
-                        {
-                            XMIMusic.ChangeThemeMusic(2);
-                        }
-                        else
-                        {
-                            XMIMusic.ChangeThemeMusic(5);//combat theme
-                        }
-                    }
-                }
-            }
-
-            XMIMusic.CombatMusicTimer = main.GlobalPITTimer;
 
             if ((critter.npc_hp == 0) & (critter.index != 1))
             {
@@ -167,7 +129,10 @@ namespace Underworld
                     //if not already in the death animation
                     if (npc.SpecialDeathCases(critter))
                     {
-                        playerdat.AwardXPKill(critter);
+                        if (damagesource == 1)
+                        {//only the player's kills earn experience (crit_die, who == 1)
+                            playerdat.AwardXPKill(critter);
+                        }
                         critter.npc_animation = npc.ANIMATION_DEATH;
                         critter.AnimationFrame = 0;
                         npc.RedrawAnimation(critter);
@@ -184,6 +149,10 @@ namespace Underworld
                                     DeathSound = 0x23; break;
                                 case 4://Monsters
                                     DeathSound = 0x24; break;
+                                case 0://silent
+                                    break;
+                                default://crit_die: any other kind is the humanoid's
+                                    DeathSound = 0x6; break;
                             }
                         }
                         else
@@ -205,21 +174,21 @@ namespace Underworld
             return false;
         }
 
-        static bool DamageOtherObjectTypes(uwObject objToDamage, int basedamage, int damagesource)
+        /// <summary>
+        /// damage_object: no damage for quality class 3 or an object with id bit 13 (UW2: other than a door); the damage
+        /// is shifted right by the quality class and nothing happens when none is left. A mobile object loses hit points, a
+        /// spiked door (0x140..0x147, owner bit 0) the strength in its owner field, anything else quality (UW2: the owner
+        /// is told). A destroyed static object on the map sets off its use triggers. Returns whether it was destroyed.
+        /// </summary>
+        static bool DamageOtherObjectTypes(uwObject objToDamage, int basedamage, int damagesource, bool WorldObject)
         {
-            if (objToDamage.majorclass == 6)
-            {
-                Debug.Print("Do not damage traps/trigger!");
-                return false;
-            }
+            //traps and triggers are not spared: their quality class is 0 in both games, so damage_square's blasts wear
+            //them down like any other object
             bool IsBroken = false;
             var qualityclass = commonObjDat.qualityclass(objToDamage.item_id);
-            if (objToDamage.doordir == 1)
-            {
-                if (objToDamage.OneF0Class != 0x14)
-                {//door dir set and not a door.
-                    return false;
-                }
+            if ((objToDamage.doordir == 1) && ((_RES != GAME_UW2) || (objToDamage.OneF0Class != 0x14)))
+            {//id bit 13: UW1 any object, UW2 any but a door
+                return false;
             }
             if (qualityclass == 3)
             {
@@ -228,6 +197,10 @@ namespace Underworld
             }
 
             basedamage >>= qualityclass;//reduce damage based on quality class
+            if (basedamage <= 0)
+            {
+                return false;
+            }
             if (objToDamage.IsStatic)
             {//damage to a static object
 
@@ -253,9 +226,9 @@ namespace Underworld
                     objToDamage.quality = (short)finalquality;
                     Debug.Print($"Final quality is {objToDamage.quality}");
                     IsBroken = (finalquality == 0);
-                    if (commonObjDat.canhaveowner(objToDamage.item_id))
-                    {
-                        Debug.Print($"Flag trespass for owner {objToDamage.owner}");
+                    if ((_RES == GAME_UW2) && commonObjDat.canhaveowner(objToDamage.item_id))
+                    {//damaging an owned object counts against the player with its owner (damage_object, player_did_bad)
+                        a_do_trap_trespass.HackTrapTrespass(objToDamage.owner);
                     }
                 }
             }
@@ -267,7 +240,7 @@ namespace Underworld
                 IsBroken = (finalquality == 0);
             }
 
-            if ((IsBroken) && (objToDamage.IsStatic))
+            if ((IsBroken) && (objToDamage.IsStatic) && WorldObject)
             {
                 if (UWTileMap.ValidTile(objToDamage.tileX, objToDamage.tileY))
                 {
@@ -285,205 +258,124 @@ namespace Underworld
 
 
         /// <summary>
-        /// Handles destruction of a damage object and replaces it with appropiate debris objects
+        /// remove_object: what a destroyed object leaves. Off the map (in the inventory) nothing happens and it counts as
+        /// gone. A door (class index 0..7) bursts open and loses its locks; a chest or barrel loses its first lock and
+        /// spills (UW2: unless id bit 13); a UW2 weapon breaks unless the damage is pure fire; a bag spills unless something
+        /// in it is tenacious (Obj_Elem_Fate 10); UW2's djinn bottle has its quest. Anything else: fire burns away a pile
+        /// of debris, or one time in four sets it alight; its contents go. Then it becomes its debris (UW1 0xD5 or 0xD6 at
+        /// random, UW2 debris_type) and settles with obj_deal.
         /// </summary>
-        /// <param name="objToDestroy"></param>
-        /// <param name="damagetype"></param>
-        /// <param name="objList"></param>
-        /// <param name="WorldObject"></param>
-        /// <returns>1 if debris is set</returns>
+        /// <returns>Whether the object has left the map</returns>
         public static bool ObjectDestruction(uwObject objToDestroy, int damagetype, uwObject[] objList, bool WorldObject)
         {
-            int Debris = -2;
-            if ((!UWTileMap.ValidTile(objToDestroy.tileX, objToDestroy.tileY)) && (WorldObject))
+            if ((!WorldObject) || (!UWTileMap.ValidTile(objToDestroy.tileX, objToDestroy.tileY)))
             {
-                return false;
+                return true;
             }
+            var item = objToDestroy.item_id;
+            int Debris = -2;
             if (objToDestroy.OneF0Class == 0x14)
             {
                 //doors
                 if (objToDestroy.classindex <= 7)
-                {
-                    a_lock.SetIsLocked(parentObject: objToDestroy, value: false, character: 0);
+                {//it bursts open (no unlocking, so no unlock traps), then its locks go
                     door.OpenDoor(objToDestroy);
-                    
                 }
                 a_lock.RemoveAllLocks(obj: objToDestroy, RemoveAll: true);
-                return true; // don't destroy the model
+                Debris = -1;
             }
-            switch (objToDestroy.item_id)
-            {
-                case 0x15B://barrel
-                case 0x15D://chest
-                    {
-                        if (objToDestroy.doordir == 0)
-                        {
-                            a_lock.SetIsLocked(objToDestroy, false, 0);
-                            use.Use(objToDestroy, null, objList, WorldObject);
-                        }
-                        break;
-                    }
-                default:
-                    {
-                        if ((objToDestroy.OneF0Class == 0) && (damagetype != 8))
-                        {//weapons
-                            if (
-                                (objToDestroy.item_id == 3) && (_RES == GAME_UW2)
-                                ||
-                                (objToDestroy.item_id == 0x10) && (_RES == GAME_UW2)
-                                )
-                            {
-                                Debris = 0xC7;
-                            }
-                            else
-                            {
-                                if (_RES == GAME_UW2)
-                                {
-                                    Debris = 0xC5 + weaponObjectDat.skill(objToDestroy.item_id);
-                                }
-                                else
-                                {
-                                    Debris = 0xC8 + weaponObjectDat.skill(objToDestroy.item_id);
-                                }
-                            }
-                        }
-                        else
-                        {
-                            if (objToDestroy.OneF0Class == 8)
-                            {//containers
-                                Debug.Print("TODO Cull Container behaviour to be implemented");
-                                //Spill container.
-                                if (WorldObject)
-                                {
-                                    container.SpillWorldContainer(objToDestroy);
-                                }
-                            }
-                            else
-                            {
-                                if ((_RES == GAME_UW2) && (objToDestroy.item_id == 0x116))
-                                {
-                                    djinnbottle.DestroyDjinnBottle(objToDestroy, WorldObject);
-                                }
-                                else
-                                {
-                                    //default destruction logic
-                                    if (objToDestroy.item_id == 0xD6)
-                                    {//already debris, remove it
-                                        if (WorldObject)
-                                        {
-                                            ObjectRemover_OLD.DeleteObjectFromTile_DEPRECIATED(
-                                                tileX: objToDestroy.tileX,
-                                                tileY: objToDestroy.tileY,
-                                                indexToDelete: objToDestroy.index,
-                                                RemoveFromWorld: true);
-                                        }
-                                        Debris = -1;
-                                        return true;
-                                    }
-                                    else
-                                    {
-                                        if (((Rng.r.Next(0, 0x7fff) & 0x3) != 0) || (true))
-                                        {
-                                            animo.SpawnAnimoAtTarget(objToDestroy, 8, 0, objToDestroy.tileX, objToDestroy.tileY);
-                                            Debris = 0xD6;
-                                        }
-
-                                        if ((objToDestroy.is_quant == 0) && (objToDestroy.link > 0))
-                                        {
-                                            Debug.Print("TODO Clear object chain");
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        break;
-                    }
-            }
-
-            if (Debris <= -1)
-            {
-                if (_RES == GAME_UW2)
+            else if ((item == 0x15B) || (item == 0x15D))
+            {//barrel, chest
+                if ((_RES == GAME_UW2) && (objToDestroy.doordir == 1))
                 {
-                    Debris = GetObjectTypeDebris(objToDestroy, damagetype);
+                    Debris = -1;
+                }
+                else
+                {//its first lock goes, then it is used as a container by no one (emptied, no messages)
+                    a_lock.RemoveAllLocks(objToDestroy, false);
+                    container.Use(objToDestroy, WorldObject, toPlayer: false);
+                }
+            }
+            else if ((_RES == GAME_UW2) && (objToDestroy.OneF0Class == 0) && (damagetype != 8))
+            {//weapons
+                Debris = ((item == 3) || (item == 0xA)) ? 0xC7 : 0xC5 + weaponObjectDat.skill(item);
+            }
+            else if (objToDestroy.OneF0Class == 8)
+            {//bags
+                if (!ObjectRemover_OLD.ObjectCullingTest(objToDestroy, 10))
+                {
+                    Debris = -1;
                 }
                 else
                 {
-                    Debris = 0xD5 + Rng.r.Next(0, 2);
+                    container.DumpTheBag(objToDestroy, false);
                 }
             }
-
-            if (Debris >= 0)
+            else if ((_RES == GAME_UW2) && (item == 0x116))
             {
-                Debug.Print("Turn into debris");
-                objToDestroy.item_id = Debris;
-                if (!objToDestroy.IsStatic)
+                if (djinnbottle.DestroyDjinnBottle(objToDestroy))
                 {
-                    objToDestroy.npc_hp = 40;
-                }
-                objToDestroy.quality = 40;
-                if (WorldObject)
-                {
-                    objectInstance.RedrawFull(objToDestroy);
-                }
-                else
-                {
-                    uimanager.UpdateInventoryDisplay();
-                }
-                //spawn this debris item id at the position of the old object
-            }
-            if (Debris >= -1)
-            {
-                return false;
-            }
-            return true;
-        }
-
-
-
-        /// <summary>
-        /// Gets the type of debris to be left behind by an object.
-        /// </summary>
-        /// <param name="item_id"></param>
-        /// <returns>item id of debris to spawn.</returns>
-        public static int GetObjectTypeDebris(uwObject objToDestroy, int damagetype)
-        {//only used in uw2
-            if ((objToDestroy.majorclass != 0) || (damagetype == 8))
-            {
-                if (objToDestroy.OneF0Class == 0x15)
-                {//wood chips
-                    if (_RES == GAME_UW2)
-                    {
-                        return 0xDC;
-                    }
-                    else
-                    {
-                        return 0xDB;
-                    }
-
-                }
-                else
-                {
-                    return 0xD6;
+                    return true;
                 }
             }
             else
             {
-                if ((objToDestroy.item_id == 3) && (_RES == GAME_UW2))
+                if ((damagetype & 8) != 0)
                 {
-                    return 0xC7;//broken dagger in UW2
+                    if ((item == 0xD6) || ((_RES != GAME_UW2) && (item == 0xD5)))
+                    {//fire burns away a pile of debris
+                        ObjectRemover_OLD.DeleteObjectFromTile_DEPRECIATED(
+                            tileX: objToDestroy.tileX,
+                            tileY: objToDestroy.tileY,
+                            indexToDelete: objToDestroy.index,
+                            RemoveFromWorld: true);
+                        return true;
+                    }
+                    else if ((Rng.r.Next(0x8000) & 3) == 0)
+                    {
+                        animo.SpawnAnimoAtTarget(objToDestroy, 8, 0, objToDestroy.tileX, objToDestroy.tileY);
+                        Debris = _RES == GAME_UW2 ? 0xD6 : 0xD5 + Rng.r.Next(0x8000) * 2 / 0x8000;
+                    }
                 }
-                else
+                ObjectRemover_OLD.ClearContents(objToDestroy);
+            }
+
+            if (Debris < -1)
+            {
+                Debris = _RES == GAME_UW2 ? GetObjectTypeDebris(objToDestroy, damagetype) : 0xD5 + Rng.r.Next(0x8000) * 2 / 0x8000;
+            }
+
+            if (Debris >= 0)
+            {
+                objToDestroy.item_id = Debris;
+                if (_RES == GAME_UW2)
                 {
-                    if (_RES == GAME_UW2)
+                    if (!objToDestroy.IsStatic)
                     {
-                        return 0xC5 + weaponObjectDat.skill(objToDestroy.item_id);
+                        objToDestroy.npc_hp = 40;
                     }
-                    else
-                    {
-                        return 0xC8 + weaponObjectDat.skill(objToDestroy.item_id);
-                    }
+                    objToDestroy.quality = 40;
+                }
+                objectInstance.RedrawFull(objToDestroy);
+                if (objToDestroy.IsStatic && (motion.PlacedObjectCollision_seg030_2BB7_10BC(objToDestroy, objToDestroy.tileX, objToDestroy.tileY, 1) == null))
+                {//obj_deal: it fell into water or lava
+                    return true;
                 }
             }
+            return false;
+        }
+
+        /// <summary>
+        /// debris_type (UW2): a weapon (items 0..15) breaks unless the damage is pure fire, the dagger into the broken
+        /// dagger and others into the broken form of their skill (0xC5 + skill); furniture leaves wood chips, the rest debris.
+        /// </summary>
+        public static int GetObjectTypeDebris(uwObject objToDestroy, int damagetype)
+        {
+            if ((objToDestroy.OneF0Class == 0) && (damagetype != 8))
+            {
+                return objToDestroy.item_id == 3 ? 0xC7 : 0xC5 + weaponObjectDat.skill(objToDestroy.item_id);
+            }
+            return objToDestroy.OneF0Class == 0x15 ? 0xDC : 0xD6;
         }
 
 
@@ -500,10 +392,24 @@ namespace Underworld
         }
 
 
+        /// <summary>
+        /// The item's resist byte; the player's (item 127) also has the bits his resistance spells and
+        /// enchantments set (player_affected_by ORs them into ComObjData[127].resist).
+        /// </summary>
+        static int Resistances(int item_id)
+        {
+            var scales = commonObjDat.scaleresistances(item_id);
+            if (item_id == 127)
+            {
+                scales |= playerdat.PlayerDamageTypeScale;
+            }
+            return scales;
+        }
+
         static int ScaleDamageUW1(int item_id, ref int basedamage, int damagetype)
         {
 
-            var scales = commonObjDat.scaleresistances(item_id);
+            var scales = Resistances(item_id);
 
             if ((scales & damagetype) != 0)
             { //has some sort of resistance
@@ -540,8 +446,15 @@ namespace Underworld
         /// <returns></returns>
         static int ScaleDamageUW2(int item_id, ref int basedamage, int damagetype)
         {
-            var scales = commonObjDat.scaleresistances(item_id);
+            return CheckResistanceUW2(Resistances(item_id), ref basedamage, damagetype);
+        }
 
+        /// <summary>
+        /// UW2's check_res on a resist byte: the damage left after resistances, doubled for fire against
+        /// cold resistance or cold against fire resistance without cold resistance.
+        /// </summary>
+        public static int CheckResistanceUW2(int scales, ref int basedamage, int damagetype)
+        {
             if ((scales & damagetype) != 0)
             { //has some sort of resistance
                 if ((damagetype & 3) != 0) //magic resistances
@@ -612,7 +525,7 @@ namespace Underworld
         /// <returns></returns>
         static int VulnerableDamage(ref int basedamage)
         {
-            basedamage = Math.Min(127, basedamage << 1);
+            basedamage = basedamage < 0x7F ? basedamage << 1 : 0xFF;//check_res
             return basedamage;
         }
 
@@ -681,15 +594,15 @@ namespace Underworld
                     case 2:
                         break;
                     case 0:
-                        if (obj.majorclass != 0)
-                        {
+                        if (obj.OneF0Class != 0)
+                        {//a melee weapon only (class 0, items 0-15)
                             return -2;
 
                         }
                         break;
                     default:
                         {
-                            if (!uwObject.CheckIfObjectInValidSlot(obj, uimanager.CurrentSlot))
+                            if (!uwObject.CheckIfObjectInValidSlot(obj, slot))//worn in the slot being damaged (ObjWorn)
                             {
                                 return -2;
                             }
@@ -697,31 +610,34 @@ namespace Underworld
                         break;
                 }
 
-                //apply damage
+                //apply damage: damage_item off the map, so a destroyed object is left as it is for this to remove
                 var result = DamageObject(objToDamage: obj, basedamage: damage, damagetype: damagetype, objList: playerdat.InventoryObjects, WorldObject: false, damagesource: 0);
                 if (result)
-                {//taken damage and can be destroyed
+                {//destroyed
                     if (arg8 != 0)
-                    {
-                        //Turn into debris? (could this have already happened inside DamageObject)
-                        var debris = GetObjectTypeDebris(obj, 0);
-                        var tile = UWTileMap.current_tilemap.Tiles[playerdat.playerObject.tileX, playerdat.playerObject.tileY];
-                        ObjectCreator.spawnObjectInTile(
-                            itemid: debris,
-                            tileX: playerdat.playerObject.tileX, tileY: playerdat.playerObject.tileY,
-                            xpos: 3, ypos: 3, zpos: (short)(tile.floorHeight << 3),
-                            WhichList: ObjectFreeLists.ObjectListType.StaticList);
+                    {//its debris by the player (near_mob_put_at, range 6)
+                        var debris = _RES == GAME_UW2 ? GetObjectTypeDebris(obj, damagetype) : 0xD5 + Rng.r.Next(0x8000) * 2 / 0x8000;
+                        var junkIndex = ObjectCreator.PrepareNewObject(debris);
+                        if (junkIndex != 0)
+                        {
+                            var junk = UWTileMap.current_tilemap.LevelObjects[junkIndex];
+                            var placed = motion.PutAt(junk, (playerdat.playerObject.tileX << 3) + playerdat.playerObject.xpos, (playerdat.playerObject.tileY << 3) + playerdat.playerObject.ypos, playerdat.playerObject.zpos, 6, false);
+                            if (placed != null)
+                            {
+                                ObjectCreator.RenderObject(placed, UWTileMap.current_tilemap);
+                            }
+                        }
                     }
                     ObjectCreator.Consume(obj, true);//removes from inventory     
                     playerdat.PlayerStatusUpdate();
-                    distring = " destroyed";
+                    distring = " destroyed.";
                     si = 1;
                 }
                 else
                 {//taken damage and not destroyed
                     if (obj.quality != originalquality)
                     {
-                        distring = " damaged";
+                        distring = " damaged.";
                         si = 0;
                     }
                     else
@@ -729,9 +645,10 @@ namespace Underworld
                         return -1;
                     }
                 }
+                var name = GameStrings.GetName(obj.item_id, article: false, plural: false);
                 uimanager.AddToMessageScroll(ZhText.Enabled
                     ? ZhText.Compose("你的", ZhText.ObjectName(obj.item_id), si == 1 ? "壞掉了。" : "受損了。")
-                    : $"Your {GameStrings.GetObjectNounUW(obj.item_id)} was{distring}");
+                    : $"Your {name}{(name.EndsWith("s") ? " were" : " was")}{distring}");
                 return si;
             }
             else

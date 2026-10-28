@@ -98,7 +98,7 @@ public static class SoundEffects
     /// with a one-line warning. Pan is a standard MIDI 0..0x7F (OPL backend
     /// ignores it; future MT-32 backend honours it).
     /// </summary>
-    public static void Play(int soundId, byte pan = 0x40, byte velocityOffset = 0)
+    public static void Play(int soundId, byte pan = 0x40, byte velocityOffset = 0, int slot = -1)
     {
         if (_backend == null) return;
         if ((uint)soundId >= (uint)SoundDat.Length)
@@ -106,7 +106,13 @@ public static class SoundEffects
             GD.PushWarning($"SoundEffects.Play: id {soundId} out of range (have {SoundDat.Length} entries)");
             return;
         }
-        _backend.Play(SoundDat[soundId], pan, velocityOffset);
+        _backend.Play(SoundDat[soundId], pan, velocityOffset, slot);
+    }
+
+    /// <summary>Releases the voices of an effect slot, or every effect voice for -1.</summary>
+    public static void NoteOff(int slot = -1)
+    {
+        _backend?.NoteOff(slot);
     }
 
     /// <summary>Tear-down for orderly shutdown. Does not destroy the

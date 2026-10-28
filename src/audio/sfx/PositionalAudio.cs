@@ -74,21 +74,21 @@ public static class PositionalAudio
         return new SoundFalloff((byte)vol, pan, culled: false);
     }
 
-    // Pan cross-product — UW1_asm.asm:64647-64835, uw2_asm.asm:79549-79636.
+    // Pan cross-product — UW2 SOUND.C (Maybe3DAudioSource), uw2_asm.asm:79549-79636.
     //
     // The game normalises (dx, dy) to a Q7 vector on the unit circle by dividing
-    // by the isqrt distance, with endpoint saturation to ±0x7F (UW1_asm.asm:
-    // 64657, 64678 for dy; 64709, 64728 for dx). It then looks up sin/cos of
-    // the rotated heading (angle = 0x4000 - (heading<<8) → 90° rotation;
-    // UW1_asm.asm:64777) and forms a cross-product term:
-    //   offset = (dxNorm * fwdX - dyNorm * fwdY) >> 8
-    //   pan    = clamp(0x40 - offset, 0, 0x7F)
-    //
-    // Operand order was resolved audibly: with the operands reversed
-    // (dyNorm*fwdY - dxNorm*fwdX), L/R sounded swapped in-game. The current
-    // order matches uw2_asm.asm:79596-79622 literally and matches Hank's
-    // upstream implementation. Using Math.Sin/Cos here instead of the seg063
-    // LUT — drift at ≤1 LSB is inaudible at 7-bit pan resolution.
+    // by the isqrt distance, looks up the sine a and cosine b of the rotated
+    // heading (angle = 0x4000 - (heading<<8); cFstSinCos returns the sine first)
+    // and forms
+    //   side = (a * nx - ny * b) >> 8        (sin * dx - cos * dy)
+    //   pan  = clamp(0x40 - side, 0, 0x7F)
+    // so a source straight ahead is centred and one to the side moves the pan
+    // (heading 0 faces along y). Only UW2's digital effects use the pan; UW1's
+    // own formula has the opposite sign (ny * b - nx * a), for MIDI's opposite
+    // left and right, and its TVFX effects ignore the pan. The port used
+    // cos * dx - sin * dy, a quarter turn off: ahead was heard to the side.
+    // Using Math.Sin/Cos here instead of the seg063 LUT — drift at ≤1 LSB is
+    // inaudible at 7-bit pan resolution.
     private static byte ComputePan(int dx, int dy, int dist, byte heading8)
     {
         // Normalise with endpoint saturation. At exactly ±dist the division
@@ -112,9 +112,8 @@ public static class PositionalAudio
         int fwdX = (int)System.Math.Round(System.Math.Cos(theta) * 0x7F);
         int fwdY = (int)System.Math.Round(System.Math.Sin(theta) * 0x7F);
 
-        // Cross product — uw2_asm.asm:79596-79616 / UW1_asm.asm:64803-64816.
-        //   var_12 = fwdX*dxNorm - fwdY*dyNorm
-        int offset = (dxNorm * fwdX - dyNorm * fwdY) >> 8;
+        // Cross product: sine times dx less cosine times dy (fwdY is the sine).
+        int offset = (dxNorm * fwdY - dyNorm * fwdX) >> 8;
 
         // Clamp — UW1_asm.asm:64822-64835.
         return (byte)Clamp(PanCentre - offset, 0, PanMax);

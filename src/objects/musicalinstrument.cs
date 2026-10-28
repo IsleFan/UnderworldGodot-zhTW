@@ -59,9 +59,11 @@ namespace Underworld
                             {
                                 if (notesplayed == "354237875")
                                 {
-                                    ObjectCreator.SpawnObjectInHand(174);
-                                    uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, 136));
-                                    playerdat.GotCupOfWonder = true;
+                                    if (ObjectCreator.SpawnObjectInHand(174) != 0)
+                                    {//only when there is a free object on the level
+                                        uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, 136));
+                                        playerdat.GotCupOfWonder = true;
+                                    }
                                 }
                             }
                         }

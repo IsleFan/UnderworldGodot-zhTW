@@ -10,8 +10,9 @@ namespace Underworld
             args[0] = at(stack + stackptr - 1);
             args[1] = at(stack + stackptr - 2);
 
-            var string1 = getString(at(args[0]));
-            var string2 = getString(at(args[1]));
+            //after @-substitution, ignoring case (bab_compare)
+            var string1 = TextSubstitute(getString(at(args[0])));
+            var string2 = TextSubstitute(getString(at(args[1])));
 
             Debug.Print($"Comparing {string1} to {string2}");
             if (string1.ToUpper() == string2.ToUpper())

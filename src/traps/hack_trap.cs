@@ -20,8 +20,14 @@ namespace Underworld
         {
             switch (trapObj.quality)
             {
-                case 2: //do trap camera
+                case 2: //do trap camera (crystal_ball)
                     {
+                        if ((_RES == GAME_UW2) && (playerdat.Search == 0x2D))
+                        {//why a Search of 45 stops it is not known
+                            return true;
+                        }
+                        playerdat.lightlevel = 6;//set_light(6) while it is shown, FixPlayerEquips after
+                        playerdat.RefreshLighting();
                         a_do_trap_camera.Activate(
                             trapObj: trapObj,
                             objList: objList
@@ -344,8 +350,7 @@ namespace Underworld
                             a_hack_trap_visibility.Activate(
                                 trapObj: trapObj
                                 );
-                            triggerNextIndex = 0; //stop chain
-                            return true;
+                            return true;//its link is the object it changed, so the chain only goes on if that is a trap
                         }
                         break;
                     }
@@ -402,6 +407,42 @@ namespace Underworld
                         break;
                     }
 
+                case 37://bring the schedules up to date
+                    {
+                        if (_RES == GAME_UW2)
+                        {
+                            scd.ProcessSCDArk(1);
+                            return true;
+                        }
+                        break;
+                    }
+                case 44://sleep, the owner the way of sleeping (level 12)
+                    {
+                        if (_RES == GAME_UW2)
+                        {
+                            sleep.Sleep(trapObj.owner);
+                            return true;
+                        }
+                        break;
+                    }
+                case 45://make terrain unseen (UW2)
+                    {
+                        if (_RES == GAME_UW2)
+                        {
+                            automap.MakeTerrainUnseen(triggerX, triggerY, trapObj.owner, trapObj.owner);
+                            return true;
+                        }
+                        break;
+                    }
+                case 50://a critter with conversation 0xD8 talks to the player (UW1 level 7)
+                    {
+                        if (_RES != GAME_UW2)
+                        {
+                            a_hack_trap_talktoplayer.Activate();
+                            return true;
+                        }
+                        break;
+                    }
                 case 54://world gem rotation
                     {
                         if (_RES == GAME_UW2)

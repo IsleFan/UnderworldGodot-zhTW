@@ -436,11 +436,21 @@ namespace Underworld
             {
                 return;
             }
-            look.PrintLookDescription(
+            //BARTER.C: the NPC's side 1 + (skill_check(Lore, 20) > 0), the player's 1 + skill_check(Lore, 15); no heading kept
+            int lore;
+            if (useLoreCheck)
+            {
+                lore = 1 + (int)playerdat.SkillCheck(playerdat.Lore, 15);
+            }
+            else
+            {
+                lore = 1 + ((int)playerdat.SkillCheck(playerdat.Lore, 20) > 0 ? 1 : 0);
+            }
+            look.LookAt(
                 obj: obj,
                 objList: UWTileMap.current_tilemap.LevelObjects,
-                OutputConvo: true,
-                lorecheckresult: useLoreCheck ? look.LoreCheck(obj) : 0);
+                lore: lore,
+                OutputConvo: true);
         }
 
         void ToggleTradeSlotSelection(long slotNo, bool isPlayerSide)

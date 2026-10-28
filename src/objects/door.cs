@@ -15,7 +15,7 @@ namespace Underworld
         public int floorheight;
         public Vector3 position;
 
-        public static bool SkipDoorSound;//set by SCD Door Close to stop door sound effects from playing. Unimplemented.
+        public static bool SkipDoorSound;//quick_time: set by the SCD door closing to stop door sound effects from playing
 
         public static bool isMoving(uwObject obj)
         {
@@ -177,11 +177,15 @@ namespace Underworld
                 {
                     uimanager.AddToMessageScroll(ZhText.Enabled
                         ? ZhText.Compose(ZhText.ObjectName(obj.item_id), "鎖住了。")
-                        : "The " + GameStrings.GetObjectNounUW(obj.item_id) + " is locked.");    
+                        : "The " + GameStrings.GetObjectNounUW(obj.item_id) + " is locked.");
+                    if (_RES == GAME_UW2)
+                    {//UW2 rattles a locked door
+                        UWsoundeffects.PlaySoundEffectAtCoordinate(0x2D, (obj.tileX << 3) + obj.xpos, (obj.tileY << 3) + obj.ypos, 0);
+                    }
                 }                
             }
-            else
-            {   //door unlocked. toggle it's state
+            else if (isOpen(obj) || PlayerUse || ((obj.owner & 1) == 0))
+            {   //door unlocked. toggle it's state (a critter cannot open a spiked door: owner bit 0)
                 ToggleDoor(obj);
             }
             return true;
@@ -214,7 +218,10 @@ namespace Underworld
                     doorInstance.doorNode.Rotate(Vector3.Up, GetRadiansForIndex(doorObj, NoOfFrames(doorObj), doorObj.doordir));
                 }
             }
-            if (isPortcullis(doorObj))
+            if (SkipDoorSound && (_RES == GAME_UW2))
+            {//quick_time (the schedule closing doors): no sound
+            }
+            else if (isPortcullis(doorObj))
             {
                 UWsoundeffects.PlaySoundEffectAtCoordinate(UWsoundeffects.SoundEffectPortcullis, (doorObj.tileX << 3) + doorObj.xpos, (doorObj.tileY << 3) + doorObj.ypos, 0);
             }
@@ -260,7 +267,10 @@ namespace Underworld
                     doorInstance.doorNode.Rotate(Vector3.Up, GetRadiansForIndex(doorObj, 0, doorObj.doordir));
                 }
             }
-            if (isPortcullis(doorObj))
+            if (SkipDoorSound && (_RES == GAME_UW2))
+            {//quick_time (the schedule closing doors): no sound
+            }
+            else if (isPortcullis(doorObj))
             {
                 UWsoundeffects.PlaySoundEffectAtCoordinate(UWsoundeffects.SoundEffectPortcullis, (doorObj.tileX << 3) + doorObj.xpos, (doorObj.tileY << 3) + doorObj.ypos, 0);
             }
@@ -336,6 +346,15 @@ namespace Underworld
                     obj.item_id = 320 + obj.owner + 8;
                     //Debug.Print($"Open->Closed item id is now {obj.item_id}");
                     obj.owner = 0;
+                    //shut: 0xC, in UW2 0x26 for a portcullis and nothing in quick time (toast_animobj)
+                    if (_RES != GAME_UW2)
+                    {
+                        UWsoundeffects.PlaySoundEffectAtObject(0xC, obj, 0);
+                    }
+                    else if (!SkipDoorSound)
+                    {
+                        UWsoundeffects.PlaySoundEffectAtObject((byte)(isPortcullis(obj) ? 0x26 : 0xC), obj, 0);
+                    }
                 }
             }
             else
@@ -374,191 +393,9 @@ namespace Underworld
             }
         }
 
-        public static bool LookAt(uwObject doorobject)
-        {
-            if (_RES != GAME_UW2)
-            {
-                if ((doorobject.owner & 0x1) == 1)
-                {
-                    uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, 0x83));//the door is spiked
-                    return true;
-                }
-            }
-            return look.PrintLookDescription(
-                obj: doorobject,
-                objList: UWTileMap.current_tilemap.LevelObjects,
-                lorecheckresult: 3);
-        }
 
 
 
-
-        /// <summary>
-        /// Handles checking if the critter can operate this door or lock
-        /// Unimplemented: this function is used to operate the lock in vanilla underowrld
-        /// </summary>
-        /// <param name="character"></param>
-        /// <param name="doorobj"></param>
-        /// <param name="skillnegated">Also key index used.</param>
-        /// <returns></returns>
-        public static int CharacterDoorLockAndKeyInteraction(uwObject character, uwObject doorobj, int skillnegated)
-        {
-            if ((doorobj.is_quant == 0) && (doorobj.link <= 0))
-            {
-                var LockObject = objectsearch.FindMatchInObjectChain(
-                    ListHeadIndex: doorobj.link,
-                    majorclass: 4, minorclass: 0, classindex: 0xF,
-                    objList: UWTileMap.current_tilemap.LevelObjects,
-                    SkipNext: false, SkipLinks: true);
-
-                if (LockObject == null)
-                {
-                    return 1;
-                }
-                else
-                {
-                    if (LockObject.flags0 != 0)
-                    {
-                        //seg040_34E7_899:
-                        if (skillnegated >= 0)
-                        {
-                            //seg040_34E7_901
-                            if (skillnegated <= 0)
-                            {
-                                //or skillnegated==0
-                                return 1;
-                            }
-                            else
-                            {
-                                if ((LockObject.link & 0x1FF) == 0)
-                                {
-                                    //seg040_34E7_928:
-                                    return 0;
-                                }
-                                else
-                                {
-                                    //seg040_34E7:0917
-                                    if ((LockObject.link & 0x1FF) == skillnegated)
-                                    {
-                                        //seg040_34E7_935:
-                                        //unlock trigger
-                                        trigger.TriggerObjectLink(character.index, doorobj, 0xB, doorobj.tileX, doorobj.tileY, UWTileMap.current_tilemap.LevelObjects);
-                                        if (LockObject.flags1 == 0)
-                                        {
-                                            //seg040_34E7_963:
-                                            if (ObjectRemover_OLD.RemoveObjectFromLinkedList(doorobj.link, LockObject.index, UWTileMap.current_tilemap.LevelObjects, doorobj.PTR + 6))
-                                            {
-                                                ObjectFreeLists.ReleaseFreeObject(LockObject);
-                                            }
-                                            return 3;
-                                        }
-                                        else
-                                        {
-                                            //seg040_34E7_985
-                                            LockObject.flags0 = 0;
-                                            return 3;
-                                        }
-                                    }
-                                    else
-                                    {
-                                        return 0;
-                                    }
-                                }
-                            }
-                        }
-                        else
-                        {
-                            //seg040_34E7_8A0:
-                            //lockpick skill check
-                            var di_checkresult = playerdat.SkillCheck(-skillnegated, LockObject.zpos * 3);
-                            if (
-                                ((LockObject.zpos == 0xE) && (-skillnegated < 0x20))
-                                ||
-                                (LockObject.zpos == 0xF)
-                                ||
-                                (di_checkresult == playerdat.SkillCheckResult.Fail)
-                                )
-                            {
-                                //seg040_34E7_8E7
-                                if (di_checkresult == playerdat.SkillCheckResult.CritFail)
-                                {
-                                    //seg040_34E7_8EC
-                                    return 5;
-                                }
-                                else
-                                {
-                                    //seg040_34E7_8F1:
-                                    return 0;
-                                }
-                            }
-                            else
-                            {
-                                //seg040_34E7_8F6
-                                if (di_checkresult == playerdat.SkillCheckResult.CritFail)
-                                {
-                                    return 5;
-                                }
-                                else
-                                {
-                                    //seg040_34E7_935: (again)
-                                    //unlock trigger
-                                    trigger.TriggerObjectLink(character.index, doorobj, 0xB, doorobj.tileX, doorobj.tileY, UWTileMap.current_tilemap.LevelObjects);
-                                    if (LockObject.flags1 == 0)
-                                    {
-                                        //seg040_34E7_963:
-                                        if (ObjectRemover_OLD.RemoveObjectFromLinkedList(doorobj.link, LockObject.index, UWTileMap.current_tilemap.LevelObjects, doorobj.PTR + 6))
-                                        {
-                                            ObjectFreeLists.ReleaseFreeObject(LockObject);
-                                        }
-                                        return 3;
-                                    }
-                                    else
-                                    {
-                                        //seg040_34E7_985
-                                        LockObject.flags0 = 0;
-                                        return 3;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    else
-                    {
-                        //seg040_34E7:081F
-                        if (skillnegated <= 0)
-                        {
-                            return 4;
-                        }
-                        else
-                        {
-                            //seg040_34E7_832
-                            if ((doorobj.OneF0Class == 0x14) && (doorobj.classindex >= 0x8))
-                            {
-                                //seg040_34E7_862:
-                                return 4;
-                            }
-                            else
-                            {
-                                if (LockObject.link != skillnegated)
-                                {
-                                    return 0;
-                                }
-                                else
-                                {
-                                    //seg040_34E7_87C
-                                    LockObject.flags0 = 1;
-                                    return 2;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            else
-            {
-                return 1;
-            }
-        }
 
 
 

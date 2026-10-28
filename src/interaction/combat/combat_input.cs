@@ -9,6 +9,20 @@ namespace Underworld
     /// </summary>
     public partial class combat : UWClass
     {
+        /// <summary>
+        /// No ammunition: UW1 'Sorry, you have no ' (written in the code; its string 0xCF is another message), UW2 string
+        /// 0xCF, then the plural name and a full stop.
+        /// </summary>
+        static string NoAmmoMessage(int ammo)
+        {
+            if (ZhText.Enabled)
+            {
+                return _RES == GAME_UW2 ? ZhText.PhraseAndName(0xCF, ammo) : ZhText.Compose("抱歉，你沒有", ZhText.ObjectName(ammo), "。");
+            }
+            var sorry = _RES == GAME_UW2 ? GameStrings.GetString(1, 0xCF) : "Sorry, you have no ";
+            return $"{sorry}{GameStrings.GetName(ammo, article: false, plural: true)}.";
+        }
+
 
         static bool DoAttack = false;
         /// <summary>
@@ -184,10 +198,10 @@ namespace Underworld
                             //ranged combat targeting (if player has ammo)
                             //check for ammo, if no ammo cancel
                             var ammoType = rangedObjectDat.RangedWeaponType(playerdat.PrimaryHandObject.item_id);
-                            var foundammo = objectsearch.FindMatchInFullObjectList(0, 1, ammoType, playerdat.InventoryObjects);
+                            var foundammo = objectsearch.FindObj(0, 1, ammoType);
                             if (foundammo == null)
                             {
-                                uimanager.AddToMessageScroll(ZhText.Enabled ? ZhText.PhraseAndName(207, 16 + ammoType) : $"{GameStrings.GetString(1, 207)}{GameStrings.GetSimpleObjectNameUW(16 + ammoType)}s");//sorry you have no Xs
+                                uimanager.AddToMessageScroll(NoAmmoMessage(16 + ammoType));//sorry you have no Xs
                                 return;
                             }
                         }
@@ -241,8 +255,16 @@ namespace Underworld
                         AttackScoreFlankingBonus = 0;
                         AttackWasACrit = false;
 
-                        Debug.Print("PlacehholderInitialising PlayerWeaponSound to 1");
-                        PlayerWeaponSound = 1;
+                        //GetPlayerWeapon's player_weapon for a blow: 0 the fist, 2 an edged or pointed weapon, 1 any
+                        //other (UW2; UW1 keeps 1)
+                        if (_RES == GAME_UW2)
+                        {
+                            PlayerWeaponSound = currentweapon == null ? 0 : (IsSharp(currentweapon.item_id) ? 2 : 1);
+                        }
+                        else
+                        {
+                            PlayerWeaponSound = 1;
+                        }
 
                         //can start swing animation
                         uimanager.DrawWeaponAnimation(WeaponAnimGroup + WeaponAnimStrikeOffset + WeaponAnimHandednessOffset, 0);
@@ -313,10 +335,10 @@ namespace Underworld
                                     //launch projectile if has ammo
                                     var ammoType = rangedObjectDat.RangedWeaponType(playerdat.PrimaryHandObject.item_id);
                                     //check if player has one some ammo.
-                                    var foundammo = objectsearch.FindMatchInFullObjectList(0, 1, ammoType, playerdat.InventoryObjects);
+                                    var foundammo = objectsearch.FindObj(0, 1, ammoType);
                                     if (foundammo == null)
                                     {
-                                        uimanager.AddToMessageScroll(ZhText.Enabled ? ZhText.PhraseAndName(207, 16 + ammoType) : $"{GameStrings.GetString(1, 207)}{GameStrings.GetSimpleObjectNameUW(16 + ammoType)}s");//sorry you have no Xs
+                                        uimanager.AddToMessageScroll(NoAmmoMessage(16 + ammoType));//sorry you have no Xs
                                         return;
                                     }
                                     else
@@ -431,9 +453,9 @@ namespace Underworld
             PlayerAttackCharge = mincharge + ChargeAdjust;
             CalculatePlayerAttackScores();
 
-            ExecuteAttack(playerdat.playerObject);
-            if (_RES == GAME_UW2)
-            {
+            var hit = ExecuteAttack(playerdat.playerObject);
+            if ((_RES == GAME_UW2) && hit)
+            {//a special weapon's power only follows a blow that landed (player_attack)
                 if (OnHitSpell > 0)
                 {
                     if (AttackWasACrit || OnHitSpell == 6)
@@ -517,7 +539,6 @@ namespace Underworld
         static void MissileRelease(int RangedWeaponSubclass, uwObject foundAmmo)
         {
             //remove ammo from inventory
-            var PlayerLaunched = true;
 
             if ((_RES == GAME_UW2) && (
                 (RangedWeaponSubclass == 8) || (RangedWeaponSubclass == 9) || (RangedWeaponSubclass == 0xA)
@@ -559,18 +580,34 @@ namespace Underworld
             }
             else
             {
-                //play soundeffect
-                UWsoundeffects.PlaySoundEffectAtAvatar(UWsoundeffects.SoundEffectFail, 0x40, 0);
+                //UW2 rattles (0x2D); UW1 only prints
+                if (_RES == GAME_UW2)
+                {
+                    UWsoundeffects.PlaySoundEffectAtAvatar(UWsoundeffects.SoundEffectFail, 0x40, 0);
+                }
                 uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, GameStrings.str_you_need_more_space_to_fire_that_weapon_));
             }
 
-            if ((motion.MissileFlagA == false) && (RangedWeaponSubclass == 8))
+            //player_fire: a bow or crossbow (9, 10; 8 is the sling) twangs, in UW1 whether or not the arrow left; in UW2
+            //only when it did, and then the bow or sling launch is heard at the missile too
+            var bow = (RangedWeaponSubclass == 9) || (RangedWeaponSubclass == 0xA);
+            if (_RES == GAME_UW2)
             {
-                if (PlayerLaunched)
+                if (projectile != null)
                 {
-                    //make a sound
-                    UWsoundeffects.PlaySoundEffectAtAvatar(UWsoundeffects.SoundEffectBowTwang, 0x40, 0);
+                    if (bow)
+                    {
+                        UWsoundeffects.PlaySoundEffectAtAvatar(UWsoundeffects.SoundEffectBowTwang, 0x40, 0);
+                    }
+                    if (bow || (RangedWeaponSubclass == 8))
+                    {
+                        UWsoundeffects.PlaySoundEffectAtObject(0xA, projectile, 0x14);
+                    }
                 }
+            }
+            else if (bow)
+            {
+                UWsoundeffects.PlaySoundEffectAtAvatar(UWsoundeffects.SoundEffectBowTwang, 0x40, 0);
             }
             motion.MissileFlagA = false;
         }

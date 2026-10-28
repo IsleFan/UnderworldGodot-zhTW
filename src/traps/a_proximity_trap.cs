@@ -37,19 +37,15 @@ namespace Underworld
                     {
                         if (yhome <= triggerY+ trapObj .owner)
                         {
-                            if (trapObj.xpos!=0)
+                            //the height tests (TRAP_PROXIMITY): unless fine x is set the object must be at or
+                            //below the trap's height, and unless fine y is set above it
+                            if (trapObj.xpos == 0 && zpos > trapObj.zpos)
                             {
-                                if (zpos>= trapObj.zpos)
-                                {
-                                    goto testresult;//object is above the zone
-                                }
+                                goto testresult;//object is above the zone
                             }
-                            if (trapObj.ypos==0)
+                            if (trapObj.ypos == 0 && zpos <= trapObj.zpos)
                             {
-                                if (zpos<trapObj.zpos)
-                                {
-                                    goto testresult;// object is below the zone.
-                                }
+                                goto testresult;// object is below the zone.
                             }
                             result = true;//within bounds
                         }

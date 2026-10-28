@@ -201,8 +201,8 @@ namespace Underworld
         /// <param name="IncreasePlayMana"></param>
         public static void UpdateHPManaMax(bool IncreasePlayMana = true)
         {
-            if ((_RES != GAME_UW2) && (dungeon_level == 7) && (isOrbDestroyed == false))
-            {
+            if ((_RES != GAME_UW2) && (dungeon_level == 7))
+            {//player_compute: on Tybal's level the new maximum is kept aside, orb or no orb
                 backup_mana = ((ManaSkill + 1) * INT) >> 3; //handles case where player increases mana while subject to Tybals mana drain effect.
             }
             else
@@ -509,43 +509,27 @@ namespace Underworld
         /// <param name="skillno"></param>
         /// <returns>1 if skill increases, 0 if no increase</returns>
         public static int IncreaseSkill(int skillno)
-        {
-            int[] governingRngRanges = new int[] { 0x19, 0x28, 0xA };
+        {//get_skill
+            int[] governingRngRanges = _RES == GAME_UW2 ? new int[] { 25, 30, 15 } : new int[] { 25, 40, 10 };
             var governingAttribute = GetGoverningAttribute(skillno);
 
             int skillvalue = GetSkillValue(skillno);
             int attributeValue = GetAttributeValue(governingAttribute);
 
-            if ((attributeValue << 1) < skillvalue)
-            {//cap skill at 2xAttribute value
+            if (((attributeValue << 1) < skillvalue) || (skillvalue >= 30))
+            {//no more above twice the attribute or at 30
                 return 0;
             }
-            if (skillvalue >= 30)
-            { //already at max
-                return 0;
-            }
-            //increment by 1
             skillvalue++;
-            SetSkillValue(skillNo: skillno, value: skillvalue);
-
-            if (governingAttribute != 0)
-            {
-                if (governingAttribute / 2 > skillvalue)
-                {//gain another point when skill is less than half the attribute
-                    skillvalue++;
-                    SetSkillValue(skillNo: skillno, value: skillvalue);
-                }
-                if (skillvalue < governingAttribute)
-                {//if skill is still less than attribute. add another point based on rng
-                    var r = Rng.r.Next(governingRngRanges[governingAttribute]);
-                    if (r < governingAttribute - skillvalue)
-                    {
-                        skillvalue++;
-                        GetSkillValue(skillno);
-                        SetSkillValue(skillNo: skillno, value: skillvalue);
-                    }
-                }
+            if ((governingAttribute != 0) && (attributeValue / 2 > skillvalue))
+            {//another point while the skill is below half the attribute (not for strength skills)
+                skillvalue++;
             }
+            if ((skillvalue < attributeValue) && (Rng.r.Next(governingRngRanges[governingAttribute]) < attributeValue - skillvalue))
+            {//and perhaps one more while below the attribute
+                skillvalue++;
+            }
+            SetSkillValue(skillNo: skillno, value: System.Math.Min(skillvalue, 30));
 
             if (skillno == 8)
             {
@@ -616,7 +600,7 @@ namespace Underworld
                 }
                 else
                 {
-                    SkillToUpdate_varC = StartSkillNo_var6 + Rng.r.Next(0, SkillRange_var8);
+                    SkillToUpdate_varC = StartSkillNo_var6 + Rng.r.NextScaled(SkillRange_var8);//rand() * count / 0x8000 (grant_skill_advance)
                 }
 
                 var tmp = IncreaseSkill(SkillToUpdate_varC);

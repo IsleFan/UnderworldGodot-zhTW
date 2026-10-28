@@ -92,8 +92,8 @@ namespace Underworld
                     {
                         Debug.Print("untested change trade evaluation threshold");
                         var multiplier = at(at(stack + stackptr - 2));
-                        TradePatience = multiplier * TradePatience;
-                        result_register = TradePatience;
+                        TradeThreshold = multiplier * TradeThreshold;//it is the greed that is multiplied (babl_hack 8)
+                        result_register = TradeThreshold;
                         break;
                     }
                 case 9: //trade bonus

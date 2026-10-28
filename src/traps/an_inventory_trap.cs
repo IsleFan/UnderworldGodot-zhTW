@@ -5,13 +5,24 @@ namespace Underworld
     public class an_inventory_trap : trap
     {
         public static short Activate(uwObject trapObj, uwObject[] objList)
+        {//TRAP_INVENTORY: having the item (worn, with fine x; enough of it, with z) goes on along the link. Without it
+         //UW1 stops, UW2 runs the else chain, the object after the linked one.
+            var result = Check(trapObj);
+            if ((result == 0) && (_RES == GAME_UW2) && (trapObj.link != 0))
+            {
+                return objList[trapObj.link].next;
+            }
+            return result;
+        }
+
+        static short Check(uwObject trapObj)
         {
             var itemid = ((trapObj.quality & 0x3F) << 5) | (trapObj.owner & 0x3F);
             var majorclass = itemid >> 6;
             var minorclass = (itemid & 0x30) >> 4;
             var classindex = itemid & 0xF;
 
-            var match = objectsearch.FindMatchInFullObjectList(majorclass, minorclass, classindex, playerdat.InventoryObjects);
+            var match = objectsearch.FindObj(majorclass, minorclass, classindex);
             if (match != null)
             {
                 if ((trapObj.xpos != 0) && (_RES == GAME_UW2))

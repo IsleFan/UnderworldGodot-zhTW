@@ -45,14 +45,14 @@ namespace Underworld
 
         static short dseg_67d6_22AE;//tmp
 
-        public static short MotionWeightRelated_dseg_67d6_C8;
+        public static short MotionWeightRelated_dseg_67d6_C8 = 0x60;//MaxPlayerAccel, 0x60 to begin with
 
         public static short MotionTurnStep_dseg_67d6_775 = 0xF;
 
         /// <summary>
         /// Value is > -1 when on a sliding tile.
         /// </summary>
-        static short TypeOfSlidingFloor_seg_67d6_D4;
+        static short TypeOfSlidingFloor_seg_67d6_D4 = -1;//slide: -1 when not on a slope or in a current
 
         public static short PlayerMotionYaw_dseg_67d6_8296;//set by the camera yaw at the start of motion input
 
@@ -63,7 +63,7 @@ namespace Underworld
         public static bool ICYFloor_dseg_229E = false;
 
         static sbyte[] dseg_67d6_743 = new sbyte[] { 1, 3, 4, 3, 1, -3, 0, 0, 1, 3, 4, 3, 1, -3, 0, 0 };
-        static sbyte[] dseg_67d6_753 = new sbyte[] { 0, 0, -1, -2, -3 - 4, -5, -6, -6, -4, -3, -2, -1, 0, 0, 0, -4 };
+        static sbyte[] dseg_67d6_753 = new sbyte[] { 0, 0, -1, -2, -3, -4, -5, -6, -6, -4, -3, -2, -1, 0, 0, 0 };
 
         /// <summary>
         /// Moves the player by processing the inputs and forces acting on the player
@@ -233,8 +233,8 @@ namespace Underworld
                                     terrainVarA += 8;
                                 }
                                 else
-                                {
-                                    terrainVarA += 4;
+                                {//speeding up down an icy slope: less grip
+                                    terrainVarA -= 4;
                                 }
                             }
                         }
@@ -372,7 +372,7 @@ namespace Underworld
             }//end uw2 specific code.
 
             //Seg008_a61
-            playerMotionParams.speed_12 = (sbyte)ClockIncrement;//too low a value breaks some motion. too high a value makes turning too fast.
+            playerMotionParams.speed_12 = (short)ClockIncrement;//too low a value breaks some motion. too high a value makes turning too fast.
 
             if (_RES != GAME_UW2)
             {
@@ -488,6 +488,7 @@ namespace Underworld
                     if (_RES == GAME_UW2)
                     {
                         //player has changed height in the same tile. Check if pressure triggers in the tile need to be ran
+                        playerObj.zpos = di_zpos;//hgt_change releases at the old height, so it takes the height from before this move
                         trigger.PressureTriggerZChange(
                         obj: playerObj,
                         tile: UWTileMap.current_tilemap.Tiles[playerObj.tileX, playerObj.tileY],
@@ -502,8 +503,8 @@ namespace Underworld
                 //seg008_1B09_E5B
                 if (playerMotionParams.unk_26_falldamage != 0)
                 {
-                    if (playerMotionParams.heading_1E == PlayerMotionYaw_dseg_67d6_8296)
-                    {
+                    if ((playerMotionParams.heading_1E == PlayerMotionYaw_dseg_67d6_8296) && (playerMotionParams.gravity_10_Z == 0))
+                    {//a head-on hit stops the player only when not in the air
                         if ((playerdat.TileState & 0x4) == 0)
                         {
                             if (dseg_67d6_22AE == -1)
@@ -533,32 +534,25 @@ namespace Underworld
                 //this may be uw2 specific
                 PlayerMotionYaw_dseg_67d6_8296 = playerMotionParams.heading_1E;
 
-                var si = playerMotionParams.heading_1E - (dseg_67d6_D0 << 0xE);
-                if ((playerMotionParams.unk_17 & 0x80) != 0)
+                //sliding along a wall the facing follows the heading a step at a time (UW2 0x600 and not on a slope or current, UW1 0x400)
+                var si = (short)(playerMotionParams.heading_1E - (dseg_67d6_D0 << 0xE));
+                if (((playerMotionParams.unk_17 & 0x80) != 0) && ((_RES != GAME_UW2) || (TypeOfSlidingFloor_seg_67d6_D4 == -1)))
                 {
-                    if (TypeOfSlidingFloor_seg_67d6_D4 == -1)
+                    var turnStep = (_RES == GAME_UW2) ? 0x600 : 0x400;
+                    var diff = (short)(playerdat.PlayerCameraYaw_dseg_8294 - si);//16-bit, as the original's
+                    if (Math.Abs((int)diff) < turnStep)
                     {
-                        if (Math.Abs(playerdat.PlayerCameraYaw_dseg_8294 - si) >= 0x600)
-                        {
-                            //seg008_1B09_EC7
-                            if (playerdat.PlayerCameraYaw_dseg_8294 - si >= 0x7FFF)
-                            {
-                                //seg008_1B09_ED9: 
-                                playerdat.PlayerCameraYaw_dseg_8294 += 0x600;
-                            }
-                            else
-                            {
-                                playerdat.PlayerCameraYaw_dseg_8294 -= 0x600;
-                            }
-                        }
-                        else
-                        {
-                            //seg008_1B09_EC1:
-                            playerdat.PlayerCameraYaw_dseg_8294 = (short)si;
-                        }
+                        playerdat.PlayerCameraYaw_dseg_8294 = si;
+                    }
+                    else if ((ushort)diff < 0x7FFF)
+                    {
+                        playerdat.PlayerCameraYaw_dseg_8294 -= (short)turnStep;
+                    }
+                    else
+                    {
+                        playerdat.PlayerCameraYaw_dseg_8294 += (short)turnStep;
                     }
                 }
-
             }
             //seg008_1B09_EDF:  (SEG_008_AAD in UW1 version)
             playerObj.heading = (short)((playerdat.PlayerCameraYaw_dseg_8294 >> 0xD) & 0x7);
@@ -673,21 +667,17 @@ namespace Underworld
                         {
                             if (inputcmd == 6)
                             {
-                                if (playerMotionParams.unk_a_pitch == 0)
-                                {
-                                    if (playerMotionParams.gravity_10_Z == 0)
-                                    {
-                                        if (playerMotionParams.momentum_14 == 0)
-                                        {
-                                            //seg008_1B09_1158:
-                                            di = playerdat.PlayerCameraYaw_dseg_8294;
-                                            PlayerMotionYaw_dseg_67d6_8296 = di;
-                                            arg4 = (short)(PlayerActualForwardSpeed_1_dseg_67d6_22A6 / 2);
-                                            playerMotionParams.momentum_14 = arg4;
-                                            dseg_67d6_D0 = 0;
-                                        }
-                                    }
+                                if ((playerMotionParams.unk_a_pitch != 0) || (playerMotionParams.gravity_10_Z != 0) || (playerMotionParams.momentum_14 != 0))
+                                {//a running jump only from standing still on the ground; otherwise nothing happens
+                                    PlayerMotionYaw_dseg_67d6_8296 = di;
+                                    break;
                                 }
+                                //seg008_1B09_1158:
+                                di = playerdat.PlayerCameraYaw_dseg_8294;
+                                PlayerMotionYaw_dseg_67d6_8296 = di;
+                                arg4 = (short)(PlayerActualForwardSpeed_1_dseg_67d6_22A6 / 2);
+                                playerMotionParams.momentum_14 = arg4;
+                                dseg_67d6_D0 = 0;
                             }
                             //case 7
                             playerMotionParams.unk_a_pitch = 0x263;
@@ -759,6 +749,69 @@ namespace Underworld
             }
         }
 
+        /// <summary>
+        /// simple_fizix, the step keys: turn -1 or 1 turns 45 degrees; 0 steps half a tile forward but not into another
+        /// terrain or off a ledge; 2 takes that step without those checks; -2 steps a quarter tile back. The step is tested
+        /// with can_place and made directly: the player lands at its height (or starts to fall). Only while not falling.
+        /// Only while not falling and moving slower than MaxPlayerAccel (MotionWeightRelated_dseg_67d6_C8).
+        /// Returns whether the player moved or turned.
+        /// </summary>
+        public static bool SimpleFizix(int turn)
+        {
+            if ((playerMotionParams.gravity_10_Z != 0) || (playerMotionParams.momentum_14 >= MotionWeightRelated_dseg_67d6_C8))
+            {
+                return false;
+            }
+            var facing = (int)(ushort)playerdat.PlayerCameraYaw_dseg_8294;
+            if ((turn == -1) || (turn == 1))
+            {
+                if ((facing & 0x1FFF) != 0)
+                {
+                    facing = (facing & 0xE000) + ((turn > 0 ? 1 : 0) << 13);
+                }
+                else
+                {
+                    facing += turn << 13;
+                }
+                playerdat.PlayerCameraYaw_dseg_8294 = (short)(ushort)facing;
+                playerdat.playerObject.heading = (short)((facing >> 13) & 7);
+                playerdat.playerObject.npc_heading = (short)((facing >> 8) & 0x1F);
+                return true;
+            }
+            var backwards = turn == 2;//the original's name for the unchecked step, which goes forward
+            var dist = turn == -2 ? 0x40 : 0x80;
+            var heading = (turn == -2 ? ((facing + 0x8000) & 0xFFFF) : facing) >> 8;
+            if ((playerdat.TileState & 4) != 0)
+            {
+                dist /= 16;
+            }
+            var flying = (playerdat.MagicalMotionAbilities & 0x14) != 0;
+            int x = playerMotionParams.x_0;
+            int y = playerMotionParams.y_2;
+            GetCoordinateInDirection(heading, dist, ref x, ref y);
+            if (!CanPlace(playerdat.playerObject.item_id, 1, x / 32, y / 32, playerdat.playerObject.zpos, backwards || flying, 8))
+            {
+                return false;
+            }
+            if (!backwards && (NvokTerr != 1) && (NvokTerr != PreviousTileState_dseg_67d6_22B4) && ((NvokTerr != 0x10) || !flying))
+            {//not into another terrain or off a ledge
+                return false;
+            }
+            playerMotionParams.x_0 = (short)x;
+            playerMotionParams.y_2 = (short)y;
+            if (!(backwards || flying) || ((playerMotionParams.z_4 >> 3) - 8 <= NvokHgt))
+            {
+                playerdat.playerObject.zpos = (short)NvokHgt;
+                playerMotionParams.z_4 = (short)(NvokHgt << 3);
+            }
+            else if (!flying)
+            {
+                playerMotionParams.gravity_10_Z = -4;
+            }
+            ProcessPlayerTileState((short)NvokTerr, 0);
+            return true;
+        }
+
         public static void ProcessPlayerTileState(short tilestate, int arg2)
         {
             var InWater = false;
@@ -780,9 +833,9 @@ namespace Underworld
                     }
                     else
                     {
-                        if ((tilestate & 8) != 0)
+                        if (((tilestate & 8) != 0) && (_RES == GAME_UW2))
                         {
-                            //in lava
+                            //on ice (UW1 has no ice state)
                             NewMotionState = 3;
                         }
                         else
@@ -952,7 +1005,7 @@ namespace Underworld
 
             if ((playerdat.WeightMax != 0) && ((playerdat.WeightCarried << 1) > playerdat.WeightMax))
             {
-                motion.MotionWeightRelated_dseg_67d6_C8 = (short)(0x60 - ((playerdat.WeightCarried * 0x60) / (playerdat.WeightMax << 1)));
+                motion.MotionWeightRelated_dseg_67d6_C8 = (short)(0x60 - ((ushort)(playerdat.WeightCarried * 0x60) / (playerdat.WeightMax << 1)));//the product is an unsigned 16-bit int, as the original's
             }
             else
             {
@@ -990,16 +1043,16 @@ namespace Underworld
             switch (TypeOfShake)
             {
                 case 0x20:
-                    playerdat.Shake20_Duration_73F = (sbyte)duration;
+                    playerdat.Shake20_Duration_73F = (byte)duration;
                     break;
                 case 0x40:
-                    playerdat.Shake40_Duration_740 = (sbyte)duration;
+                    playerdat.Shake40_Duration_740 = (byte)duration;
                     break;
                 case 0x80:
                     if (_RES == GAME_UW2)
                     {
                         //UW2 only form of shaking
-                        playerdat.Shake80_Duration_741 = (sbyte)duration;
+                        playerdat.Shake80_Duration_741 = (byte)duration;
                         break;
                     }
                     return;
@@ -1102,7 +1155,7 @@ namespace Underworld
                         //shake40,
                         var tmp = playerdat.Shake40_Duration_740;
                         playerdat.Shake40_Duration_740--;
-                        if (tmp <= 0)
+                        if (tmp == 0)
                         {
                             //seg35_BAB
                             //end shake
@@ -1120,15 +1173,15 @@ namespace Underworld
                     if ((playerdat.TileState & 0x20) != 0)
                     {
                         var tmp = playerdat.Shake20_Duration_73F;
-                        playerdat.Shake20_Duration_73F--;
-                        if (tmp <= 0)
+                        playerdat.Shake20_Duration_73F--;//an unsigned byte: ends after it reaches 0, then wraps to 255
+                        if (tmp == 0)
                         {
                             //seg35_BF2
                             //turn off shake
                             playerdat.TileState = playerdat.TileState & 0xDF;//clear bit 5
                         }
                         //seg35_BFF
-                        var2_incrementrelated = playerdat.Shake20_Duration_73F / 0xA;
+                        var2_incrementrelated = playerdat.Shake20_Duration_73F / 8;
                         if (var2_incrementrelated > 3)
                         {
                             var2_incrementrelated = 3;
@@ -1141,7 +1194,7 @@ namespace Underworld
                     {
                         var tmp = playerdat.Shake80_Duration_741;
                         playerdat.Shake80_Duration_741--;
-                        if (tmp <= 0)
+                        if (tmp == 0)
                         {
                             //seg35_C2D
                             //turn off shake
@@ -1149,14 +1202,15 @@ namespace Underworld
                         }
                         //Seg_C40
                         var2_incrementrelated = 0;
-                        playerdat.CameraYawModifier_dseg_67d6_33D0 = (short)(((Rng.r.Next(0x7FFF) & 0x1FF) - 256) << 2);
+                        playerdat.CameraYawModifier_dseg_67d6_33D0 += (short)(((Rng.r.Next(0x8000) & 0x1FF) - 256) << 2);
                     }
                     //seg35_C56
 
                     var1 += var2_incrementrelated;
-                    playerdat.CameraYawModifier_dseg_67d6_33D0 = (short)(var1 * ((Rng.r.Next(0x7FFF) & 0xFF) - 128));
-                    playerdat.CameraPitchModifier_dseg_67d6_33D2 = (short)(var1 * ((Rng.r.Next(0x7FFF) & 0x7F) - 64));
-                    playerdat.CameraRollModifier_dseg_67d6_33D4 = (short)(var1 * ((Rng.r.Next(0x7FFF) & 0x1FF) - 256));
+                    //added to the swim sway and roll set above (and the sliding shake's yaw)
+                    playerdat.CameraYawModifier_dseg_67d6_33D0 += (short)(var1 * ((Rng.r.Next(0x8000) & 0xFF) - 128));
+                    playerdat.CameraPitchModifier_dseg_67d6_33D2 += (short)(var1 * ((Rng.r.Next(0x8000) & 0x7F) - 64));
+                    playerdat.CameraRollModifier_dseg_67d6_33D4 += (short)(var1 * ((Rng.r.Next(0x8000) & 0x1FF) - 256));
                     //Debug.Print($"Screenshake by {CameraYawModifier_dseg_67d6_33D0},{CameraPitchModifier_dseg_67d6_33D2},{CameraRollModifier_dseg_67d6_33D4}");
                 }
             }

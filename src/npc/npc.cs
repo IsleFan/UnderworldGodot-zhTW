@@ -225,104 +225,71 @@ namespace Underworld
             return result;
         }
 
+        /// <summary>
+        /// CritterLook: 'You see a <attitude> <kind> named <Name>.' The attitude (block 5, 0x60 + attitude) shows only for
+        /// whoami below 0xF0 or 0xFF; the kind is the item's name, or in UW2 for a nameless kind with goal 11 string
+        /// 0x115 + its animation; the name is block 7, whoami + 0x10. A name starting in lower case replaces the kind.
+        /// </summary>
         public static bool LookAt(uwObject critter)
         {
-            if ((critter.npc_whoami >= 240) && (critter.npc_whoami != 248))//Ethereal void creatures 
+            string desc = GameStrings.GetString(4, critter.item_id);
+            var descZh = desc == "" ? null : ZhText.Enabled ? ZhText.ObjectName(critter.item_id) : null;
+            if (desc == "")
             {
-                EtheralVoidNPCDescription(critter);
-            }
-            else
-            {
-                if ((_RES != GAME_UW2) && (critter.npc_whoami == 248))
-                {//slasher of veils
-                    var name = critter.a_name;
-                    if (ZhText.Enabled)
-                    {
-                        uimanager.AddToMessageScroll(ZhText.YouSee(Localization.Lookup(7, critter.npc_whoami + 16, name)));
-                        return true;
-                    }
-                    uimanager.AddToMessageScroll($"You see {name}");
-                }
-                else
+                desc = null;
+                if ((_RES == GAME_UW2) && (critter.npc_goal == 11))
                 {
-                    RegularNPCDescription(critter);
+                    desc = GameStrings.GetString(1, critter.npc_animation + 0x115);
+                    descZh = ZhText.Enabled ? GameStrings.GetDisplayString(1, critter.npc_animation + 0x115) : null;
                 }
             }
-            return true;
-        }
-
-        /// <summary>
-        /// Describes Mr Jaws and his friends
-        /// </summary>
-        /// <param name="critter"></param>
-        private static void EtheralVoidNPCDescription(uwObject critter)
-        {
-            if (_RES == GAME_UW2)
+            var who = critter.npc_whoami;
+            var attitude = -1;
+            if ((who < 0xF0 || who == 0xFF) && (GameStrings.GetString(5, 0x60 + critter.npc_attitude) != ""))
             {
-                var id = critter.npc_animation + 277;
-                if (ZhText.Enabled)
+                attitude = 0x60 + critter.npc_attitude;
+            }
+            string name = null;
+            if (who > 0)
+            {
+                name = GameStrings.GetString(7, who + 0x10);
+                if (name == "")
                 {
-                    uimanager.AddToMessageScroll(ZhText.YouSee(GameStrings.GetDisplayString(1, id)));
-                    return;
+                    name = null;
                 }
-                var name = GameStrings.GetString(1, id);
-                uimanager.AddToMessageScroll($"You see {name}");
             }
-            else if (ZhText.Enabled)
-            {
-                uimanager.AddToMessageScroll(ZhText.YouSee(critter.npc_whoami != 0
-                    ? Localization.Lookup(7, critter.npc_whoami + 16, critter.a_name)
-                    : ZhText.ObjectName(critter.item_id)));
-            }
-            else
-            {
-                uimanager.AddToMessageScroll($"You see {critter.a_name.Replace("_", " ")}");
-            }
-        }
-
-        /// <summary>
-        /// Describes an NPC in terms of their mood, race and name
-        /// </summary>
-        /// <param name="critter"></param>
-        private static void RegularNPCDescription(uwObject critter)
-        {
-            var name = critter.a_name;
-            var lowercasename = char.IsLower(name.First<char>());//check if name is lower case. if so do not print it
-            string npcrace = GameStrings.GetObjectNounUW(critter.item_id);
-            var mood = GameStrings.GetString(5, 96 + critter.npc_attitude);
+            var named = name != null && char.IsUpper(name[0]);
+            var showKind = desc != null && (name == null || named);
 
             if (ZhText.Enabled)
             {
-                uimanager.AddToMessageScroll(ZhText.LookCreature(critter.npc_attitude, critter.item_id, critter.npc_whoami, name, lowercasename));
-                return;
+                uimanager.AddToMessageScroll(ZhText.LookCreature(
+                    attitudeString: desc != null ? attitude : -1,
+                    kind: showKind ? descZh : null,
+                    name: name != null ? Localization.Lookup(7, who + 0x10, name) : null,
+                    named: desc != null && named));
+                return true;
             }
-
-            var article = "a";
-            switch (mood.ToUpper().Substring(0, 1))
+            var s = GameStrings.GetString(1, GameStrings.str_you_see_);
+            if (desc != null && attitude >= 0)
             {
-                case "A":
-                case "E":
-                case "I":
-                case "O":
-                case "U":
-                    article = "an"; break;
-
+                var mood = GameStrings.GetString(5, attitude);
+                s += ("aeiou".IndexOf(mood[0]) >= 0 ? "an " : "a ") + mood + " ";
             }
-            if ((critter.npc_whoami != 0))
+            if (showKind)
             {
-                if (lowercasename)
-                {//print the whoami as the race only
-                    uimanager.AddToMessageScroll($"You see {article} {mood} {name}");
+                s += GameStrings.FixNameString(desc, article: attitude < 0, plural: false);
+            }
+            if (name != null)
+            {
+                if (desc != null && named)
+                {
+                    s += " named ";
                 }
-                else
-                {//print race
-                    uimanager.AddToMessageScroll($"You see {article} {mood} {npcrace} named {name}");
-                }
+                s += GameStrings.FixNameString(name, article: desc == null, plural: false);
             }
-            else
-            {
-                uimanager.AddToMessageScroll($"You see {article} {mood} {npcrace}");
-            }
+            uimanager.AddToMessageScroll($"{s}.");
+            return true;
         }
 
         /// <summary>
@@ -536,16 +503,17 @@ namespace Underworld
                 obj.UnkBit_0x19_4 = 0;
                 obj.UnkBit_0x19_5 = 0;
                 obj.UnkBit_0x19_0_likelyincombat = 0;
-                if (obj.npc_goal != (byte)npc.npc_goals.npc_goal_want_to_talk)
-                {
+                obj.UnkBit_0x19_1 = 0;
+                if ((_RES != GAME_UW2) || (obj.npc_goal != (byte)npc.npc_goals.npc_goal_want_to_talk))
+                {//UW2 keeps the heading of one waiting to talk
                     obj.heading = (short)(Rng.r.Next(8) & 7);
                 }
                 var avghit = critterObjectDat.avghit(obj.item_id);
                 if (obj.npc_hp < avghit)
                 {
                     if (obj.UnkBit_0XD_Bit9_StopHPRegen == 0)
-                    {
-                        obj.npc_hp += (byte)(avghit / 2);
+                    {//half way to its average hit points
+                        obj.npc_hp = (byte)((obj.npc_hp + avghit) / 2);
                     }
                 }
                 if (obj.UnkBit_0XA_Bit7 == 0)
@@ -563,12 +531,8 @@ namespace Underworld
                 }
 
                 if ((obj.quality != obj.npc_xhome) || (obj.owner != obj.npc_yhome))
-                {
-                    var tile = UWTileMap.current_tilemap.Tiles[obj.npc_xhome, obj.npc_yhome];
-                    if (tile.tileType != UWTileMap.TILE_SOLID)
-                    {
-                        npc.moveNPCToTile(obj, tile.tileX, tile.tileY);
-                    }
+                {//back to the home square kept in quality and owner (npc_xhome/yhome is the square it is on)
+                    npc.moveNPCToTile(obj, obj.quality, obj.owner);
                 }
 
             }

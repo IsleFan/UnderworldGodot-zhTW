@@ -187,16 +187,71 @@ namespace Underworld
         }
 
 
+        //A look click in the default mode waiting to become a drag that picks the object up (mouse_dragged).
+        static int LookDragIndex = -1;
+        static MouseButton LookDragButton;
+        static Vector2 LookDragStart;
+
+        /// <summary>
+        /// Follows the mouse after a look click in the default mode: once the pointer has moved more than six pixels of
+        /// the original 320x200 screen with the button still down, the object is picked up (player_3dlook's
+        /// mouse_dragged, then player_3dget); releasing the button first ends it.
+        /// </summary>
+        public static void ContinueLookDrag(InputEvent @event)
+        {
+            if (LookDragIndex < 0)
+            {
+                return;
+            }
+            if (@event is InputEventMouseButton release && !release.Pressed && release.ButtonIndex == LookDragButton)
+            {
+                LookDragIndex = -1;
+            }
+            else if (@event is InputEventMouseMotion motion)
+            {
+                var moved = motion.Position - LookDragStart;
+                if (Mathf.Abs(moved.X) + Mathf.Abs(moved.Y) > 6 * 4)//the screen is drawn at four times 320x200
+                {
+                    var index = LookDragIndex;
+                    LookDragIndex = -1;
+                    if (InGame && !blockinput && InteractionMode == InteractionModes.ModeNone && playerdat.ObjectInHand == -1)
+                    {//player_3dget in the default mode: what cannot be taken is talked to (a critter, UW2's wisp) or used
+                        var dragged = UWTileMap.current_tilemap.LevelObjects[index];
+                        var releaseable = pickup.CanBePickedUpOverrides(dragged.item_id) || (commonObjDat.CanBePickedUp(dragged.item_id) && dragged.IsStatic);
+                        var mode = InteractionModes.ModePickup;
+                        if (!releaseable)
+                        {
+                            mode = ((!dragged.IsStatic && dragged.majorclass == 1) || ((UWClass._RES == UWClass.GAME_UW2) && (dragged.item_id == 0x1CD)))
+                                ? InteractionModes.ModeTalk
+                                : InteractionModes.ModeUse;
+                        }
+                        InteractWithObjectCollider(index: index, LeftClick: LookDragButton == MouseButton.Left, mode: mode);
+                    }
+                }
+            }
+        }
+
+        /// <summary>A pick buffer pixel that names an object (red 0, the object index in blue and green).</summary>
+        static bool IsObjectPixel(Color pixel)
+        {
+            var index = (pixel.B8 << 8) | pixel.G8;
+            return (pixel.R8 == 0) && (index > 0) && (index <= 1024);
+        }
+
         public static void ClickOnViewPort(InputEventMouseButton eventMouseButton)
         {
             if (!InGame) { return; }
+            if (playerdat.ParalyseTimer > 0) { return; }//UW2 mous_in_3d: nothing at all while paralysed, not even a drop (UW1 blocks the input elsewhere, to the same effect)
             //store these values for use in throw and spell casting events
             var screenPoint = Controls.ScreenPoint(eventMouseButton.Position);
             ViewPortMouseXPos = screenPoint.X;
             ViewPortMouseYPos = screenPoint.Y;
             bool LeftClick = (eventMouseButton.ButtonIndex == MouseButton.Left);
+            //classic with no icon selected: the original's default mode, a click looks and a drag after it picks up
+            //(mous_in_3d, player_3dlook)
+            bool classicDefault = !Controls.Modern && InteractionMode == InteractionModes.ModeNone;
             //modern controls: right click looks, whatever the icon
-            bool look = Controls.Modern && !LeftClick;
+            bool look = (Controls.Modern && !LeftClick) || (classicDefault && UsageMode == 0);
             if (uimanager.InteractionMode == InteractionModes.ModeAttack && !look)
             {
                 return;//no more needs to be done.
@@ -208,7 +263,27 @@ namespace Underworld
             //text.GetImage().SavePng("c:\\temp\\testobjectinfo.png");
             //var vi = new Vector2I((int)(ViewPortMouseXPos / text.GetWidth()), (int)(ViewPortMouseYPos / text.GetHeight()));
             var mouse = Controls.ViewportPoint();
-            var pixel = text.GetImage().GetPixel((int)mouse.X, (int)mouse.Y);//
+            var pickImage = text.GetImage();
+            var pixel = pickImage.GetPixel((int)mouse.X, (int)mouse.Y);//
+            if ((UWClass._RES == UWClass.GAME_UW2) && !IsObjectPixel(pixel))
+            {//check_around: a click on a wall, floor or nothing looks outward in a square spiral (radius 9 in the original's pixels) for an object
+                var step = System.Math.Max(1, pickImage.GetWidth() / 0xD0);
+                int x = (int)mouse.X, y = (int)mouse.Y, dx = 0, dy = 1;
+                for (int r = 1; r < 10 && !IsObjectPixel(pixel); r++)
+                {
+                    for (int k = 0; k < r; k++)
+                    {
+                        x += dx * step;
+                        y += dy * step;
+                        if ((x >= 0) && (x < pickImage.GetWidth()) && (y >= 0) && (y < pickImage.GetHeight()) && IsObjectPixel(pickImage.GetPixel(x, y)))
+                        {
+                            pixel = pickImage.GetPixel(x, y);
+                            break;
+                        }
+                    }
+                    if (dx != 0) { dy = -dx; dx = 0; } else { dx = dy; dy = 0; }
+                }
+            }
 
 
             //do projectiles first.
@@ -227,12 +302,12 @@ namespace Underworld
             {
                 //something is held. try and drop or throw it
                 var objToThrow = UWTileMap.current_tilemap.LevelObjects[playerdat.ObjectInHand];
-                var itemid = objToThrow.item_id;
+                var hadMoonstone = pickup.HasOrIsMoonstone(objToThrow);
                 if (pickup.DropObjectByPlayer(objToThrow, true))
                 {
                     playerdat.ObjectInHand = -1;
                     instance.mousecursor.SetCursorToCursor();
-                    pickup.DropSpecialCases(itemid);//primarily handle moonstones                    
+                    pickup.DropSpecialCases(hadMoonstone);//primarily handle moonstones                    
                 }
                 return;
             }
@@ -257,7 +332,17 @@ namespace Underworld
                         {
                             mode = UsageMode == 1 ? InteractionModes.ModeUse : Controls.ContextMode(obj);
                         }
+                        else if (classicDefault)
+                        {//using an object on another
+                            mode = InteractionModes.ModeUse;
+                        }
                         InteractWithObjectCollider(index: obj.index, LeftClick: LeftClick, mode: mode);
+                        if (classicDefault && mode == InteractionModes.ModeLook && eventMouseButton.ButtonIndex == Controls.DragButton)
+                        {//only the drag button's look turns into a drag
+                            LookDragIndex = obj.index;
+                            LookDragButton = eventMouseButton.ButtonIndex;
+                            LookDragStart = eventMouseButton.Position;
+                        }
                         if (mode == InteractionModes.ModePickup && Input.IsKeyPressed(Key.Shift) && Controls.Modern)
                         {
                             PutHeldObjectInBackpack();
@@ -291,6 +376,11 @@ namespace Underworld
                     else if (InteractionMode == InteractionModes.ModeUse)
                     {
                         uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, GameStrings.str_you_cannot_use_that_));
+                    }
+                    else if ((InteractionMode == InteractionModes.ModePickup) || (InteractionMode == InteractionModes.ModeTalk))
+                    {//look_nothing: 'Nothing to get.', 'You cannot talk to that.' (how 3 and 4 after 'You cannot use that.')
+                        var nothing = UWClass._RES == UWClass.GAME_UW2 ? 0xA6 : 0x98;
+                        uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, nothing + (InteractionMode == InteractionModes.ModePickup ? 3 : 4)));
                     }
                 }
             }

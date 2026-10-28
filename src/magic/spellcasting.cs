@@ -18,16 +18,35 @@ namespace Underworld
         /// <param name="caster">Casting object (use if not the player casting)</param>
         /// <param name="target"></param>
         /// <returns></returns>
-        public static void CastSpell(int majorclass, int minorclass, uwObject caster, uwObject target, int tileX, int tileY, bool CastOnEquip)
+        static int PendingUW1CreatureSpell;
+
+        /// <summary>
+        /// One of UW1's five creature spells on a critter in the area (area1_spells): only Smite Undead can fail to act.
+        /// </summary>
+        static bool UW1CreatureSpellOnTarget(int x, int y, uwObject obj, TileInfo tile, int srcIndex)
+        {
+            if (obj == null)
+            {
+                return false;
+            }
+            if (PendingUW1CreatureSpell == 2)
+            {
+                return SmiteUndead(obj.index, UWTileMap.current_tilemap.LevelObjects, playerdat.playerObject);
+            }
+            CastClass7_SpellsOnCallBack(PendingUW1CreatureSpell, obj.index, UWTileMap.current_tilemap.LevelObjects, playerdat.playerObject);
+            return true;
+        }
+
+        /// <returns>false when the spell is refused (do_spell): no magic here, or no room for another active spell</returns>
+        public static bool CastSpell(int majorclass, int minorclass, uwObject caster, uwObject target, int tileX, int tileY, bool CastOnEquip)
         {
             bool PlayerCast = caster == playerdat.playerObject;
-            bool applyCost = true;//unless otherwise specified a cost is applied now in this function.
             Debug.Print($"{caster.a_name} is casting {majorclass},{minorclass}");
             if (_RES==GAME_UW1)
             {
                 if (playerdat.dungeon_level==9)
                 {
-                    return; //no casting in the ethereal void.
+                    return false; //no casting in the ethereal void.
                 }
             }
             //if no magic allow bit return
@@ -36,7 +55,7 @@ namespace Underworld
                 var tile = UWTileMap.current_tilemap.Tiles[tileX, tileY];
                 if (tile.noMagic == 1)
                 {
-                    return;
+                    return false;
                 }
             }
 
@@ -49,11 +68,15 @@ namespace Underworld
                 case 2://
                 case 3://
                     {
+                        if (PlayerCast && (playerdat.ActiveSpellEffectCount >= 3))
+                        {//no room for another active spell: set_curmagic fails and do_spell refuses
+                            return false;
+                        }
                         CastClass0123_Spells(caster: caster, majorclass: majorclass, minorclass: minorclass);                        
                         break;
                     }
                 case 4://healing
-                    CastClass4_Heal(minorclass);
+                    CastClass4_Heal(minorclass, caster, target);
                     break;
                 case 5://projectile spells
                     {
@@ -61,7 +84,6 @@ namespace Underworld
                         {
                             currentSpell = new RunicMagic(majorclass,minorclass);
                             uimanager.instance.mousecursor.SetCursorToCursor(9);
-                            applyCost = false;
                         }
                         else
                         {//cast by an object, eg spell trap. fire off immediately
@@ -70,10 +92,19 @@ namespace Underworld
                     }
                     break;
                 case 6://spells that run code in an area around the player
-                    CastClass6_SpellsAroundPlayer(minorclass);
+                    CastClass6_SpellsAroundPlayer(minorclass, caster);
                     break;
                 case 7://spells with prompts and code callbacks.
                     {
+                        if (_RES != GAME_UW2)
+                        {//UW1 casts its creature spells at once on the first critter within 2 squares of a point 4 ahead (nail_1area)
+                            if (PlayerCast)
+                            {
+                                PendingUW1CreatureSpell = minorclass & 0x3F;
+                                CallBacks.RunCodeOnTargetsAroundObject(UW1CreatureSpellOnTarget, caster.index, 1, minorclass & 0xC0, 4, 2);
+                            }
+                            break;
+                        }
                         currentSpell = new RunicMagic(majorclass,minorclass);
                         uimanager.instance.mousecursor.SetCursorToCursor(10);
                     }
@@ -105,12 +136,8 @@ namespace Underworld
                     break;
             }
 
-            if ((applyCost) && (PlayerCast))
-            {
-                playerdat.play_mana = System.Math.Max(0, playerdat.play_mana - RunicMagic.PendingSpellCost);
-                RunicMagic.PendingSpellCost = 0;
-            }
             playerdat.PlayerStatusUpdate();
+            return true;
         } 
         
         /// <summary>
@@ -130,13 +157,18 @@ namespace Underworld
                         uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1,GameStrings.str_there_is_not_enough_room_to_release_that_spell_));
                         return;
                     case 7://click on object spells
-
-                        CastClass7_SpellsOnCallBack(
+                        //target_spells/obj_spells: the mana held back at the cast is paid only if the spell worked
+                        if (CastClass7_SpellsOnCallBack(
                             minorclass: currentSpell.SpellMinorClass, 
                             index: index, 
                             objList: objList,
                             caster: playerdat.playerObject,                           
-                            WorldObject: WorldObject); 
+                            WorldObject: WorldObject))
+                        {
+                            playerdat.play_mana = System.Math.Max(0, playerdat.play_mana - RunicMagic.PendingSpellCost);
+                            playerdat.PlayerStatusUpdate();
+                        }
+                        RunicMagic.PendingSpellCost = 0;
                         currentSpell = null;
                         uimanager.instance.mousecursor.SetCursorToCursor();
                         break;

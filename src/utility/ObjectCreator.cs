@@ -127,14 +127,10 @@ namespace Underworld
                         obj.link = 0;
                         break;
                 }
-                if (WhichList == ObjectFreeLists.ObjectListType.MobileList)
-                {
-                    //mobile object                    
-                    if (obj.majorclass == 1) //NPC
-                    {
-                        //in uw2 critter is initialised here, uw1 skips this. leaving it like this for now as I've yet to find the uw1 equivilant to study
-                        InitialiseCritter(obj);
-                    }
+                if ((obj.majorclass == 1) && ((_RES == GAME_UW2) || (WhichList == ObjectFreeLists.ObjectListType.MobileList)))
+                {//UW2's CreateObj initialises any new critter (init_this_critter). UW1's does not, but its summoning
+                 //calls creature_obj_init itself, so a mobile critter is initialised here for it.
+                    InitialiseCritter(obj);
                 }
             }
             return slot;
@@ -650,6 +646,7 @@ namespace Underworld
             critter.ProjectileHeading = (ushort)(critter.heading << 5);
             critter.npc_goal = 8;
             critter.npc_gtarg = 0;
+            critter.npc_level = 0;//the old goal
             critter.TargetTileX = 0;
             critter.TargetTileY = 0;
             critter.TargetZHeight = 0;
@@ -661,9 +658,9 @@ namespace Underworld
             critter.SwingChargeIndex = 0;
             critter.NextFrame_0XA_Bit0123 = 0;
             critter.Projectile_Speed = 4;
-            critter.npc_animation = 0;//is this right for UW1?
+            critter.npc_animation = (short)(_RES == GAME_UW2 ? 0 : 0x20);//UW1 SEQ_STAND
             critter.AnimationFrame = 0;
-            critter.npc_attack = 10;
+            critter.Projectile_Pitch = 0x10;//level
             critter.UnkBit_0X13_Bit7 = 0;
             critter.UnkBit_0X13_Bit0to6 = 0;
             critter.AccumulatedDamage = 0;
@@ -671,9 +668,11 @@ namespace Underworld
             critter.UnkBit_0x18_7 = 0;
             critter.UnkBit_0x18_6 = 0;
             critter.PathFindIndex_0x16_0_F = 0;
+            critter.UnkBit_0X15_Bit7 = 0;
             critter.UnkBit_0X15_6 = 0;
             critter.npc_whoami = 0;
             critter.UnkBit_0x19_0_likelyincombat = 0;
+            critter.UnkBit_0x19_1 = 0;
             critter.UnkBit_0x19_4 = 0;
             critter.UnkBit_0x19_5 = 0;
             critter.IsAlly = 0;
@@ -683,7 +682,10 @@ namespace Underworld
             critter.npc_attitude = 2;
             critter.UnkBit_0XA_Bit7 = 0;//active?
             critter.npc_spellindex = 0;
-            critter.TileState_0XA_Bit456 = 0;
+            if (_RES == GAME_UW2)
+            {//SET_TERRAIN(0) only in UW2
+                critter.TileState_0XA_Bit456 = 0;
+            }
 
         }
 
@@ -719,6 +721,7 @@ namespace Underworld
                 obj.CoordinateX = (obj.xpos << 5) + (xhome << 8) + 0xF;
                 obj.CoordinateY = (obj.ypos << 5) + (yhome << 8) + 0xF;
                 obj.CoordinateZ = obj.zpos << 3;
+                obj.ProjectileSourceID = 0;//mob_init: no last hitter
             }
         }
 

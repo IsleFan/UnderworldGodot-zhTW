@@ -22,8 +22,8 @@ namespace Underworld
                 newHeight = 0;
                 newFloorTexture = trapObj.quality;
             }
-            if (newHeight<15)
-            {
+            if (newHeight <= 15)
+            {//TRAP_PIT: only a height above 15 makes the square solid
                 newTileType = UWTileMap.TILE_OPEN;
             }
             else

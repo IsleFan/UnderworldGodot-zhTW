@@ -81,9 +81,22 @@ namespace Underworld
 
         private void _on_compass_click(InputEvent @event)
         {
-            if (@event is InputEventMouseButton eventMouseButton && eventMouseButton.Pressed)
-            { 
-                scroll.Clear();
+            if (@event is InputEventMouseButton eventMouseButton && eventMouseButton.Pressed
+                && ((eventMouseButton.ButtonIndex == MouseButton.Left) || (eventMouseButton.ButtonIndex == MouseButton.Right)) && !InConversation)
+            {//print_info: only in the game (not in conversation); the report goes below what is already in the scroll
+                //the three step arrows over it come first (PLAYER.C's player_simple_move areas, in the original's 320x200 with
+                //y up from the bottom): turn left, step, turn right
+                var x = (int)(eventMouseButton.GlobalPosition.X / 4);
+                var y = 200 - (int)(eventMouseButton.GlobalPosition.Y / 4);
+                int? turn = null;
+                if (x >= 0x6B && x <= 0x7B && y >= 0x21 && y <= 0x2F) { turn = -1; }
+                else if (x >= 0x82 && x <= 0x92 && y >= 0x1F && y <= 0x2C) { turn = 0; }
+                else if (x >= 0x9B && x <= 0xAA && y >= 0x21 && y <= 0x2F) { turn = 1; }
+                if (turn.HasValue)
+                {
+                    main.PlayerSimpleMove(turn.Value);
+                    return;
+                }
                 AddToMessageScroll("\n");
                 if (UWClass._RES == UWClass.GAME_UW2)
                 {
@@ -118,9 +131,10 @@ namespace Underworld
                 fatigue = 131 - fatigue;
                 output += GameStrings.GetDisplayString(1, fatigue);
             }
-            AddToMessageScroll(output);
+            AddToMessageScroll(Localization.EndSentence(output));
 
             var worldsKnown = playerdat.GetQuest(131);
+            var worldLine = worldsKnown != 0;
             if (worldsKnown == 0)
             {//other world names are unknown
              //do nothing
@@ -150,14 +164,20 @@ namespace Underworld
             }
 
             var timeofday = (playerdat.ClockValue / 0x1c2000);
-            timeofday = timeofday % 0x12;
+            timeofday = timeofday % 12;//twelve two-hour periods
 
             output =
                 GameStrings.GetDisplayString(1, GameStrings.str_you_guess_that_it_is_currently_)
                 +
                 GameStrings.GetDisplayString(1, timeofday + 84);
 
-            AddToMessageScroll(output);
+            AddToMessageScroll(Localization.EndSentence(output));
+            //the report always takes the same number of lines: a blank line, and another when there was no world line
+            AddToMessageScroll("\n");
+            if (!worldLine)
+            {
+                AddToMessageScroll("\n");
+            }
 
         }
 
@@ -216,7 +236,7 @@ namespace Underworld
                 +
                 GameStrings.GetDisplayString(1, timeofday + 71);
 
-            AddToMessageScroll(output);
+            AddToMessageScroll(Localization.EndSentence(output));
         }
     }//end class
 }//end namespace

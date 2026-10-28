@@ -11,7 +11,7 @@ namespace Underworld
                 //print use message
                 uimanager.AddToMessageScroll(ZhText.Enabled
                     ? ZhText.Compose("要把", ZhText.ObjectName(obj.item_id), "用在什麼上？")
-                    : $"Use {GameStrings.GetSimpleObjectNameUW(obj.item_id)} on?");
+                    : $"Use {GameStrings.GetName(obj.item_id, article: false, plural: false)} on what?");
             }
             else
             {
@@ -32,6 +32,10 @@ namespace Underworld
             if (targetObject.item_id == 0x117)
             {
                 uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, 0x85));//the orb is destroyed.
+                if (playerUsing)
+                {//the orb rock used from the inventory is used up
+                    ObjectCreator.Consume(OrbObject, true);
+                }
                 animo.SpawnAnimoAtTarget(targetObject, 0x4, 0x5, targetObject.tileX, targetObject.tileY);
                 ObjectRemover_OLD.DeleteObjectFromTile_DEPRECIATED(targetObject.tileX, targetObject.tileY, targetObject.index);
                 playerdat.isOrbDestroyed = true;
@@ -39,7 +43,7 @@ namespace Underworld
                 playerdat.play_mana = playerdat.max_mana;
 
                 //damage tybal
-                CallBacks.RunCodeOnNPCS_WhoAmI(methodToCall: ChangeTybalHP, whoami: 0xE7, paramsArray: new int[]{2}, loopAll: true);
+                CallBacks.RunCodeOnNPCS_WhoAmI(methodToCall: ChangeTybalHP, whoami: 0xE7, paramsArray: new int[]{2}, loopAll: false);//gronk_whoami with all 0: the first one
             }
             else
             {

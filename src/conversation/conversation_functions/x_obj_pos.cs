@@ -5,84 +5,76 @@ namespace Underworld
     public partial class ConversationVM : UWClass
     {
         /// <summary>
-        /// Performs operations on an object position
+        /// x_obj_pos(arg5 object, arg4 mode, arg3 x, arg2 y, arg1 z), x, y and z passed by address; a variable holding
+        /// -1 is left alone. Mode 1 sets the fine position and height (a height above 0x7F means the floor of square
+        /// x, y); mode 2 reads back the square and height; any other mode the fine position and height.
         /// </summary>
         public static void x_obj_pos()
         {
-            Debug.Print("Untested x_obj_pos");
-            var X_var4 = at(stack + stackptr - 3);
-            var Y_var8 = at(stack + stackptr - 2);
-            var Z_var10 = at(stack + stackptr - 1);
+            var xAddress = at(stack + stackptr - 3);
+            var yAddress = at(stack + stackptr - 2);
+            var zAddress = at(stack + stackptr - 1);
             var objindex = at(at(stack + stackptr - 5));
             var mode = at(at(stack + stackptr - 4));
+            var x = at(xAddress); var y = at(yAddress); var z = at(zAddress);
 
             var obj = UWTileMap.current_tilemap.LevelObjects[objindex];
 
             switch (mode)
             {
                 case 1:
-                    {//Change x,y,z
-                        if (X_var4 != -1)
-                        {
-                            obj.xpos = X_var4;
-                        }
-                        if (Y_var8 != -1)
-                        {
-                            obj.ypos = Y_var8;
-                        }
-                        if (Z_var10 != -1)
-                        {
-                            if (Z_var10 <= 0x7F)
-                            {//use the supplied height
-
-                            }
-                            else
-                            {//use the height of the tile given by X and Y
-                                if (UWTileMap.ValidTile(X_var4, Y_var8))
-                                {
-                                    var tile = UWTileMap.current_tilemap.Tiles[X_var4, Y_var8];
-                                    obj.zpos = (short)(tile.floorHeight << 3);
-                                }
-                            }
-                        }
-                        break;
+                    if (x != -1)
+                    {
+                        obj.xpos = (short)x;
                     }
+                    if (y != -1)
+                    {
+                        obj.ypos = (short)y;
+                    }
+                    if (z != -1)
+                    {
+                        if (z > 0x7F)
+                        {
+                            if (UWTileMap.ValidTile(x, y))
+                            {
+                                obj.zpos = (short)(UWTileMap.current_tilemap.Tiles[x, y].floorHeight << 3);
+                            }
+                        }
+                        else
+                        {
+                            obj.zpos = (short)z;
+                        }
+                    }
+                    objectInstance.Reposition(obj);
+                    break;
                 case 2:
-                    {//Set xhome and yhome for mobile objects, stores value of zpos on stack
-                        if (X_var4 != -1)
-                        {
-                            obj.npc_xhome = X_var4;
-                        }
-                        if (Y_var8 != -1)
-                        {
-                            obj.npc_yhome = Y_var8;
-                        }
-                        if (Z_var10 != -1)
-                        {
-                            Debug.Print("Store zos, untested");
-                            Set(Z_var10, obj.zpos);
-                        }
-                        break;
+                    if (x != -1)
+                    {
+                        Set(xAddress, obj.tileX);
                     }
-                case 3:
-                    {//store values.
-                        if (X_var4 != -1)
-                        {
-                            Debug.Print("Store xpos, untested");
-                            Set(X_var4, obj.xpos);
-                        }
-                        if (Y_var8 != -1)
-                        {
-                            Debug.Print("Store xpos, untested");
-                            Set(Y_var8, obj.ypos);
-                        }
-                        if (Z_var10 != -1)
-                        {
-                            Debug.Print("Store zpos, untested");
-                            Set(Z_var10, obj.zpos);
-                        }
-                        break;
+                    if (y != -1)
+                    {
+                        Set(yAddress, obj.tileY);
                     }
+                    if (z != -1)
+                    {
+                        Set(zAddress, obj.zpos);
+                    }
+                    break;
+                default:
+                    if (x != -1)
+                    {
+                        Set(xAddress, obj.xpos);
+                    }
+                    if (y != -1)
+                    {
+                        Set(yAddress, obj.ypos);
+                    }
+                    if (z != -1)
+                    {
+                        Set(zAddress, obj.zpos);
+                    }
+                    break;
             }
         }
     } //end class

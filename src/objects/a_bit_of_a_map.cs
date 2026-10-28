@@ -21,7 +21,7 @@ namespace Underworld
             {
                 return false;
             }
-            var match = objectsearch.FindMatchInFullObjectList(4, 3, 0xA, playerdat.InventoryObjects); //search for player map
+            var match = objectsearch.FindObj(4, 3, 0xA); //search for player map
             {
                 if (match == null)
                 {
@@ -165,7 +165,7 @@ namespace Underworld
             foreach (var srcNote in sourcenotes.notes)
             {                
                 var NoteX_var14 = (srcNote.posX - 10) / 3;
-                var NoteY_var16 = (srcNote.posY - 9) / 3;
+                var NoteY_var16 = (srcNote.posY - 7) / 3;
                 var var6 = GetMapPieceSegmentNo(NoteX_var14 - 32, NoteY_var16-32);
                 if (((SegmentToCopy >> var6) & 0x1) != 0)
                 {
@@ -204,7 +204,7 @@ namespace Underworld
             var cx = arg0;
             var di = arg2;
 
-            if ((di * di) + (cx * cx) < 0x51)
+            if ((di * di) + (cx * cx) <= 0x51)
             {
                 return 0;
             }

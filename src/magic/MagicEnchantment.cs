@@ -21,23 +21,12 @@ namespace Underworld
             LinkedSpellObject = _linkedSpellObject;
         }
 
-        public static bool IsPotion(uwObject obj, bool UW2Only = true)
+        /// <summary>
+        /// UW2's potions, FIRST_POTION (0xE1) to ITEM_BROWN_POTION (0xE7); 0xE0 is a runestone.
+        /// </summary>
+        public static bool IsPotion(uwObject obj)
         {
-            if (_RES==GAME_UW2)
-            {
-                return (obj.item_id>=224 && obj.item_id<=231);
-            }
-            else
-            {
-                if (UW2Only)
-                {
-                    return false;// hack for checking enchantments in uw2
-                }
-                else
-                {
-                    return (obj.item_id>=187 && obj.item_id<=188);
-                }
-            }
+            return (_RES == GAME_UW2) && (obj.item_id >= 0xE1) && (obj.item_id <= 0xE7);
         }
 
         /// <summary>
@@ -53,18 +42,7 @@ namespace Underworld
         public Description Describe(uwObject obj, uwObject[] objList, int LoreCheck = 3)
         {
             var stringNo = 0;
-            if (IsPotion(obj, false))
-            {
-                if (obj.is_quant == 0)
-                {//check for poisoned potions
-                    var damagetrap = objectsearch.FindMatchInObjectChain(obj.link, 6,0,0,objList);
-                    if (damagetrap  != null)
-                    {
-                        return new Description(Poison: true, Cursed: false, StringNo: -1, Charges: -2);
-                    }
-                }
-            }
-            //if not a poisoned potion check for other causes.
+            //a poisoned potion is look.DoOf's, before any spell
             if (LoreCheck == 3)
             {//passed lorecheck
                 if (SpellMajorClass == 0xC)
@@ -151,10 +129,6 @@ namespace Underworld
             {
                 return "";
             }
-            if (d.Poison)
-            {
-                return " of poison";
-            }
             if (d.Cursed)
             {
                 return "cursed";
@@ -174,6 +148,11 @@ namespace Underworld
             }
             return $"{GameStrings.GetString(d.StringNo)}{charges}";
         }
+
+        /// <summary>
+        /// always_decode: set while looking, so a spell object with no charges is never hidden.
+        /// </summary>
+        public static bool AlwaysDecode = false;
 
         public static MagicEnchantment GetSpellEnchantment(uwObject obj, uwObject[] objList)
         {
@@ -217,9 +196,14 @@ namespace Underworld
                         majorclass: 4, 
                         minorclass: 2, 
                         classindex: 0, 
-                        objList: objList);
+                        objList: objList,
+                        SkipLinks: true);//decode_obj_spell: in the contents only, not inside them
                     if (obj!=null)
                     {
+                        if ((obj.quality == 0) && !AlwaysDecode && ((Rng.r.Next(0x8000) * 10) / 0x8000 < 4))
+                        {//a spell with no charges left is hidden 4 times in 10 (looking always sees it)
+                            return null;
+                        }
                         _linkedSpell = obj;
                     }
                 }
@@ -269,16 +253,47 @@ namespace Underworld
         /// </summary>
         /// <param name="obj"></param>
         /// <param name="spell"></param>
-        public static void CastObjectSpell(uwObject obj, MagicEnchantment spell)
-        {
+        /// <param name="fromTheObject">checkSpell in the world: the object itself is the source, at its tile, on its user (inanimate_spell).</param>
+        public static bool CastObjectSpell(uwObject obj, MagicEnchantment spell, bool cooldown = true, bool fromTheObject = false)
+        {//checkSpell: the player using the object is the caster. Casts are one per 0x2FD clock ticks (food and potions
+         //are exempt, the original clears the timer around them); too soon, nothing is cast and the charge is kept.
             use.SpellHasBeenCast = true;
+            if (cooldown)
+            {
+                if ((playerdat.ClockValue < NextSpellTime) && (NextSpellTime - playerdat.ClockValue <= 0x2FD))//(a clock gone back, an older save loaded, does not count)
+                {
+                    UWsoundeffects.PlaySoundEffectAtAvatar(0x15, 0x40, 0);
+                    if (_RES == GAME_UW2)
+                    {
+                        uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, 0xB));//You are not yet ready to cast another spell.
+                    }
+                    return false;
+                }
+                NextSpellTime = playerdat.ClockValue + 0x2FD;
+            }
             var spellno = spell.SpellMinorClass;
             if (spell.SpellMajorClass != -1)
             {
                 spellno = spellno |= (spell.SpellMajorClass << 6);
             }
-            SpellCasting.CastSpellFromObject(spellno, obj);
-        } 
+            if (fromTheObject)
+            {
+                SpellCasting.CastSpellFromObject(spellno, obj, playerdat.playerObject, obj.tileX, obj.tileY);
+            }
+            else
+            {
+                SpellCasting.CastSpellFromObject(spellno, playerdat.playerObject);
+            }
+            return true;
+        }
+
+        static long NextSpellTime = 0;
+
+        /// <summary>A restored game may cast from objects at once (reset_game clears nextSpellTime).</summary>
+        public static void ResetSpellTimer()
+        {
+            NextSpellTime = 0;
+        }
 
 
         /// <summary>
@@ -291,42 +306,28 @@ namespace Underworld
         /// <returns>True when spell has ran out.</returns>
         public static bool DecrementSpellQuality(uwObject[] objList, bool WorldObject, uwObject parentObject, MagicEnchantment spell)
         {
+            //useNSpellCharges: only a cast-on-use spell (id bit 11) spends charges; with none left it is deleted 4 times in 10
+            if (spell.LinkedSpellObject.flags2 == 0)
+            {
+                return false;
+            }
             if (spell.LinkedSpellObject.quality > 0)
             {
                 spell.LinkedSpellObject.quality--;
             }
-            else
+            else if ((Rng.r.Next(0x8000) * 10) / 0x8000 < 4)
             {
-                //spell has ran out. unlink it
-                var next = parentObject.link;
-                var previous = 0;
-                while (next != 0)
+                //spell has ran out. unlink it from the object's contents (the rest of the contents stay)
+                if (WorldObject)
                 {
-                    var nextObj = objList[next];
-                    if (next == spell.LinkedSpellObject.index)
-                    {
-                        if (WorldObject)
-                        {
-                            if (previous == 0)
-                            {
-                                parentObject.link = 0;
-                            }
-                            else
-                            {
-                                var previousObject = objList[previous];
-                                previousObject.link = 0;
-                            }
-                            ObjectFreeLists.ReleaseFreeObject(spell.LinkedSpellObject);                            
-                        }
-                        else
-                        {
-                            playerdat.RemoveFromInventory(spell.LinkedSpellObject.index, ClearLink: true, updateUI: false);
-                        }
-                        return true;//spell has ran out
-                    }
-                    next = nextObj.next;
-                    previous = nextObj.index;
+                    ObjectRemover_OLD.RemoveObjectFromLinkedList(parentObject.link, spell.LinkedSpellObject.index, objList, parentObject.PTR + 6);
+                    ObjectFreeLists.ReleaseFreeObject(spell.LinkedSpellObject);
                 }
+                else
+                {
+                    playerdat.RemoveFromInventory(spell.LinkedSpellObject.index, ClearLink: true, updateUI: false);
+                }
+                return true;//spell has ran out
             }
             return false;
         }

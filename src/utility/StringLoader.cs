@@ -768,6 +768,38 @@ namespace Underworld
         }
         
 
+        /// <summary>
+        /// fix_name_string: a plural takes the text after '&' (or adds an "s"), a singular the text before it; the
+        /// article before '_' ("a_", "an_", "some_", "the_") is kept as a word when article is set, else dropped.
+        /// </summary>
+        public static string FixNameString(string s, bool article, bool plural)
+        {
+            var amp = s.IndexOf('&');
+            if (plural)
+            {
+                s = amp >= 0 ? s.Substring(amp + 1) : s + "s";
+            }
+            else if (amp >= 0)
+            {
+                s = s.Substring(0, amp);
+            }
+            var under = s.IndexOf('_');
+            if (under >= 0)
+            {
+                s = article ? s.Substring(0, under) + " " + s.Substring(under + 1) : s.Substring(under + 1);
+            }
+            return s;
+        }
+
+        /// <summary>
+        /// get_name: the item's name from block 4, shaped by FixNameString. Empty when it has none.
+        /// </summary>
+        public static string GetName(int item_id, bool article, bool plural)
+        {
+            var name = GetString(4, item_id);
+            return string.IsNullOrEmpty(name) ? "" : FixNameString(name, article, plural);
+        }
+
         //// <summary>
         /// Gets the simple object name without articles etc
         /// </summary>

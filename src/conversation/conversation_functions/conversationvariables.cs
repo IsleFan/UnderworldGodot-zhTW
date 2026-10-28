@@ -42,7 +42,7 @@ namespace Underworld
 							}
 						case "npc_hunger": //bit 7 only
 							{
-								valueToImport = (npc.npc_hunger & 0x80) >> 7;
+								valueToImport = npc.UnkBit_0x19_7;//the fed bit, b19 bit 7 (setup_converse_data)
 								if (valueToImport == 1)
 								{
 									valueToImport = 16;
@@ -62,7 +62,7 @@ namespace Underworld
 								}
 								else
 								{
-									valueToImport = (npc.npc_hp << 8) / avghit;
+									valueToImport = (short)(npc.npc_hp << 8) / avghit;//16-bit: 128 hit points or more come out below 0
 								}
 								break;
 							}
@@ -155,7 +155,7 @@ namespace Underworld
 							}
 						case "play_health":
 							{
-								valueToImport = (playerdat.play_hp << 8) / playerdat.max_hp; break;
+								valueToImport = playerdat.max_hp != 0 ? (short)(playerdat.play_hp << 8) / playerdat.max_hp : 0x80; break;//16-bit, as npc_health
 							}
 						case "play_hp":
 							{
@@ -231,7 +231,8 @@ namespace Underworld
 			}
 		} //end importvars
 
-		public static void ExportVariables(uwObject npc)
+		/// <returns>Whether the NPC was left hostile (attitude 0)</returns>
+		public static bool ExportVariables(uwObject npc)
 		{
 			for (int c = 0; c <= bglobal.bGlobals.GetUpperBound(0); c++)
 			{
@@ -246,45 +247,58 @@ namespace Underworld
 				}
 			}
 
-			var newvalue = FindVariable("npc_hunger");
-			if (newvalue >= 32)
-			{//Set bit 7
-				npc.npc_hunger = (short)((npc.npc_hunger & 0x7F) | (1 << 7));
-			}
-			else
+			//update_converse_data: bab_var_out leaves val as it was when the script did not import that variable
+			short val = 0;
+			short gtarg = 0;
+			void Out(string name, ref short value)
 			{
-				//unset bit
-				npc.npc_hunger = ((short)(npc.npc_hunger & 0x7F));
+				for (int i = 0; i <= currentConversation.functions.GetUpperBound(0); i++)
+				{
+					if ((currentConversation.functions[i].import_type == 0x010F) && (name == currentConversation.functions[i].importname.ToLower()))
+					{
+						value = at(currentConversation.functions[i].ID_or_Address);
+						return;
+					}
+				}
 			}
-
-			npc.npc_hp = (byte)FindVariable("npc_hp");
-			npc.owner = FindVariable("npc_yhome");
-			npc.quality = FindVariable("npc_xhome");
-			npc.npc_goal = (byte)FindVariable("npc_goal"); //There may be deeper logic applying here
-			npc.npc_gtarg = (byte)FindVariable("npc_gtarg");
+			Out("npc_hunger", ref val);
+			npc.UnkBit_0x19_7 = (short)(val < 0x20 ? 1 : 0);//fed when below 0x20
+			Out("npc_hp", ref val);
+			npc.npc_hp = (byte)val;
+			Out("npc_xhome", ref val);
+			npc.quality = val;
+			Out("npc_yhome", ref val);
+			npc.owner = val;
+			Out("npc_goal", ref val);
+			Out("npc_gtarg", ref gtarg);
+			Underworld.npc.SetGoalAndGtarg(npc, val, gtarg);//change_critter_goal
 			npc.npc_talkedto = 1;// this always gets set to 1
-			newvalue = FindVariable("npc_attitude");
-			if (newvalue > 3)
+			Out("npc_attitude", ref val);
+			if (val > 3)
 			{
 				npc.npc_attitude = 3;
 				npc.IsAlly = 1;
 			}
 			else
 			{//note this value will overwrite a set_race_attitude value, npc will become hostile later on in this case due to hardcoded behavioural code when their gtarg is the player 1
-				npc.npc_attitude = newvalue; //(short)Math.Max(0, (int)newvalue&0x3);
+				npc.npc_attitude = val;
 			}
+			var killed = val == 0;
 
-			playerdat.play_hunger = (byte)FindVariable("play_hunger");
-			playerdat.play_hp = (byte)FindVariable("play_hp");
-			playerdat.play_mana = (byte)FindVariable("play_mana");
-			playerdat.play_poison = (byte)FindVariable("play_poison");
-			//Add new_exp
-			newvalue = FindVariable("new_player_exp");
-			if (newvalue != 0)
+			Out("play_hunger", ref val);
+			playerdat.play_hunger = (byte)val;
+			Out("play_hp", ref val);
+			var hp = val;
+			Out("play_mana", ref val);
+			playerdat.SetHpAndManaFromConversation(hp, val);//as they are: no clamp to the maximum
+			Out("play_poison", ref val);
+			playerdat.play_poison = (byte)val;
+			Out("new_player_exp", ref val);
+			if (val != 0)
 			{
-				Debug.Print("Change in xp in conversation. Test me.");//the exp change logic is dungeon level dependant with some randomisation
-				playerdat.ChangeExperience(newvalue);
+				playerdat.ChangeExperience(val);
 			}
+			return killed;
 		}
 
 		/// <summary>

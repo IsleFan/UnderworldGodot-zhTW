@@ -326,16 +326,37 @@ namespace Underworld
         /// <param name="BaseObject"></param>
         /// <param name="tileX"></param>
         /// <param name="tileY"></param>
+        /// <summary>
+        /// Change_AnimPtr: an animation object moved to another object record (between the mobile and static lists) keeps
+        /// its animation: the first animation entry pointing at the old record points at the new one.
+        /// </summary>
+        public static void ChangeAnimPtr(uwObject to, uwObject from)
+        {
+            foreach (var ovl in UWTileMap.current_tilemap.Overlays)
+            {
+                if ((ovl != null) && (ovl.link == from.index))
+                {
+                    ovl.link = to.index;
+                    break;
+                }
+            }
+        }
+
+        /// <summary>
+        /// fireball_effect: 3 to 5 flames, each the next item or the one after, within 2 of the source's fine position
+        /// (drawn again until it stays in the tile) and from 8 below to 7 above its height.
+        /// </summary>
         public static void SpawnAnimoCopies(uwObject BaseObject, int tileX, int tileY)
         {
-            var di_rng = 2 + Rng.r.Next(3);
-
-            for (int i = 0; i < di_rng; i++)
+            for (int n = Rng.r.Next(0x8000) % 3 + 2; n >= 0; n--)
             {
-                var classIndex = BaseObject.classindex + Rng.r.Next(2);
-                var rndX = Math.Min(Math.Max(0, BaseObject.xpos + Rng.r.Next(5) - 2), 7);
-                var rndY = Math.Min(Math.Max(0, BaseObject.ypos + Rng.r.Next(5) - 2), 7);
-                var rndZ = Math.Min(Math.Max(0, BaseObject.zpos - 8 + Rng.r.Next(15)), 127);
+                var classIndex = BaseObject.classindex + (Rng.r.Next(0x8000) & 1) + 1;
+                int off;
+                do { off = Rng.r.Next(0x8000) % 5 - 2; } while ((BaseObject.xpos + off < 0) || (BaseObject.xpos + off > 7));
+                var rndX = BaseObject.xpos + off;
+                do { off = Rng.r.Next(0x8000) % 5 - 2; } while ((BaseObject.ypos + off < 0) || (BaseObject.ypos + off > 7));
+                var rndY = BaseObject.ypos + off;
+                var rndZ = Math.Min(Math.Max(0, BaseObject.zpos - 8 + (Rng.r.Next(0x8000) & 0xF)), 127);
                 animo.SpawnAnimoInTile(classIndex, (short)rndX, (short)rndY, (short)rndZ, tileX, tileY);
             }
         }

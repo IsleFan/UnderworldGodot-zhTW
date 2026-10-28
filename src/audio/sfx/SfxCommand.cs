@@ -8,5 +8,7 @@ namespace Underworld.Sfx;
 /// The consumer (<see cref="TvfxVoice.EmitRegisters"/>) multiplies the
 /// carrier's TVFX-computed linear volume by VolScale/127 before inverting
 /// to OPL Total Level. VolScale=127 is the identity (no extra attenuation).
+/// Slot is the game's effect slot (EffectChannels) the voice plays for; a NoteOff command releases the voices of its
+/// slot, or every voice when Slot is -1 (kill_effect, kill_all_effects).
 /// </summary>
-public readonly record struct SfxCommand(TvfxPatch Patch, int LifetimeTicks, byte VolScale);
+public readonly record struct SfxCommand(TvfxPatch Patch, int LifetimeTicks, byte VolScale, int Slot = -1, bool NoteOff = false);

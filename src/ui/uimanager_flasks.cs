@@ -27,15 +27,27 @@ namespace Underworld
         {
             get
             {
-                return (int)((float)((float)playerdat.play_hp / (float)playerdat.max_hp) * 12f);
+                return FlaskLevel(playerdat.play_hp, playerdat.max_hp);
             }
         }
         public static int TargetManaFlaskLevel
         {
             get
             {
-                return (int)((float)((float)playerdat.play_mana / (float)playerdat.max_mana) * 12f);
+                return FlaskLevel(playerdat.play_mana, playerdat.max_mana);
             }
+        }
+
+        /// <summary>
+        /// set_screen_frame: the value in twelfths of its maximum, at most 12, and 0 when there is no maximum.
+        /// </summary>
+        public static int FlaskLevel(int value, int max)
+        {
+            if (max == 0)
+            {
+                return 0;
+            }
+            return System.Math.Min(value * 12 / max, 12);
         }
 
 
@@ -267,7 +279,7 @@ namespace Underworld
                         4 critically
                         */
 
-                    var poisonlevel = (playerdat.play_poison - 1) % 5;
+                    var poisonlevel = (playerdat.play_poison - 1) / 3;//1-3 barely, 4-6 mildly, ...
                     if (uimanager.InConversation)
                     {
                         AddToMessageScroll(

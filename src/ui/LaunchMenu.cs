@@ -143,6 +143,13 @@ public partial class LaunchMenu : Control
 	[Export]
 	public Control ControlsBox;
 
+	/// <summary>The button that drags objects, in both control schemes: the right (0) or the left (1).</summary>
+	[Export]
+	public Label DragLabel;
+
+	[Export]
+	public OptionButton DragOptionSelector;
+
 	/// <summary>Mouse look speed 1 to 10 (item index + 1), and up and down normal (0) or inverted (1).</summary>
 	[Export]
 	public OptionButton Sensitivity, InvertMouse;
@@ -356,6 +363,11 @@ public partial class LaunchMenu : Control
 		ResolutionLabel.Text = T("Window", "視窗大小");
 		ControlsLabel.Text = T("Controls", "操作");
 		PopulateControlsOptions();
+		DragLabel.Text = T("Drag objects", "拖曳物品");
+		DragOptionSelector.Clear();
+		DragOptionSelector.AddItem(T("Right button", "右鍵拖曳"));
+		DragOptionSelector.AddItem(T("Left button", "左鍵拖曳"));
+		DragOptionSelector.Selected = _uwSettings.dragwithleft ? 1 : 0;
 		Sensitivity.Clear();
 		for (int speed = 1; speed <= 10; speed++)
 		{
@@ -978,6 +990,12 @@ public partial class LaunchMenu : Control
 	public void OnSensitivityChanged(int index)
 	{
 		_uwSettings.mousesensitivity = index + 1;
+		_uwSettings.Save();
+	}
+
+	public void OnDragOptionSelected(int index)
+	{
+		_uwSettings.dragwithleft = index == 1;
 		_uwSettings.Save();
 	}
 

@@ -40,7 +40,7 @@ namespace Underworld
                     {//Items of no monetary value will not be offered by the npc
                         skip = true;
                     }
-                if ((Rng.r.Next(0,7)<5) && (LargelootList))
+                if (((Rng.r.Next(0x8000) & 7) < 5) && (LargelootList))//five in eight once every slot is full
                 {//RNG seems to happen when NPC has more inventory than slots. Randomly replace earlier items 
                     skip=true;
                 }

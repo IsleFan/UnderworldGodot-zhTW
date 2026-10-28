@@ -27,7 +27,18 @@ public static class StereoPanBake
 
     // Gain denominator: pan_graph[max] * vol[max] = 127 * 127.
     // external/AIL2/DMASOUND.ASM:993-1006.
-    private const int GainDenominator = 127 * 127; // 16129
+    public const int GainDenominator = 127 * 127; // 16129
+
+    /// <summary>
+    /// The left and right gains of a volume and pan, out of <see cref="GainDenominator"/> (16129).
+    /// </summary>
+    public static void Gains(byte vol, byte pan, out int gainL, out int gainR)
+    {
+        pan &= 0x7F;
+        vol &= 0x7F;
+        gainL = _panGraph[pan] * vol;   // Miles native: P=0 → right
+        gainR = _panGraph[(0x7F) - pan] * vol;
+    }
 
     /// <summary>
     /// Produce stereo-interleaved int16 (L, R, L, R, ...) from a mono int16
@@ -35,11 +46,7 @@ public static class StereoPanBake
     /// </summary>
     public static short[] Apply(short[] mono, byte vol, byte pan)
     {
-        pan &= 0x7F;
-        vol &= 0x7F;
-
-        int gainL = _panGraph[pan]           * vol;   // Miles native: P=0 → right
-        int gainR = _panGraph[(0x7F) - pan]  * vol;
+        Gains(vol, pan, out int gainL, out int gainR);
 
         var stereo = new short[mono.Length * 2];
         for (int i = 0, j = 0; i < mono.Length; i++)

@@ -9,7 +9,8 @@ namespace Underworld
             var Y = GetConvoStackValueAtPtr(stack + stackptr-1);
             var X = GetConvoStackValueAtPtr(stack + stackptr-2);
             Debug.Print($"Teleport Talker to {X},{Y}");          
-            npc.moveNPCToTile(critter: talker, destTileX: X, destTileY: Y);
+            TeleportTalkerX = X; TeleportTalkerY = Y;//moved when the conversation ends
+            result_register = 1;
         }
     }//end class
 }//end namespace

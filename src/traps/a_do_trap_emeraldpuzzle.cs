@@ -58,13 +58,21 @@ namespace Underworld
                         return;//not a valid tile. Should not happen.
                     }
                 }
-                //spawn the Vas stone
-                ObjectCreator.spawnObjectInTile(
+                //spawn the Vas stone (emerald_trap: fine position 3, 3 at height 0x40, settled by obj_deal so it drops)
+                var vas = ObjectCreator.spawnObjectInTile(
                     itemid:0xFD, 
                     tileX: triggerX, tileY: triggerY + 1, 
-                    xpos:6,
-                    ypos:6,
+                    xpos:3,
+                    ypos:3,
                     zpos: 0x40);
+                if (vas != null)
+                {
+                    var settled = motion.PlacedObjectCollision_seg030_2BB7_10BC(vas, triggerX, triggerY + 1, 1);
+                    if (settled != null)
+                    {
+                        objectInstance.RedrawFull(settled);
+                    }
+                }
             }
         }
     }//end class

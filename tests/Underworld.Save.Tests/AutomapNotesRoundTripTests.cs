@@ -212,6 +212,37 @@ public class AutomapNotesRoundTripTests : System.IDisposable
         }
     }
 
+    /// <summary>
+    /// put_arc rewrites a block in place when it fits its allocation (bit 2 set and length within it, or the two equal),
+    /// else rebuilds the file skipping the old allocation. Packed blocks must therefore say their allocation is their
+    /// length, and keep the source's compress and reserve bits with the compressed bit clear, as written uncompressed.
+    /// </summary>
+    [Fact]
+    public void LevArkWriter_Uw2_EveryBlockKeepsItsFlagsAndReservesItsOwnLength()
+    {
+        Underworld.UWClass.BasePath = Path.Combine(TestData.UW2GogRoot, "UW2");
+        Underworld.UWClass._RES = Underworld.UWClass.GAME_UW2;
+        Assert.True(Underworld.LevArkLoader.LoadLevArkFileData(folder: "SAVE0"));
+        byte[] source = Underworld.LevArkLoader.lev_ark_file_data;
+        try
+        {
+            byte[] written = Underworld.LevArkWriter.Serialize();
+            int n = (int)Underworld.Loader.getAt(written, 0, 32);
+            for (int block = 0; block < n; block++)
+            {
+                var (off, flag, len, res) = Uw2BlockHeader(written, block);
+                var (_, srcFlag, _, _) = Uw2BlockHeader(source, block);
+                Assert.Equal(srcFlag & 5, flag);
+                Assert.Equal(len, res);
+                Assert.True((flag & 2) == 0, $"block {block} is written uncompressed");
+            }
+        }
+        finally
+        {
+            Underworld.LevArkLoader.lev_ark_file_data = source;
+        }
+    }
+
     [Fact]
     public void LevArkWriter_Uw2_DeletingEveryNote_ClearsTheBlockAndItsHeaderFields()
     {
@@ -234,7 +265,7 @@ public class AutomapNotesRoundTripTests : System.IDisposable
 
             var (off, flag, len, res) = Uw2BlockHeader(cleared, 240);
             Assert.Equal(0, off);
-            Assert.Equal(0, flag);
+            Assert.Equal(5, flag);  // put_arc keeps bits 0 and 2 (compress, reserve) of an absent block, as DATA has them
             Assert.Equal(0, len);
             Assert.Equal(0, res);   // an absent block carries no allocation
 

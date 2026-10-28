@@ -1,5 +1,5 @@
-using System.Diagnostics;
-using System.Text.RegularExpressions;
+using System.Collections;
+using Peaky.Coroutines;
 
 namespace Underworld
 {
@@ -10,6 +10,38 @@ namespace Underworld
     {
         public static int PlayerNumericAnswer;
         public static bool WaitingForInput;
+
+        /// <summary>
+        /// menus_active: a menu of answers is on the scroll. Another message printed there clears it (scroll_print),
+        /// and the menu waits 500 ticks (or a key or click) and shows the answers again (converse_event_loop).
+        /// </summary>
+        public static bool MenusActive;
+
+        /// <summary>
+        /// Waits for the player's answer to the menu on the scroll, showing the answers again whenever another
+        /// message has cleared them.
+        /// </summary>
+        static IEnumerator WaitForMenuAnswer(string menutext)
+        {
+            MenusActive = true;
+            WaitingForInput = true;
+            while (WaitingForInput)
+            {
+                if (!MenusActive)
+                {
+                    yield return MessageDisplay.ScrollWait(0x1F4);
+                    if (WaitingForInput)
+                    {
+                        uimanager.instance.scroll.Clear();
+                        uimanager.AddToMessageScroll(menutext);
+                        MenusActive = true;
+                    }
+                    continue;
+                }
+                yield return new WaitOneFrame();
+            }
+            MenusActive = false;
+        }
 
         /// <summary>
         /// Gets the specified string for the currently referenced conversation.
@@ -55,169 +87,86 @@ namespace Underworld
         }
 
         /// <summary>
-        /// For substituting calculated values into strings
+        /// For substituting calculated values into strings (convert_string): each @-variable is @, the kind
+        /// (G a global, S a stack slot, P a parameter, C a constant), then for all but C the type (I an integer,
+        /// anything else a string number), then the number, optionally followed by another variable giving a
+        /// 1-based index. "@@" is a literal @. A substituted string is substituted in turn.
+        /// G reads mem[number + index - 1], S the local stack[bp + number + index - 1], P the address held in
+        /// stack[bp + number] plus index - 1, and C is the number itself.
         /// </summary>
-        /// <param name="input"></param>
-        /// <param name="doNestedSubstitute">Allows doing a recursive subsitution if the substituted value contains @. Should be only allowed once.</param>
-        /// <returns></returns>
-        public static string TextSubstitute(string input, bool doNestedSubstitute = true)
+        public static string TextSubstitute(string input, int depth = 0)
         {
-            //X: source of variable to substitute, one of these: GSP
-            //G: game global variable
-            //S: stack variable
-            //P: pointer variable
-            //Y: type of variable, one of these: SI
-            //S: value is a string number into current string block
-            //I: value is an integer value
-            //<num>: decimal value
-            //<extension>: format: C<number>: use array index <number-1> offset from the initial source value.
-
-            //Remove \\1 and \\0 which wraps the reprinting of player typed input in conversations.
+            //Remove \1 and \0 which wraps the reprinting of player typed input in conversations.
             input = input.Replace("\\1", "").Replace("\\0", "");
 
-            if (!input.Contains("@"))
+            if (!input.Contains('@'))
             {
                 return input;
             }
-            string RegExForFindingReplacements = "([@][GSP][SI])(-*[0-9]*)([S][I])?([0-9]*)?([C][0-9]*)?";
-
-            Debug.Print($"Doing string replacement on line {input}");
-            MatchCollection matches = Regex.Matches(input, RegExForFindingReplacements);
-
-            for (int sm = 0; sm < matches.Count; sm++)
+            var output = new System.Text.StringBuilder();
+            var pos = 0;
+            while (pos < input.Length)
             {
-                string ReplacementString = matches[sm].Value;
-                if (matches[sm].Success)
+                if (input[pos] == '@' && pos + 1 < input.Length)
                 {
-                    string ReplacementType = "";
-                    int ReplacementValue = 0;
-                    int OffsetValue = 0;
-                    string FoundString = "";
-                    int ArrayOffset = 0;
-                    bool SIOffset = false;
-                    for (int sg = 0; sg < matches[sm].Groups.Count; sg++)
+                    pos++;
+                    if (input[pos] != '@')
                     {
-                        if (matches[sm].Groups[sg].Success)
+                        var value = ReadAtVariable(input, ref pos, false, out char type);
+                        if (type == 'I')
                         {
-                            switch (sg)
-                            {
-                                case 1: //Replacement Type
-                                    ReplacementType = matches[sm].Groups[sg].Value; break;
-                                case 2: //Replacement value
-                                    {
-                                        if (int.TryParse(matches[sm].Groups[sg].Value, out int val))
-                                        {
-                                            ReplacementValue = val;
-                                        }
-                                        else
-                                        {
-                                            ReplacementValue = 0;
-                                        }
-                                        break;
-                                    }
-                                case 3: //Offset Type (should only be SI?)
-                                    string OffsetType = matches[sm].Groups[sg].Value;
-                                    SIOffset = true;
-                                    //Debug.Print($"Unimplemented SI Offset {OffsetType}");
-                                    break;
-                                case 4: //Offset value
-                                    {
-                                        if (int.TryParse(matches[sm].Groups[sg].Value, out int val))
-                                        {
-                                            if (SIOffset)
-                                            {
-                                                OffsetValue = at(stack + basep + val) - 1;
-                                            }
-                                            else
-                                            {
-                                                OffsetValue = val;
-                                            }
-
-                                        }
-                                        else
-                                        {
-                                            OffsetValue = 0;
-                                        }
-                                        break;
-                                    }
-                                case 5: //c2 array offset
-                                    {
-                                        string CModifier = matches[sm].Groups[sg].Value;
-                                        CModifier = CModifier.Replace("C", "");
-                                        if (int.TryParse(CModifier, out int val))
-                                        {
-                                            ArrayOffset = val - 1; // array is 1-based
-                                        }
-                                        break;
-                                    }
-                            }
+                            output.Append(value);
                         }
-                    }
-
-                    //Now replace
-                    switch (ReplacementType)
-                    {
-                        case "@GS": //Global string.
-                            {
-                                //FoundString = GameStrings.GetString(0x125, at(ReplacementValue)); //getString(at(ReplacementValue));
-                                FoundString = getDisplayString(at(ReplacementValue + OffsetValue));
-                                break;
-                            }
-                        case "@GI": //Global integer
-                            {
-                                //Debug.Print("@GI String replacement (" + ReplacementValue + ")");//Depending on the presense of the 'C' extension a offset may be applied.
-                                FoundString = at(ReplacementValue + ArrayOffset).ToString();
-                                break;
-                            }
-                        case "@SS": //Stack string
-                            {
-                                if (OffsetValue != 0)
-                                {
-                                    int actualptr = at(stack + basep + OffsetValue);
-                                    FoundString = getDisplayString(at(basep + actualptr));
-                                }
-                                else
-                                {
-                                    FoundString = getDisplayString(at(stack + basep + ReplacementValue));
-                                }
-                                break;
-                            }
-                        case "@SI": //Stack integer
-                            {
-                                FoundString = at(stack + basep + ReplacementValue + ArrayOffset).ToString();
-                                break;
-                            }
-
-                        case "@PS": //Pointer string
-                            {
-                                FoundString = getDisplayString(at(at(stack + basep + ReplacementValue)));
-                                break;
-                            }
-                        case "@PI": //Pointer integer
-                            {
-                                if (ReplacementValue < 0)
-                                {
-                                    FoundString = at(at(stack + basep + ReplacementValue)).ToString();//was basp+replacement-1. If I have to change again this may need deeper investigation of ConvoVM memory management
-                                }
-                                else
-                                {
-                                    FoundString = at(at(stack + basep + ReplacementValue)).ToString();
-                                }
-                                break;
-                            }
-                    }
-                    if (FoundString.Contains("@") && doNestedSubstitute)
-                    {
-                        //try one time to see if the @ in the found string can be replaced.
-                        FoundString = TextSubstitute(input: FoundString, doNestedSubstitute: false);
-                    }
-                    if (FoundString != "")
-                    {
-                        input = input.Replace(ReplacementString, FoundString);
+                        else if (depth < 8)
+                        {//(the original has no depth limit)
+                            output.Append(TextSubstitute(getDisplayString(value), depth + 1));
+                        }
+                        continue;
                     }
                 }
+                output.Append(input[pos++]);
             }
-            return input;
+            return output.ToString();
+        }
+
+        /// <summary>
+        /// Reads one @-variable after its @ (kind, type, number and any index variable) and returns its value.
+        /// </summary>
+        static short ReadAtVariable(string input, ref int pos, bool isIndex, out char type)
+        {
+            var kind = input[pos++];
+            type = 'I';
+            if (kind != 'C' && pos < input.Length)
+            {
+                type = input[pos++];
+            }
+            if (isIndex && type != 'I')
+            {//AtIndex: only an integer index counts; its number is left in the text
+                return 0;
+            }
+            //atoi: an optional sign then digits; then every digit and '-' is skipped
+            var numstart = pos;
+            if (pos < input.Length && (input[pos] == '-' || input[pos] == '+')) pos++;
+            while (pos < input.Length && char.IsAsciiDigit(input[pos])) pos++;
+            int.TryParse(input.Substring(numstart, pos - numstart), out int number);
+            while (pos < input.Length && (char.IsAsciiDigit(input[pos]) || input[pos] == '-')) pos++;
+
+            var extra = 0;
+            if (pos < input.Length && (input[pos] == 'G' || input[pos] == 'S' || input[pos] == 'P' || input[pos] == 'C'))
+            {//an index variable (AtIndex)
+                extra = ReadAtVariable(input, ref pos, true, out _) - 1;
+            }
+            switch (kind)
+            {
+                case 'G':
+                    return at(number + extra);
+                case 'P':
+                    return at(at(stack + basep + number) + extra);
+                case 'S':
+                    return at(stack + basep + number + extra);
+                default:
+                    return (short)number;
+            }
         }
     }//end class
 }//end namespace

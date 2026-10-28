@@ -109,6 +109,7 @@ namespace Underworld
 				instance.scroll.Lines[i] = new();
 			}
 			instance.scroll.OutputControl = new RichTextLabel[] { MessageScroll };
+			instance.scroll.Clear();//the scene's placeholder text is not a message: the scroll starts empty
 
 			instance.convo = new();
 			if (UWClass._RES == UWClass.GAME_UW2)
@@ -167,6 +168,11 @@ namespace Underworld
 			{//don't allow any overwriting when a message is already being displayed temporarily.
 				return;
 			}
+			if ((CurrentGameMode != GameModes.GAME) && (CurrentGameMode != GameModes.OPTIONS) && (CurrentGameMode != GameModes.CONVERSATION))
+			{//scroll_print prints only in screen modes 1 and 4, the game (its options panel too) and a conversation:
+			 //not on the map, in a cutscene, the menus or character creation
+				return;
+			}
 
 			if (NextOutputPrependedString != "")
 			{//forces messages to include text like "the sign says"
@@ -203,6 +209,11 @@ namespace Underworld
 				case MessageDisplay.MessageDisplayMode.TypedInput:
 				default:
 					{
+						if (ConversationVM.MenusActive && InConversation && (mode == MessageDisplay.MessageDisplayMode.NormalMode))
+						{//scroll_print: a message over a conversation's answers clears them first; babl_menu shows them again
+							ConversationVM.MenusActive = false;
+							instance.scroll.Clear();
+						}
 						_ = Peaky.Coroutines.Coroutine.Run(
 								instance.scroll.AddText(newText: stringToAdd, option: option, colour: colour),
 								main.instance

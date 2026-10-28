@@ -38,6 +38,13 @@ public sealed class TvfxVoiceAllocator
         }
     }
 
+    /// <summary>Note off for the voices of effect slot <paramref name="slot"/>, or all of them for -1.</summary>
+    public void NoteOff(int slot)
+    {
+        foreach (var v in _voices)
+            if (slot == -1 || v.Slot == slot) v.NoteOff();
+    }
+
     /// <summary>Total active (non-Idle) voices. Used by tests and diagnostics.</summary>
     public int ActiveCount
     {

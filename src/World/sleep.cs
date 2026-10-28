@@ -22,8 +22,8 @@ namespace Underworld
 
             if (sleepmethod >= 0)
             {
-                if (((playerdat.TileState & 0x1B) == 0) && (motion.playerMotionParams.gravity_10_Z == 0))
-                {
+                if (((playerdat.TileState & 0x1B) == 0) && (motion.playerMotionParams.gravity_10_Z == 0) && ((_RES == GAME_UW2) || (playerdat.dungeon_level != 9)))
+                {//(UW1 cannot sleep in the void, level 9)
                     if ((_RES == GAME_UW2) && (playerdat.CurrentWorld == 8) && (playerdat.DreamingInVoid))
                     {//player has tried to sleep while sleeping in a void vision. end the void vision.
                         AwakenFromTheVoid();
@@ -88,8 +88,8 @@ namespace Underworld
             //find and close doors while sleeping
             scd.FindAndCloseDoors(arg0_isPlayer: false);
 
-            //TODO Cull objects.
-            Debug.Print("TODO cull objects while sleeping");
+            //Obj_GarbageCollect(1, 0x14): up to 20 objects far from the player go
+            ObjectRemover_OLD.GarbageCollect(range: 1, count: 0x14);
 
             var si_hourstosleep = 2 + Rng.r.Next(5);
 
@@ -100,21 +100,18 @@ namespace Underworld
 
             if (_RES == GAME_UW2)
             {
-                if (playerdat.CurrentWorld == 2) //killorn
+                if ((playerdat.GetQuest(50) == 1) && (playerdat.GetQuest(54) == 0))//keep is crashing and has not yet crashed (wherever the player sleeps)
                 {
-                    if ((playerdat.GetQuest(50) == 1) && (playerdat.GetQuest(54) != 0))//keep is crashing and has not yet crashed.
-                    {
-                        killorn.KilornIsCrashing(false);
-                        damage.DamagePlayer(
-                            basedamage: 0xFF,
-                            damagetype: 0,
-                            damagesource: 0);//kill the player for being dumb enough to fall asleep in a crashing keep.
-                    }
+                    killorn.KilornIsCrashing(false);
+                    damage.DamagePlayer(
+                        basedamage: 0xFF,
+                        damagetype: 0,
+                        damagesource: 0);//kill the player for being dumb enough to fall asleep in a crashing keep.
                 }
             }
 
 
-            playerdat.UpdateLightStability(si_hourstosleep * 0x180);
+            playerdat.UpdateLightStability(si_hourstosleep * 180, 0);//180 steps an hour
 
             if (playerdat.play_poison > 0)
             {
@@ -150,9 +147,8 @@ namespace Underworld
                 }
                 else
                 {
-                    Debug.Print("Add calm function here");
-                    uwObject.ResetMobileObjects();
-                    a_create_object_trap.FindAndRunCreateObjectTraps();
+                    uwObject.ResetMobileObjects();//update_all_critters_whilst_player_snoozes
+                    a_create_object_trap.FindAndRunCreateObjectTraps(isPlayer: false);
 
                     si_hourstosleep = 7 + Rng.r.Next(4) - si_hourstosleep;
                     if (playerdat.play_hp < 0xA)
@@ -160,10 +156,10 @@ namespace Underworld
                         si_hourstosleep = si_hourstosleep + 1 + Rng.r.Next(2);
                     }
                     playerdat.AdvanceTime(si_hourstosleep * 0xE10);
-                    playerdat.UpdateLightStability(si_hourstosleep * 0xB4);
+                    playerdat.UpdateLightStability(si_hourstosleep * 180, 0);
 
                     int foodregenfactor_var2;
-                    if ((playerdat.play_hunger < 0x40) || (sleepmethod <= 0))
+                    if ((playerdat.play_hunger <= 0x40) || (sleepmethod <= 0))//comfort: fed (above 0x40) in a bedroll or bed
                     {
                         foodregenfactor_var2 = 0;
                     }
@@ -188,17 +184,17 @@ namespace Underworld
                     }
                     else
                     {
-                        var regen = fatigueregenfactor_var4 * foodregenfactor_var2;
+                        var regen = fatigueregenfactor_var4 + fatigueregenfactor_var4 * foodregenfactor_var2 - 1;//player_sleep
                         playerdat.HPRegenerationChange(regen);
                         playerdat.ManaRegenChange(-6);
                         playerdat.ManaRegenChange(((fatigueregenfactor_var4 + 1) * foodregenfactor_var2) + fatigueregenfactor_var4 - 1);
                     }
 
-                    playerdat.ChangeHunger(-2 - Rng.r.Next(0x1F));
-                    UpdateIntoxication();
+                    playerdat.ChangeHunger(-24 - (Rng.r.Next(0x8000) & 0x1F));
+                    UpdateIntoxication(0x20);//a full night sobers by 32
 
-                    if (playerdat.play_hp == 0 && sleepmethod >= 0)
-                    {
+                    if (playerdat.play_hp == 0 && sleepmethod >= 0 && _RES == GAME_UW2)
+                    {//UW2 keeps a dying sleeper alive through the dream
                         playerdat.play_hp = 1;//keep player alive
                         PlayerWillDie = true;
                     }
@@ -229,24 +225,25 @@ namespace Underworld
 
         private static void SleepInterupted()
         {
-            if (playerdat.play_fatigue <= 0x18)
+            var rest = _RES == GAME_UW2 ? 0x18 : 0x20;//what an interrupted night still takes off the fatigue
+            if (playerdat.play_fatigue <= rest)
             {
                 playerdat.play_fatigue = 0;
             }
             else
             {
-                playerdat.play_fatigue -= 0x18;
+                playerdat.play_fatigue -= (byte)rest;
             }
             uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, 0x15));//your sleep is interrupted
-            playerdat.ChangeHunger(-12 - Rng.r.Next(16));
-            UpdateIntoxication();
+            playerdat.ChangeHunger(-12 - (Rng.r.Next(0x8000) & 0xF));
+            UpdateIntoxication(0x10);
         }
 
-        private static void UpdateIntoxication()
+        private static void UpdateIntoxication(int sobering)
         {
-            if (playerdat.intoxication >= 0x10)
+            if (playerdat.intoxication >= sobering)
             {
-                playerdat.intoxication -= 0x10;
+                playerdat.intoxication -= sobering;
             }
             else
             {
@@ -264,6 +261,7 @@ namespace Underworld
 
             playerdat.DreamingInVoid = false;
             playerdat.DreamPlantCounter = 0;
+            playerdat.PuntMouseObject();//punt_void: what is held stays in the dream
 
             Teleportation.Teleport(
                 character: 0, tileX:
@@ -369,7 +367,7 @@ namespace Underworld
             CallBacks.RunCodeOnTargetsAroundObject(
                 methodToCall: NpcHuntsSleepingPlayer,
                 CentreObject: 1,
-                rngProbablity: 0,
+                rngProbablity: 1,//only one monster comes
                 targetType: 0,
                 distanceFromObject: 0,
                 tileRadius: 8);
@@ -394,10 +392,11 @@ namespace Underworld
                     if (Rng.r.Next(2) == 1)
                     {
                         //50:50 chance
+                        npc.SetCritterVarsForPathing(obj);
                         var distance = ((obj.tileX - playerdat.playerObject.tileX) * (obj.tileX - playerdat.playerObject.tileX)) + ((obj.tileY - playerdat.playerObject.tileY) * (obj.tileY - playerdat.playerObject.tileY));
                         if ((critterObjectDat.TravelRange(obj.item_id) * critterObjectDat.TravelRange(obj.item_id)) * 3 >= distance)
                         {
-                            if (Pathfind.PathFindBetweenTiles(critter: obj, currTileX_arg0: obj.tileX, currTileY_arg2: obj.tileY, CurrFloorHeight_arg4: obj.zpos, TargetTileX_arg6: playerdat.playerObject.tileX, TargetTileY_arg8: playerdat.playerObject.tileY, TargetFloorHeight_argA: playerdat.playerObject.zpos, LikelyRangeArgC: 0))
+                            if (Pathfind.PathFindBetweenTiles(critter: obj, currTileX_arg0: obj.tileX, currTileY_arg2: obj.tileY, CurrFloorHeight_arg4: obj.zpos >> 3, TargetTileX_arg6: playerdat.playerObject.tileX, TargetTileY_arg8: playerdat.playerObject.tileY, TargetFloorHeight_argA: playerdat.playerObject.zpos >> 3, LikelyRangeArgC: 0))
                             {
                                 if (Pathfind.MaybePathIndexOrLength_dseg_67d6_225A >= 2)
                                 {
@@ -428,12 +427,13 @@ namespace Underworld
                                         varb++;
                                     }
                                     //ovr107_9E0
-                                    //get the path of the 2nd last tile
-                                    var lastpath = FinalPath56.finalpath[Pathfind.MaybePathIndexOrLength_dseg_67d6_225A - 1];
+                                    //wander_that_monster: two squares short of the player (the path ends at index length)
+                                    var lastpath = FinalPath56.finalpath[Pathfind.MaybePathIndexOrLength_dseg_67d6_225A - 2];
                                     //var lasttile = UWTileMap.current_tilemap.Tiles[lastpath.X0, lastpath.Y1];
 
-                                    if (npc.moveNPCToTile(obj, lastpath.X0, lastpath.Y1))
-                                    {
+                                    if (npc.moveNPCToTile(obj, lastpath.X0, lastpath.Y1, onFloor: true))
+                                    {//wander_that_monster puts even a flier on the floor, and the monster knows where the player is
+                                        obj.UnkBit_0x19_0_likelyincombat = 1;
                                         npc.SetNPCTargetDestination(obj, playerdat.playerObject.tileX, playerdat.playerObject.tileY, playerdat.playerObject.zpos);
                                         NearbyHostileFindsAvatar = true;
                                         return true;
@@ -502,8 +502,8 @@ namespace Underworld
                 FoundStageVar2 = 0;
             }
 
-            if (FoundStageVar2 == 0)
-            {
+            if (FoundStageVar2 < 0)
+            {//no story dream due: a 1 in 4 + 4 * sleepfactor chance of one of dreams 4 to 9 (dream)
                 if (Rng.r.Next(4 + (sleepfactor << 2)) == 0)
                 {
                     FoundStageVar2 = 4 + Rng.r.Next(6);
@@ -557,17 +557,17 @@ namespace Underworld
                 {
                     if (xclock >= DreamXClocks[counter_var4])
                     {
-                        if ((si_dreamflags & (1 << counter_var4)) == (1 << counter_var4))
+                        if ((si_dreamflags & (1 << counter_var4)) != (1 << counter_var4))
                         {
-                            //found a dreamstage that has not yet happened
+                            //found a dreamstage that has not yet happened (its flag is still clear)
                             FoundStageVar2 = counter_var4;
                         }
                     }
                 }
                 if (FoundStageVar2 < 0)
                 {
-                    if (playerdat.DreamPlantCounter == 0)
-                    {//should always be the case.
+                    if ((Rng.r.Next(4 + (sleepfactor << 2)) == 0) && (playerdat.DreamPlantCounter == 0))
+                    {//a 1 in 4 + 4 * sleepfactor chance of a random dream (dream)
                         FoundStageVar2 = 4 + Rng.r.Next(3); //try and pic a random dream.
                         if (((1 << FoundStageVar2) & si_dreamflags) != 0)
                         {

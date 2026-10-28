@@ -126,6 +126,8 @@ public class uwsettings
     // Mouse look speed, 1 to 10.
     public int mousesensitivity { get; set; } = 5;
     public bool invertmouse { get; set; }
+    // The button that drags objects (in the inventory, and out of the 3D view after a look): the right one, or the left.
+    public bool dragwithleft { get; set; }
     // Modern controls' key for each Controls.Action that is not its default, as Godot names keys ("W", "Space").
     public System.Collections.Generic.Dictionary<string, string> keys { get; set; } = new();
 

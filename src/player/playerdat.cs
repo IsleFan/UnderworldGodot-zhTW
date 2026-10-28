@@ -387,6 +387,18 @@ namespace Underworld
 
 
 
+        /// <summary>
+        /// update_converse_data writes the hit points and mana a conversation exports as they are, without the maximum
+        /// the setters keep to.
+        /// </summary>
+        public static void SetHpAndManaFromConversation(int hp, int mana)
+        {
+            SetAt(0x36, (byte)hp);
+            playerObject.npc_hp = (byte)hp;
+            SetAt(0x38, (byte)mana);
+            uimanager.RefreshStatsDisplay();
+        }
+
         public static int play_mana
         {
             get
@@ -639,95 +651,62 @@ namespace Underworld
         /// </summary>
         /// <param name="newEXP"></param>
         public static void ChangeExperience(int newEXP)
-        {
-            //Debug.Print($"New EXP Gain of {newEXP}");
-            //value * 500 is the exp needed for next level up
-            int skillpointfactor;
-            if (_RES == GAME_UW2)
-            {
-                skillpointfactor = 1500;
-            }
-            else
-            {
-                skillpointfactor = 3000;
-            }
+        {//player_get_exp
             int[] LevelUpAt = new int[] { 0, 1, 2, 3, 4, 6, 8, 0xC, 0x10, 0x18, 0x20, 0x30, 0x40, 0x60, 0x80, 0xC0 };
-            if (newEXP > 0)
-            {
+            if ((_RES == GAME_UW2) && (newEXP > 0))
+            {//UW2 halves every gain, rounding at random
                 newEXP = (newEXP + Rng.r.Next(0, 2)) / 2;
             }
-
-            if (newEXP >= 0)
+            if (newEXP < 0)
+            {//a loss is taken off, not below 0, and nothing else happens
+                Exp = Math.Max(0, Exp + newEXP);
+                return;
+            }
+            if ((_RES != GAME_UW2) && (Exp > 0x17700))
+            {//UW1 gains nothing more past 96000
+                return;
+            }
+            //less once the player has outgrown the area: the world in UW2, the dungeon level in UW1
+            var area = _RES == GAME_UW2 ? (dungeon_level - 1) / 8 : dungeon_level;
+            if ((area << 1) + 2 < play_level)
             {
-                if (_RES == GAME_UW2)
-                {
-                    var world = (dungeon_level - 1) / 8;
-                    world = world << 1;
-                    world += 2;
-                    if (world < play_level)
-                    {//reduce xp gain if on a lower "world level" then the player level
-                        newEXP = 1 + (newEXP / 2);
-                    }
+                newEXP = 1 + (newEXP / 2);
+            }
+            var skillpointfactor = _RES == GAME_UW2 ? 1500 : 3000;
+            var newTotalSkillPoints = (Exp + newEXP) / skillpointfactor; //how many skill points the player will have gained at their new exp level
+            if (SkillPointsTotal < newTotalSkillPoints)
+            {
+                SkillPoints = SkillPoints + (newTotalSkillPoints - SkillPointsTotal);// calculate new level of skill points available to spend.
+                SkillPointsTotal = newTotalSkillPoints; //store total earned.
+            }
+            if (_RES == GAME_UW2)
+            {
+                if (Exp + newEXP > 0x7FFF0)
+                {//a gain past the cap is refused
+                    return;
                 }
-                else
-                {
-                    if ((dungeon_level << 1) + 2 < play_level)
-                    {
-                        //lower exp gain if on a lower dungeon level than the player level.
-                        newEXP = 1 + (newEXP / 2);
-                    }
-                }
-                var newTotalSkillPoints = (Exp + newEXP) / skillpointfactor; //how many skill points the player will have gained at their new exp level
-                if (SkillPointsTotal < newTotalSkillPoints)
-                {
-                    SkillPoints = SkillPoints + (newTotalSkillPoints - SkillPointsTotal);// calculate new level of skill points available to spend.
-                    SkillPointsTotal = newTotalSkillPoints; //store total earned.
-                }
-                //there is possibly a cap of 524272 
-                Exp = Math.Min(Exp + newEXP, 0x7FFF0);//experience cap
-                if (Exp <= 0x17700) //level up cap
-                {
-                    var si_newlevelincrease = 0;
-                    var newlevelpoints = Exp / 500;
-                    while (true)
-                    {
-                        if (
-                            (LevelUpAt[play_level + si_newlevelincrease] <= newlevelpoints)
-                            &&
-                            (play_level + si_newlevelincrease < 0x10)
-                        )
-                        {
-                            si_newlevelincrease++;
-                        }
-                        else
-                        {
-                            if (si_newlevelincrease != 0)
-                            {
-                                LevelUp(si_newlevelincrease);
-                            }
-                            break;
-                        }
-                    }
-
-                    UpdateHPManaMax(false);
-                    uimanager.RefreshStatsDisplay();
-                    //Check if player can level up
-                    // if (play_level < 0x10)
-                    // {
-                    //     var PointsToCheck = Exp / 500;
-                    //     var pointsNeeded = LevelUpAt[play_level];
-                    //     if (pointsNeeded <= PointsToCheck)
-                    //     {//player can level up
-                    //         LevelUp(play_level + 1);
-                    //     }
-                    // }
+                Exp += newEXP;
+                if (Exp > 0x17700)
+                {//no more levels
+                    return;
                 }
             }
             else
             {
-                //negative exp
-                Exp = Math.Max(0, Exp - newEXP);
+                Exp += newEXP;
             }
+            var si_newlevelincrease = 0;
+            var newlevelpoints = Exp / 500;
+            while ((LevelUpAt[play_level + si_newlevelincrease] <= newlevelpoints) && (play_level + si_newlevelincrease < 0x10))
+            {
+                si_newlevelincrease++;
+            }
+            if (si_newlevelincrease != 0)
+            {
+                LevelUp(si_newlevelincrease);
+            }
+            UpdateHPManaMax(false);
+            uimanager.RefreshStatsDisplay();
         }
 
         /// <summary>
@@ -743,8 +722,8 @@ namespace Underworld
                 if (!uimanager.InConversation)
                 {
                     uimanager.AddToMessageScroll(ZhText.Enabled
-                        ? ZhText.Compose(GameStrings.GetDisplayString(1, GameStrings.str_you_have_attained_experience_level_), $" {increaseLevelBy}。")
-                        : $"{GameStrings.GetString(1, GameStrings.str_you_have_attained_experience_level_)}{increaseLevelBy}");
+                        ? ZhText.Compose(GameStrings.GetDisplayString(1, GameStrings.str_you_have_attained_experience_level_), $" {play_level}。")
+                        : $"{GameStrings.GetString(1, GameStrings.str_you_have_attained_experience_level_)}{play_level}");//the new level (advance)
                 }
                 RecalculateHPManaMaxWeight(false);
                 uimanager.RefreshStatsDisplay();
@@ -766,10 +745,10 @@ namespace Underworld
                 }
                 XMIMusic.ChangeThemeMusic(XMIMusic.Fanfare); //fanfare
                 var exp_reward = critterObjectDat.experience(critter.item_id);
-                exp_reward = exp_reward + Rng.DiceRoll(2, exp_reward);
+                exp_reward = exp_reward * 4 + Rng.DiceRoll(2, exp_reward);//player_killed_a
                 if (critter.IsPowerful == 1)
-                {
-                    exp_reward = exp_reward + (((0x18 + Rng.r.Next(0x18)) * exp_reward) / 0x10);
+                {//1.5 to nearly 3 times
+                    exp_reward = (int)((long)exp_reward * (0x18 + Rng.r.Next(0x18)) / 0x10);
                 }
                 ChangeExperience(exp_reward);
             }
@@ -784,16 +763,10 @@ namespace Underworld
         /// </summary>
         /// <param name="RestoreMana"></param>
         public static void RecalculateHPManaMaxWeight(bool RestoreMana)
-        {
-            max_hp = 0x1E + ((STR * play_level) / 5);
-            max_mana = ((ManaSkill + 1) * INT) >> 3; //TODO: This needs to account for tybals Orb.
-            if (RestoreMana)
-            {
-                play_mana = max_mana;
-            }
-            // uimanager.RefreshManaFlask();
-            // uimanager.RefreshHealthFlask();
-            WeightMax = (short)(300 + (STR * 13));
+        {//player_compute. The hit point and mana maxima are UpdateHPManaMax's (which keeps the Tybal rule); this
+         //used to work them out again itself, without it.
+            UpdateHPManaMax(RestoreMana);
+            WeightMax = (short)(_RES == GAME_UW2 ? 300 + (STR * 13) : STR * 20);//player_compute: UW1 strength * 20
         }
     } //end class
 }//end namespace

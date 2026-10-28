@@ -83,9 +83,21 @@ namespace Underworld
             }
         }
 
+        /// <summary>
+        /// Lets <paramref name="span"/> seconds of game time pass, as sleeping, repairing or
+        /// coming back from death does. The clock (1/256 seconds) moves on; in UW2 the time of
+        /// day (X clock 0, 72 steps of 20 minutes) is set from it and every schedule in SCD.ARK
+        /// catches up (pass_time). UW1 only moves the clock.
+        /// </summary>
         public static void AdvanceTime(int span)
         {
             Debug.Print ($"Advance time {span}");
+            ClockValue += span << 8;
+            if (_RES == GAME_UW2)
+            {
+                SetXClock(0, (int)((uint)ClockValue / 0x4B000 % 72));
+                scd.ProcessSCDArk(1);
+            }
         }
     }  //end class
 }//end namespace

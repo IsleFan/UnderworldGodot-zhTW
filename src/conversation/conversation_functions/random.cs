@@ -8,7 +8,7 @@ namespace Underworld
         public static void Random()
         {
             var max = GetConvoStackValueAtPtr(stack + stackptr - 1);  
-            result_register = Rng.r.Next(max) + 1;
+            result_register = Rng.r.NextScaled(max) + 1;//rand() * max / 0x8000 + 1 (BabRand)
             return;
         }
     } 

@@ -28,19 +28,12 @@ namespace Underworld
         const float InventoryDragThresholdPx = 5f;
 
         /// <summary>
-        /// UW1: left or right drag. UW2: right drag only (left drag does nothing).
+        /// Only the drag button (Controls.DragButton) drags, in both games; the other button's drag does nothing. (The
+        /// original UW1 drags with either button, UW2 with the right only.)
         /// </summary>
         static bool CanInventoryDrag(MouseButton button)
         {
-            if (button == MouseButton.Right)
-            {
-                return true;
-            }
-            if (button == MouseButton.Left)
-            {
-                return UWClass._RES != UWClass.GAME_UW2;
-            }
-            return false;
+            return button == Controls.DragButton;
         }
 
         static void ClearInventoryPointerState()
@@ -65,8 +58,8 @@ namespace Underworld
 
         /// <summary>
         /// After moving past the drag threshold, mark the gesture as a drag.
-        /// Pickup only happens when the button is allowed to drag (UW1 L/R, UW2 R).
-        /// UW2 left-drag is therefore a no-op (not a click).
+        /// Pickup only happens when the button is allowed to drag (Controls.DragButton).
+        /// A drag with the other button is therefore a no-op (not a click).
         /// </summary>
         static void TryStartInventoryDrag(Vector2 position)
         {
@@ -183,12 +176,12 @@ namespace Underworld
             ViewPortMouseYPos = mouse.Y;
 
             var objToThrow = UWTileMap.current_tilemap.LevelObjects[playerdat.ObjectInHand];
-            var itemid = objToThrow.item_id;
+            var hadMoonstone = pickup.HasOrIsMoonstone(objToThrow);
             if (pickup.DropObjectByPlayer(objToThrow, true))
             {
                 playerdat.ObjectInHand = -1;
                 instance.mousecursor.SetCursorToCursor();
-                pickup.DropSpecialCases(itemid);
+                pickup.DropSpecialCases(hadMoonstone);
             }
         }
 
@@ -247,6 +240,10 @@ namespace Underworld
             {
                 PickupToEmptySlot(playerdat.ObjectInHand);
             }
+            else if (CurrentSlot == 8 - playerdat.handednessvalue)
+            {//DoInventoryMouse: nothing held and an empty weapon hand
+                ToggleFightModeFromWeaponHand();
+            }
         }
 
         /// <summary>
@@ -285,6 +282,7 @@ namespace Underworld
                             }
                             var index = playerdat.AddObjectToPlayerInventory(ObjectToPickup, false);
                             playerdat.SetInventorySlotListHead(CurrentSlot, index);
+                            PutOutLightOutsideLightSlot(playerdat.InventoryObjects[index], CurrentSlot);
                             //redraw                
                             RefreshSlot(CurrentSlot);
                             if (ObjectToPickup == playerdat.ObjectInHand)
@@ -302,6 +300,7 @@ namespace Underworld
                         {//backpackslot
                             var index = playerdat.AddObjectToPlayerInventory(ObjectToPickup, false);
                             playerdat.SetInventorySlotListHead(CurrentSlot, index);
+                            PutOutLightOutsideLightSlot(playerdat.InventoryObjects[index], CurrentSlot);
 
                             //redraw
                             BackPackIndices[CurrentSlot - 11] = index;
@@ -343,6 +342,7 @@ namespace Underworld
                                 //in a container 
                                 var index = playerdat.AddObjectToPlayerInventory(ObjectToPickup, false);
                                 var newobj = playerdat.InventoryObjects[index];
+                                PutOutLightOutsideLightSlot(newobj, 19);//into a bag
 
                                 if (previousObjectIndex != -1)
                                 {
@@ -442,7 +442,7 @@ namespace Underworld
             }
             else
             {
-                look.LookAt(objAtSlot.index, playerdat.InventoryObjects, false);
+                look.LookAtInventory(objAtSlot.index);
             }
         }
 
@@ -524,11 +524,11 @@ namespace Underworld
                 }
                 else
                 {
-                    look.PrintLookDescription(
+                    look.LookAt(
                         obj: objAtSlot,
                         objList: playerdat.InventoryObjects,
-                        OutputConvo: true,
-                        lorecheckresult: look.LoreCheck(objAtSlot));
+                        lore: look.LoreCheck(objAtSlot),
+                        OutputConvo: true);
                 }
             }
         }
@@ -649,6 +649,7 @@ namespace Underworld
                 {
                     var Added = playerdat.AddObjectToPlayerInventory(srcObj, false);
                     var AddedObj = playerdat.InventoryObjects[Added];
+                    PutOutLightOutsideLightSlot(AddedObj, 19);//into a bag
                     AddedObj.next = target.link;
                     target.link = Added;
                     playerdat.ObjectInHand = -1;
@@ -680,16 +681,19 @@ namespace Underworld
                 return;
             }
 
-            if (target.item_id == source.item_id)
+            if (AddTogether(source, target) && ValidObjectForSlot(CurrentSlot, source))
             {
-                if ((commonObjDat.stackable(target.item_id) & 0x1) == 0)
-                {//and is stackable.
-                    //average out the quality between the stacks
-                    target.quality = (short)(((target.quality * target.ObjectQuantity) + (source.quality * source.ObjectQuantity)) / (target.ObjectQuantity + source.ObjectQuantity));
-
-                    //change the quantities.
-                    target.link += source.link;
-                    target.is_quant = 1;
+                {//merge the stacks (AddToOccupiedSlot): the weight joins the player's, the quality is the average of the two
+                    var qty = (source.is_quant == 1) ? source.link : 1;
+                    if (target.is_quant == 0)
+                    {
+                        target.is_quant = 1;
+                        target.link = 1;
+                    }
+                    playerdat.WeightCarried += (short)(commonObjDat.mass(source.item_id) * qty);
+                    RefreshWeightDisplay();
+                    target.link += (short)qty;
+                    target.quality = (short)((target.quality + source.quality) >> 1);
 
                     UpdateInventoryDisplay();
                     //destroy the source.
@@ -758,6 +762,10 @@ namespace Underworld
                     DestroyInventoryObject: DestroyInventoryObject,
                     ClearLink: true
                     );
+            if (newIndex == 0)
+            {//no free objects on the level: it stays where it is
+                return 0;
+            }
             var pickObject = UWTileMap.current_tilemap.LevelObjects[newIndex];
             pickObject.next = 0;
             if (ChangeHand)
@@ -827,6 +835,43 @@ namespace Underworld
         /// </summary>
         /// <param name="index"></param>
         /// <param name="objList"></param>
+        /// <summary>
+        /// AddTogether: whether obj can be merged into the stack onto: the same stackable item, both plain stacks (no
+        /// contents, no special link), keys of the same lock, under 999 together, and, except for sling stones, bolts and
+        /// arrows, the same quality band (quality / 16) with neither ruined unless both are. UW2 storage crystals never merge.
+        /// </summary>
+        public static bool AddTogether(uwObject obj, uwObject onto)
+        {
+            if (obj.item_id != onto.item_id)
+            {
+                return false;
+            }
+            if (((obj.is_quant == 0) && (obj.link > 0)) || ((onto.is_quant == 0) && (onto.link > 0))
+                || ((obj.is_quant == 1) && ((obj.link & 0x200) != 0)) || ((onto.is_quant == 1) && ((onto.link & 0x200) != 0))
+                || (commonObjDat.stackable(obj.item_id) == 1) || (commonObjDat.stackable(obj.item_id) == 3))
+            {
+                return false;
+            }
+            if ((obj.OneF0Class == 0x10) && (obj.owner != onto.owner))
+            {
+                return false;
+            }
+            if (obj.link + onto.link >= 999)
+            {
+                return false;
+            }
+            if ((obj.item_id >= 0x10) && (obj.item_id <= 0x12))
+            {
+                return true;
+            }
+            if ((UWClass._RES == UWClass.GAME_UW2) && (obj.item_id == 0xA1))
+            {
+                return false;
+            }
+            var q1 = obj.quality; var q2 = onto.quality;
+            return ((q1 >> 4) == (q2 >> 4)) && (((q1 != 0) && (q2 != 0)) || (q1 == q2));
+        }
+
         /// <param name="obj"></param>
         /// <returns></returns>
         public static IEnumerator DoPickupQty(uwObject objAtSlot, int currslot)
@@ -834,10 +879,15 @@ namespace Underworld
             MessageScrollLine[] linesToRestore = BackupLines(instance.scroll.Lines, 5);
             //var obj = playerdat.InventoryObjects[objAtSlot];
             MessageDisplay.WaitingForTypedInput = true;
+            MessageDisplay.QuantityPrompt = objAtSlot.ObjectQuantity;
 
-            instance.TypedInput.Text = objAtSlot.ObjectQuantity.ToString();
+            instance.TypedInput.Text = "1";//AskHowMany offers one
+            MessageDisplay.TypedInitialPending = true;
             uimanager.instance.TypedInput.CaretColumn = uimanager.instance.TypedInput.Text.Length;
-            instance.scroll.Clear();
+            if (uimanager.InConversation)
+            {//the answers on the scroll are put back afterwards
+                instance.scroll.Clear();
+            }
             AddToMessageScroll(ZhText.Enabled ? ZhText.Compose("要移動多少？{TYPEDINPUT}|") : "Move how many? {TYPEDINPUT}|", mode: MessageDisplay.MessageDisplayMode.TypedInput);
 
             while (MessageDisplay.WaitingForTypedInput)
@@ -860,13 +910,20 @@ namespace Underworld
                     {
                         //if <quantity selected, split objects, pickup object of that quantity.
                         var newObjIndex = ObjectCreator.SpawnObjectInHand(itemid: objAtSlot.item_id, weightmultiplier: NoOfItemsPickedUp); //spawning in hand is very handy here
+                        if (newObjIndex == 0)
+                        {//no free object on the level
+                            yield break;
+                        }
                         var newObj = UWTileMap.current_tilemap.LevelObjects[newObjIndex];
                         for (int i = 0; i < 8; i++)
                         {
                             newObj.DataBuffer[newObj.PTR + i] = objAtSlot.DataBuffer[objAtSlot.PTR + i];
                         }
+                        newObj.next = 0;//(the copy took the slot object's next)
                         newObj.link = (short)NoOfItemsPickedUp;
                         objAtSlot.link = (short)(objAtSlot.link - NoOfItemsPickedUp);//reduce the other object.
+                        playerdat.WeightCarried -= (short)(commonObjDat.mass(objAtSlot.item_id) * NoOfItemsPickedUp);//the part taken leaves the inventory
+                        RefreshWeightDisplay();
                     }
                 }
             }
@@ -884,8 +941,24 @@ namespace Underworld
             yield return true;
         }
 
+        /// <summary>
+        /// ItemFitsSlot: a lit light stays lit only in a shoulder or hand slot (ValidLightSlots); anywhere else it goes out.
+        /// </summary>
+        static void PutOutLightOutsideLightSlot(uwObject obj, int slot)
+        {
+            if ((obj.majorclass == 2) && (obj.minorclass == 1) && (obj.classindex >= 4) && (obj.classindex <= 7) && ((slot < 5) || (slot > 8)))
+            {
+                light.LightOff(obj);
+            }
+        }
+
         public static bool ValidObjectForSlot(int slot, uwObject obj)
         {//TODO: this should respect objects.dat settings
+            if ((slot == 8 - playerdat.handednessvalue) && (obj.majorclass == 0) && (obj.minorclass == 0)
+                && (obj.is_quant == 1) && ((obj.link & 0x200) == 0) && (obj.link > 1))
+            {//the weapon hand refuses a stack of melee weapons
+                return false;
+            }
             //test game specific special objects
             //Ensure that "storage" slots are always valud
             switch (slot)

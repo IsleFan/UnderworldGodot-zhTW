@@ -251,6 +251,13 @@ namespace Underworld
         /// </summary>
         static int LastSpellCastClock_dseg_5c99_16E3 = 0;
 
+        /// <summary>reset_times: a new or restored game may cast at once (lstime and the delay cleared).</summary>
+        public static void ResetSpellCastInterval()
+        {
+            LastSpellCastClock_dseg_5c99_16E3 = 0;
+            SpellCastDelay_dseg_5c99_16E2 = 0;
+        }
+
         /// <summary>
         /// DOS refuses a cast until the interval from the previous one has run out.
         /// PlayerAttemptsSpellCast_ovr119_399 does it at ovr119_3CE: it widens the delay
@@ -304,12 +311,22 @@ namespace Underworld
             LastSpellCastClock_dseg_5c99_16E3 = playerdat.ClockValue;
         }
 
+        /// <summary>
+        /// Set by a cast attempt (try_cast) so the next rune clicked starts a new shelf.
+        /// </summary>
+        public static bool ClearShelfOnNextRune = false;
+
         public static void CastRunicSpell()
         {
-            if (SpellCasting.currentSpell != null)
+            if (SpellCasting.currentSpell != null || playerdat.ObjectInHand != -1 || useon.CurrentItemBeingUsed != null)
             {
-                return; //player is already casting something else.
+                return; //another input mode is active (try_cast: GameInputMode != 0)
             }
+            if ((_RES == GAME_UW2) && (playerdat.ParalyseTimer > 0))
+            {
+                return;//UW2 cannot cast while paralysed (try_cast)
+            }
+            ClearShelfOnNextRune = true;
             if (!SpellCastIntervalHasElapsed())
             {
                 // Refused. DOS plays effect 0x15 at the avatar with pan 0x40 and leaves,
@@ -326,62 +343,70 @@ namespace Underworld
                 return;
             }
             var spell = CurrentSpell();
-            if (spell != null)
-            {
-                if (spell.TestIfPlayerCanCastSpell())
-                {
-                    //apply mana cost
-                    //playerdat.play_mana = System.Math.Max(0, playerdat.play_mana - spell.ManaCost);
-                    PendingSpellCost = spell.ManaCost;
-
-                    Debug.Print($"{spell.spellname}");
-                    //do the skill check
-                    var chkresult = playerdat.SkillCheck(playerdat.Casting, spell.SpellLevel * 3);
-                    // An ordinary failed incantation does not start the interval. DOS
-                    // tests the skill result at ovr119_518 with jnz and leaves on zero,
-                    // which is Fail, before reaching the code that stamps the clock. A
-                    // critical failure falls through into the backfire and does stamp it.
-                    if (chkresult != playerdat.SkillCheckResult.Fail)
-                    {
-                        StartSpellCastInterval(spell.SpellLevel);
-                    }
-                    switch (chkresult)
-                    {
-                        case playerdat.SkillCheckResult.CritFail:
-                            {
-                                //In a crit fail the spell class turns into a curse and subclass into spell level/2
-                                SpellCasting.CastSpell(
-                                    majorclass: 9,
-                                    minorclass: spell.SpellLevel / 2,
-                                    caster: playerdat.playerObject, target: null,
-                                    tileX: playerdat.playerObject.tileX, tileY: playerdat.playerObject.tileY,
-                                    CastOnEquip: false);
-                                uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, GameStrings.str_the_spell_backfires_));
-                                break;
-                            }
-                        case playerdat.SkillCheckResult.Fail:
-                            {
-                                uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, GameStrings.str_the_incantation_failed_));
-                                break;
-                            }
-                        default:
-                            
-                            UWsoundeffects.PlaySoundEffectAtAvatar(effectno: GetSpellSFX(spell.SpellMajorClass, spell.SpellMinorClass), pan: 0x40, velocityOffset: 0);
-
-                            SpellCasting.CastSpell(
-                                majorclass: spell.SpellMajorClass,
-                                minorclass: spell.SpellMinorClass,
-                                caster: playerdat.playerObject, target: null,
-                                tileX: playerdat.playerObject.tileX, tileY: playerdat.playerObject.tileY,
-                                CastOnEquip:false);
-                            break;
-                    }
-                }
-            }
-            else
+            if (spell == null)
             {
                 uimanager.AddToMessageScroll(ZhText.Enabled ? ZhText.Compose("這不是法術。") : "Not a spell.");
+                return;
             }
+            if (!spell.TestIfPlayerCanCastSpell())
+            {
+                return;
+            }
+            Debug.Print($"{spell.spellname}");
+            //player_cast: UW2 rolls Casting against 3 per circle, UW1 Casting + 5 against 2 per circle
+            var chkresult = _RES == GAME_UW2
+                ? playerdat.SkillCheck(playerdat.Casting, spell.SpellLevel * 3)
+                : playerdat.SkillCheck(playerdat.Casting + 5, spell.SpellLevel * 2);
+            if (chkresult == playerdat.SkillCheckResult.Fail)
+            {
+                // An ordinary failed incantation does not start the interval. DOS
+                // tests the skill result at ovr119_518 with jnz and leaves on zero,
+                // which is Fail, before reaching the code that stamps the clock.
+                FailSpell(2);//The incantation failed.
+                return;
+            }
+            var majorclass = spell.SpellMajorClass;
+            var minorclass = spell.SpellMinorClass;
+            if (chkresult == playerdat.SkillCheckResult.CritFail)
+            {//the spell backfires: it becomes a curse of strength circle / 2, said before it acts
+                uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, GameStrings.str_the_spell_backfires_));
+                majorclass = 9;
+                minorclass = spell.SpellLevel / 2;
+            }
+            StartSpellCastInterval(spell.SpellLevel);
+            // The mana is paid now, except for spells that wait for a target: missiles, and
+            // UW2's targeted spells, which pay only once aimed and released (mspell_mused).
+            PendingSpellCost = spell.ManaCost;
+            if (majorclass != 5 && !(_RES == GAME_UW2 && majorclass == 7))
+            {
+                playerdat.play_mana -= PendingSpellCost;
+                PendingSpellCost = 0;
+            }
+            if (SpellCasting.CastSpell(
+                    majorclass: majorclass,
+                    minorclass: minorclass,
+                    caster: playerdat.playerObject, target: null,
+                    tileX: playerdat.playerObject.tileX, tileY: playerdat.playerObject.tileY,
+                    CastOnEquip: false))
+            {//the casting sound follows the spell's own minor class even on a backfire
+                UWsoundeffects.PlaySoundEffectAtAvatar(effectno: GetSpellSFX(majorclass, spell.SpellMinorClass), pan: 0x40, velocityOffset: 0);
+            }
+            else
+            {//refused: what was held back is waived, what was paid stays paid
+                PendingSpellCost = 0;
+                FailSpell(3);//Casting was not successful.
+                playerdat.PlayerStatusUpdate();
+            }
+        }
+
+        /// <summary>
+        /// The fizzle sound and why the cast failed (fail_spell): 0 not experienced enough, 1 not enough mana,
+        /// 2 the incantation failed, 3 casting was not successful.
+        /// </summary>
+        static void FailSpell(int why)
+        {
+            UWsoundeffects.PlaySoundEffectAtAvatar(effectno: UWsoundeffects.SoundEffectSpellFailure, pan: 0x40, velocityOffset: 0);
+            uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, why + (_RES == GAME_UW2 ? 0xE1 : 0xD2)));
         }
 
 
@@ -472,36 +497,23 @@ namespace Underworld
             if (_RES == GAME_UW2)
             {
                 if (worlds.GetWorldNo(playerdat.dungeon_level) == 0)
-                {//check if spell is allowed in britannia
-                    if (SpellLevel >= 3)
+                {//check if spell is allowed in britannia: nothing above the third circle (player_cast)
+                    if (SpellLevel > 3)
                     {
-                        Sfx.SoundEffects.Play(UWsoundeffects.SoundEffectSpellFailure, 0x40,0);
-                        uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, GameStrings.str_the_incantation_failed_));//incantation failed
+                        FailSpell(3);//Casting was not successful.
                         return false;
                     }
                 }
             }
             if (((playerdat.play_level + 1) / 2) < SpellLevel)
             {
-                Sfx.SoundEffects.Play(UWsoundeffects.SoundEffectSpellFailure, 0x40,0);
-                if (_RES == GAME_UW2)
-                {
-                    uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, 225)); //you are not experienced enough
-                }
-                else
-                {
-                    uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, 210));
-                }
+                FailSpell(0);//you are not experienced enough
                 return false;
             }
-            else
+            if (playerdat.play_mana < ManaCost)
             {
-                if (playerdat.play_mana < ManaCost)
-                {
-                    Sfx.SoundEffects.Play(UWsoundeffects.SoundEffectSpellFailure, 0x40,0);
-                    uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, GameStrings.str_you_do_not_have_enough_mana_to_cast_the_spell_));
-                    return false;
-                }
+                FailSpell(1);//you do not have enough mana
+                return false;
             }
             return true;
         }

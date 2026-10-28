@@ -527,13 +527,12 @@ namespace Underworld
             {
                 return;//cannot drop an offmap npc
             }
-            var tile = UWTileMap.current_tilemap.Tiles[critter.tileX, critter.tileY];
             //Drop npc loot (spawn if missing)
             if (critter.LootSpawnedFlag == 0)
             {
                 spawnloot(critter);
             }
-            container.SpillWorldContainer(critter); //spill the items added in spawnloot or that are already heald
+            container.SpillWorldContainer(critter, critterObjectDat.generaltype(critter.item_id)); //drop_some_objects: what it carried belongs to its race
 
             var fluids = critterObjectDat.fluids(critter.item_id);
             if (fluids != 0)
@@ -546,37 +545,42 @@ namespace Underworld
                 {
                     fluids += 0xD8;
                 }
-                //UWTileMap.GetRandomXYZForTile(tile, out int newxpos, out int newypos, out int newzpos);
-                ObjectCreator.spawnObjectInTile(
+                //build_corpse: where the critter lay and at its height, quality 0x28, then settled by obj_deal (it may
+                //fall, sink or burn)
+                var stain = ObjectCreator.spawnObjectInTile(
                     itemid: fluids,
                     tileX: critter.tileX,
                     tileY: critter.tileY,
                     xpos: (short)critter.xpos,
-                    ypos: (short)critter.zpos,
-                    zpos: (short)(tile.floorHeight << 3),
+                    ypos: (short)critter.ypos,
+                    zpos: (short)critter.zpos,
                     WhichList: ObjectFreeLists.ObjectListType.StaticList);
+                if (stain != null)
+                {
+                    stain.quality = 0x28;
+                    var settled = motion.PlacedObjectCollision_seg030_2BB7_10BC(stain, critter.tileX, critter.tileY, 1);
+                    if (settled != null)
+                    {
+                        objectInstance.RedrawFull(settled);
+                    }
+                }
             }
 
             //Drop corpse
             var corpse = critterObjectDat.corpse(critter.item_id);
-            if ((_RES == GAME_UW2) && (worlds.GetWorldNo(playerdat.dungeon_level) == 7))
-            {
-                corpse = 0;//no spawn in the pits of carnage
-            }
             if (corpse != 0)
-            {
-                if (Rng.r.Next(0, 16) < 7)
+            {//7 times in 16, but always in the UW2 Pits of Carnage
+                var roll = Rng.r.Next(0, 16);
+                if ((roll < 7) || ((_RES == GAME_UW2) && (worlds.GetWorldNo(playerdat.dungeon_level) == 7)))
                 {
                     corpse += 0xC0;
-                    //UWTileMap.GetRandomXYZForTile(tile, out int newxpos, out int newypos, out int newzpos);
-                    ObjectCreator.spawnObjectInTile(
-                        itemid: corpse,
-                        tileX: critter.tileX,
-                        tileY: critter.tileY,
-                        xpos: (short)critter.xpos,
-                        ypos: (short)critter.zpos,
-                        zpos: (short)(tile.floorHeight << 3),
-                        WhichList: ObjectFreeLists.ObjectListType.StaticList);
+                    var slot = ObjectCreator.PrepareNewObject(corpse, ObjectFreeLists.ObjectListType.StaticList);
+                    if (slot != 0)
+                    {//the critter type as owner, put near the critter (near_mob_put_at, range 4)
+                        var remains = UWTileMap.current_tilemap.LevelObjects[slot];
+                        remains.owner = (short)(critter.item_id & 0x3F);
+                        motion.PutAt(remains, (critter.tileX << 3) + critter.xpos, (critter.tileY << 3) + critter.ypos, critter.zpos, 4, false);
+                    }
                 }
             }
         }

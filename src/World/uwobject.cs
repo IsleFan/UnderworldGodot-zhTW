@@ -1628,7 +1628,8 @@ namespace Underworld
 
         public static bool CheckIfObjectInValidSlot(uwObject obj, int slot)
         {
-            if ((slot >= 0) && (slot < 4))
+            //ObjWorn: anything in the armour slots 0 to 4 and the ring slots, and a shield in the off hand (slot 7 + lefty)
+            if ((slot >= 0) && (slot <= 4))
             {
                 return true;
             }
@@ -1636,11 +1637,7 @@ namespace Underworld
             {
                 return true;
             }
-            if (
-                (playerdat.isLefty && slot == 8)
-                ||
-                (!playerdat.isLefty && slot == 7)
-                )
+            if (slot == 7 + playerdat.handednessvalue)
             {
                 if (obj.majorclass == 0)
                 {

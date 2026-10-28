@@ -21,7 +21,7 @@ public sealed class TvfxSfxBackend : ISfxBackend
         _player = player ?? throw new ArgumentNullException(nameof(player));
     }
 
-    public void Play(SoundEntry entry, byte pan, byte velocityOffset)
+    public void Play(SoundEntry entry, byte pan, byte velocityOffset, int slot = -1)
     {
         // pan is authentic no-op (OPL is mono). velocityOffset drives the
         // carrier TL scaling — see TvfxVelocity.ComputeVolScale (Miles
@@ -62,7 +62,12 @@ public sealed class TvfxSfxBackend : ISfxBackend
             lifetime = entry.DurationWord * 15 / 64;
 
         byte volScale = TvfxVelocity.ComputeVolScale(entry.Velocity, velocityOffset);
-        _player.Enqueue(new SfxCommand(patch, lifetime, volScale));
+        _player.Enqueue(new SfxCommand(patch, lifetime, volScale, slot));
+    }
+
+    public void NoteOff(int slot)
+    {
+        _player.Enqueue(new SfxCommand(null, 0, 0, slot, NoteOff: true));
     }
 
     public void Dispose() { /* SfxStreamPlayer is owned by the Godot scene tree */ }

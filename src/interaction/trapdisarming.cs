@@ -15,84 +15,67 @@ namespace Underworld
         /// <param name="searchSkill"></param>
         /// <returns>Skill check result if a trigger linked to a trap is found</returns>
         public static playerdat.SkillCheckResult DetectTrapTrigger(int index, uwObject[] objList, int searchSkill)
-        {
+        {//DetectedTrap
             var objToCheck = objList[index];
-
-            if (objToCheck.is_quant == 0 && objToCheck.link != 0)
+            if (FindTrap(objToCheck, objList, out _, out var foundtrap))
             {
-                var next = objToCheck.link;
-                while (next != 0)
-                {
-                    var foundtrigger = objectsearch.FindMatchInObjectChain(next, 6, -1, -1, objList, SkipLinks: true);
-
-                    if (foundtrigger != null)
-                    {
-                        if (_RES == GAME_UW2)
-                        {
-                            if ((foundtrigger.minorclass == 3) && (foundtrigger.link != 0))//added link check because currently I don't delete traps properly.
-                            {//found a (movement/action) based trigger
-                                //do skill check and return;
-                                return DoTrapSkillCheck(searchSkill);
-                            }
-                            else
-                            {
-                                //if not major 6, minor 3 look again for another object
-                                next = foundtrigger.next;
-                            }
-                        }
-                        else
-                        {//UW1 logic
-                            if (foundtrigger.link != 0)
-                            {
-                                if (foundtrigger.minorclass >= 2)
-                                {//found a trigger, getting it's trap
-                                    foundtrigger = objList[foundtrigger.link];
-                                }
-                                if ((foundtrigger.minorclass < 2) && (foundtrigger.majorclass == 6))
-                                {//has found a trap
-                                    return DoTrapSkillCheck(searchSkill);
-                                }
-                                else
-                                {
-                                    return playerdat.SkillCheckResult.Fail;
-                                }
-                            }
-                            else
-                            {
-                                next = foundtrigger.next;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        return playerdat.SkillCheckResult.Fail;
-                    }
+                if (_RES == GAME_UW2)
+                {//against 10 + twice the world number
+                    return playerdat.SkillCheck(searchSkill, 0xA + (worlds.GetWorldNo(playerdat.dungeon_level) << 1), true);
+                }
+                if ((foundtrap.item_id & 0x3F) <= 2)
+                {//UW1: only damage, teleport and arrow traps, against 8
+                    return playerdat.SkillCheck(searchSkill, 8, true);
                 }
             }
             return playerdat.SkillCheckResult.Fail;
         }
 
-
         /// <summary>
-        /// Does the skill check for searching against a trap. Based on world no in UW2, and static value of 8 in UW1.
+        /// The trap on an object: UW2's is the first minor 3 trigger among its contents and the trap it points at; UW1's is
+        /// the first trap object among them (a trigger standing for the trap it points at).
         /// </summary>
-        /// <param name="searchskill"></param>
-        /// <returns></returns>
-        static playerdat.SkillCheckResult DoTrapSkillCheck(int searchskill)
+        static bool FindTrap(uwObject objToCheck, uwObject[] objList, out uwObject foundtrigger, out uwObject foundtrap)
         {
-            if (_RES == GAME_UW2)
+            foundtrigger = null; foundtrap = null;
+            if (objToCheck.is_quant != 0 || objToCheck.link == 0)
             {
-                var difficulty = 0xA + (worlds.GetWorldNo(playerdat.dungeon_level) << 1);
-                return playerdat.SkillCheck(searchskill, difficulty, true);
+                return false;
             }
-            else
+            var next = objToCheck.link;
+            while (next != 0)
             {
-                return playerdat.SkillCheck(searchskill, 8, true);
+                var found = objectsearch.FindMatchInObjectChain(next, 6, -1, -1, objList, SkipLinks: true);
+                if (found == null)
+                {
+                    return false;
+                }
+                if (_RES != GAME_UW2)
+                {
+                    if (found.minorclass >= 2)
+                    {
+                        foundtrigger = found;
+                        foundtrap = found.link != 0 ? objList[found.link] : null;
+                    }
+                    else
+                    {
+                        foundtrap = found;
+                    }
+                    return foundtrap != null;
+                }
+                if (found.minorclass == 3)
+                {
+                    foundtrigger = found;
+                    foundtrap = found.link != 0 ? objList[found.link] : null;
+                    return foundtrap != null;
+                }
+                next = found.next;
             }
+            return false;
         }
 
         /// <summary>
-        /// Finds and Disarms a trap
+        /// Finds and Disarms a trap (RemoveTrap)
         /// </summary>
         /// <param name="index"></param>
         /// <param name="objList"></param>
@@ -100,58 +83,15 @@ namespace Underworld
         public static playerdat.SkillCheckResult DisarmTrap(int index, uwObject[] objList, int trapsSkill)
         {
             var objToCheck = objList[index];
-
-            if (objToCheck.is_quant == 0 && objToCheck.link != 0)
+            if (!FindTrap(objToCheck, objList, out var foundtrigger, out var foundtrap))
             {
-                var next = objToCheck.link;
-                while (next != 0)
-                {
-                    var foundtrigger = objectsearch.FindMatchInObjectChain(next, 6, -1, -1, objList, SkipLinks: true);
-
-                    if (foundtrigger != null)
-                    {
-                        if (_RES == GAME_UW2)
-                        {
-                            if (foundtrigger.minorclass == 3)
-                            {//found a (movement/action) based trigger
-                                if (foundtrigger.link != 0)
-                                {
-                                    var foundtrap = objList[foundtrigger.link];
-                                    return DoTrapDisarm(objList: objList, trapsSkill: trapsSkill, objToCheck: objToCheck, foundtrigger: foundtrigger, foundtrap: foundtrap);
-                                }
-                                //if not major 6, minor 3 look again for another object
-                                next = foundtrigger.next;
-                            }
-                        }
-                        else
-                        {//UW1 logic   
-                            var foundtrap = foundtrigger;
-                            if (foundtrigger.minorclass >= 2)
-                            {//found a trigger, getting it's trap
-                                foundtrap = objList[foundtrigger.link];
-                            }
-                            else
-                            {
-                                foundtrap = foundtrigger;
-                                foundtrigger = null;
-                            }
-                            if ((foundtrap.item_id & 0x3F) <= 2)
-                            {//has found a trap (damage, arrow or teleport)
-                                return DoTrapDisarm(objList: objList, trapsSkill: trapsSkill, objToCheck: objToCheck, foundtrigger: foundtrigger, foundtrap: foundtrap);
-                            }
-                            else
-                            {
-                                return playerdat.SkillCheckResult.Fail;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        return playerdat.SkillCheckResult.Fail;
-                    }
-                }
+                return playerdat.SkillCheckResult.Fail;
             }
-            return playerdat.SkillCheckResult.Fail;
+            if ((_RES != GAME_UW2) && ((foundtrap.item_id & 0x3F) > 2))
+            {
+                return playerdat.SkillCheckResult.Fail;
+            }
+            return DoTrapDisarm(objList: objList, trapsSkill: trapsSkill, objToCheck: objToCheck, foundtrigger: foundtrigger, foundtrap: foundtrap);
         }
 
 
@@ -167,7 +107,9 @@ namespace Underworld
         private static playerdat.SkillCheckResult DoTrapDisarm(uwObject[] objList, int trapsSkill, uwObject objToCheck, uwObject foundtrigger, uwObject foundtrap)
         {
             string traptype = GetTrapType(foundtrap);
-            var skillcheckresult = DoTrapSkillCheck(trapsSkill);
+            //UW2 against 8 + the world number, UW1 against 8
+            var skillcheckresult = playerdat.SkillCheck(trapsSkill, 8 + (_RES == GAME_UW2 ? worlds.GetWorldNo(playerdat.dungeon_level) : 0), true);
+            var inLevel = objList == UWTileMap.current_tilemap.LevelObjects;
             switch (skillcheckresult)
             {
                 case playerdat.SkillCheckResult.Success:
@@ -177,14 +119,26 @@ namespace Underworld
                         uimanager.AddToMessageScroll(ZhText.Enabled
                             ? ZhText.Compose(ZhText.ObjectName(objToCheck.item_id), "上的", traptype, GameStrings.GetDisplayString(1, 0x168))
                             : $"The {traptype} on the {GameStrings.GetObjectNounUW(objToCheck.item_id)}{GameStrings.GetString(1, 0x168)}");
-                        if (foundtrigger != null)
-                        {
-                            foundtrigger.link = 0;
-                            // if (UWTileMap.ValidTile(foundtrigger.quality, foundtrigger.owner))
-                            // {
-                            //     var tile = UWTileMap.current_tilemap.Tiles[foundtrigger.quality, foundtrigger.owner];
-                            //     ObjectRemover.RemoveTrapTriggerChain(foundtrap, tile.Ptr + 2);
-                            // }
+                        if (_RES == GAME_UW2)
+                        {//the trap and the triggers pointing at it go, from the trigger's target square (delete_trap)
+                            if (inLevel && UWTileMap.ValidTile(foundtrigger.quality, foundtrigger.owner))
+                            {
+                                var tile = UWTileMap.current_tilemap.Tiles[foundtrigger.quality, foundtrigger.owner];
+                                ObjectRemover_OLD.RemoveTrapChain(foundtrap, tile.Ptr + 2);
+                            }
+                            foundtrigger.link = 0;//(in the inventory the trigger is only disconnected)
+                        }
+                        else
+                        {//UW1 frees the trap or trigger from the object's contents (Obj_FreeChain)
+                            var found = foundtrigger ?? foundtrap;
+                            if (ObjectRemover_OLD.RemoveObjectFromLinkedList(objToCheck.link, found.index, objList, objToCheck.PTR + 6))
+                            {
+                                if (inLevel)
+                                {
+                                    ObjectRemover_OLD.ClearContents(found);
+                                }
+                                ObjectFreeLists.ReleaseFreeObject(found);
+                            }
                         }
                         break;
                     }
@@ -196,8 +150,12 @@ namespace Underworld
                         ? ZhText.Compose(GameStrings.GetDisplayString(1, 0x166), traptype, "！")
                         : $"{GameStrings.GetString(1, 0x166)} {traptype}");//your bumbling efforts
                     if (foundtrigger == null)
-                    {
+                    {//a trap with no trigger goes off and is deleted
                         trap.ActivateTrap(character: 1, trapObj: foundtrap, ObjectUsed: objToCheck, triggerX: playerdat.playerObject.tileX, triggerY: playerdat.playerObject.tileY, objList: objList);
+                        if (inLevel)
+                        {
+                            ObjectRemover_OLD.RemoveTrapChain(foundtrap, objToCheck.PTR + 6);
+                        }
                     }
                     else
                     {
@@ -266,11 +224,10 @@ namespace Underworld
         /// <returns></returns>
         public static IEnumerator DisarmAttemptQuestion(int index, uwObject[] objList)
         {
-            var disarmstring = GameStrings.GetDisplayString(1, GameStrings.str_you_found_a_trap__do_you_wish_to_try_to_disarm_it_1);
+            var disarmstring = GameStrings.GetDisplayString(1, GameStrings.str_you_found_a_trap__do_you_wish_to_try_to_disarm_it_2);//player_3dlook's wyorn: UW1 0xF4, UW2 0x103
             uimanager.instance.TypedInput.Text = "Yes";
             MessageDisplay.YesNoOption = "Yes";
             MessageDisplay.WaitingForYesOrNo = true;
-            uimanager.instance.scroll.Clear();
             uimanager.AddToMessageScroll($"{disarmstring}{{TYPEDINPUT}}", mode: MessageDisplay.MessageDisplayMode.TypedInput);
 
             while (MessageDisplay.WaitingForYesOrNo)

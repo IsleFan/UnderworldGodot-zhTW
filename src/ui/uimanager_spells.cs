@@ -81,9 +81,17 @@ namespace Underworld
                 {
                     return;
                 }
-                var effectindex = (int)extra_arg_0;
-                if ((eventMouseButton.ButtonIndex == MouseButton.Left) && (InteractionMode != InteractionModes.ModeLook))
+                if (playerdat.ObjectInHand != -1 || useon.CurrentItemBeingUsed != null || SpellCasting.currentSpell != null)
                 {
+                    return;//try_clear: not while an object or spell is on the cursor
+                }
+                var effectindex = (int)extra_arg_0;
+                if (effectindex >= playerdat.ActiveSpellEffectCount)
+                {
+                    return;
+                }
+                if (eventMouseButton.ButtonIndex == MouseButton.Left)
+                {//try_clear dispels on the left button and describes on the right, whatever the interaction mode
                     //left click. cancel spell
                     //Special case. If levitate/fly turn into slow fall
                     var effectclass = playerdat.GetEffectClass(effectindex);
@@ -92,8 +100,8 @@ namespace Underworld
                     if ((majorclass == 1) && (((minorclass & 0x3F) == 3) || ((minorclass & 0x3F) == 5)))
                     {
                         var neweffectid = (2 << 4) + majorclass;
-                        //Fly or levitate.
-                        playerdat.SetSpellEffect(index: effectindex, effectid: neweffectid, stability: playerdat.GetEffectStability(effectindex));
+                        //Fly or levitate become slow fall for one more check (dispel_spell)
+                        playerdat.SetSpellEffect(index: effectindex, effectid: neweffectid, stability: 1);
                     }
                     else
                     {
@@ -114,8 +122,8 @@ namespace Underworld
                     {
                         stabilityresult = 151;
                     }
-                    if (stability < 2)
-                    {
+                    if (stability <= 2)
+                    {//is nearly done
                         stabilityresult += 0;
                     }
                     else

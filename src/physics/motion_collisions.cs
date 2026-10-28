@@ -26,27 +26,26 @@ namespace Underworld
             }
             else
             {//2CFA:0D5B
-                var var2 = Math.Abs(MotionCalcArray.z4_base - UWMotionParamArray.CollisionZposHeightRelated_dseg_67d6_419);
-                var2 = var2 * UWMotionParamArray.dseg_67d6_412;
-
-                var2 = (var2 << 4) / (UWMotionParamArray.Gravity_Related_dseg_67d6_41F / 4);
-                MotionParams.speed_12 -= (sbyte)var2;
+                //16-bit products, as Turbo C's
+                int var2 = (short)(Math.Abs(MotionCalcArray.z4_base - UWMotionParamArray.CollisionZposHeightRelated_dseg_67d6_419) * UWMotionParamArray.dseg_67d6_412);
+                var2 = (short)(var2 << 4) / (UWMotionParamArray.Gravity_Related_dseg_67d6_41F / 4);
+                MotionParams.speed_12 -= (short)var2;
             }
 
             //seg031_2CFA_D9A:
-            MotionCalcArray.z4_base = UWMotionParamArray.CollisionZposHeightRelated_dseg_67d6_419;
+            MotionCalcArray.z4_base = (ushort)UWMotionParamArray.CollisionZposHeightRelated_dseg_67d6_419;
             UWMotionParamArray.RelatedToMotionZ_dseg_67d6_402 = 0;
 
 
             if (
                 (UWMotionParamArray.ACollisionIndex_dseg_67d6_416 == -1)
                 &&
-                ((MotionCalcArray.UnkC_terrain_base & 0x3) == 1)
+                ((_RES == GAME_UW2) ? ((MotionCalcArray.UnkC_terrain_base & 0x3) == 1) : ((MotionCalcArray.UnkC_terrain_base & 0x1) != 0))
                 &&
                 (MotionCalcArray.Radius8_base + MotionCalcArray.Unk10_base >= MotionCalcArray.z4_base)
                 &&
-                (MotionParams.unk_a_pitch <= 0)
-                )
+                ((_RES == GAME_UW2) ? (MotionParams.unk_a_pitch <= 0) : (MotionParams.unk_a_pitch < 0))
+                )//landing in water (UW1: bit 0 of the terrain, and only falling)
             {//seg031_2CFA_DDE: 
                 ZeroiseMotionValues_seg031_2CFA_7BF(MotionParams);
                 MotionParams.tilestate25 = 2;
@@ -89,7 +88,7 @@ namespace Underworld
                 // other two constants in this expression were transcribed as 0xA and 40,
                 // so this one looks like a hex digit that lost its prefix. It makes the
                 // mass term of the collision sound volume louder than DOS by a third.
-                var volume = (byte)((Math.Abs(MotionParams.unk_a_pitch) / 0xA) + ((si_mass - 600) / 0x32) - 40);//now reused as volume?/
+                var volume = (Math.Abs(MotionParams.unk_a_pitch) / 0xA) + ((si_mass - 600) / 0x32) - 40;//a signed volume change
                 //Debug.Print($"play sound effect {soundeffect} at {MotionParams.x_0 >> 5} {MotionParams.y_2 >> 5}");
                 UWsoundeffects.PlaySoundEffectAtCoordinate(effectNo: 0xF, packedX: MotionParams.x_0 >> 5, packedY: MotionParams.y_2 >> 5, volDelta: volume);
                 var di_collisionresult = CollideObjects_seg030_2BB7_1CE(MotionParams, UWMotionParamArray.ACollisionIndex_dseg_67d6_416, MotionCalcArray.MotionArrayObjectIndexA_base);
@@ -116,11 +115,11 @@ namespace Underworld
                         if (UWMotionParamArray.ACollisionIndex_dseg_67d6_416 != -1)
                         {
                             var Dst = UWMotionParamArray.ACollisionIndex_dseg_67d6_416;
+                            MotionCalcArray.Unk14_collisoncount_base--;//oCollisions[hit] = oCollisions[--found]: the last record takes its place
                             for (int i = 0; i < 6; i++)
                             {
                                 CollisionRecord.Collisions_dseg_2520[(Dst * 6) + i] = CollisionRecord.Collisions_dseg_2520[(MotionCalcArray.Unk14_collisoncount_base * 6) + i];
                             }
-                            MotionCalcArray.Unk14_collisoncount_base--;
                         }
                     }
                     else
@@ -269,8 +268,8 @@ namespace Underworld
                                         else
                                         {
                                             //seg031_2CFA_1000:
-                                            if (CollisionObject.majorclass == 1)
-                                            {
+                                            if (UWTileMap.current_tilemap.LevelObjects[MotionCalcArray.MotionArrayObjectIndexA_base].majorclass == 1)
+                                            {//the mover (not what it landed on) being a creature
                                                 MotionParams.tilestate25 = 1;
                                             }
                                             else
@@ -306,11 +305,9 @@ namespace Underworld
                             (_RES == GAME_UW2)
                             &&
                             (
-                            (((MotionCalcArray.UnkC_terrain_base & 3) == 3) && ((MotionCalcArray.UnkC_terrain_base & 0xC & 4) != 4))
+                            (((MotionCalcArray.UnkC_terrain_base & 3) == 3) && ((MotionCalcArray.UnkC_terrain_base & 4) != 0))
                             ||
-                            (((MotionCalcArray.UnkC_terrain_base & 3) == 3) && ((MotionCalcArray.UnkC_terrain_base & 0xC & 4) == 4) && ((MotionCalcArray.UnkE_base & 0x40) != 0) && ((MotionCalcArray.UnkE_base & 0x800) == 0x800))
-                            ||
-                            (((MotionCalcArray.UnkC_terrain_base & 3) != 3) && ((MotionCalcArray.UnkE_base & 0x40) != 0) && ((MotionCalcArray.UnkE_base & 0x800) == 0x800))
+                            (((MotionCalcArray.UnkE_base & 0x40) != 0) && ((MotionCalcArray.UnkE_base & 0x800) == 0))
                             )
                             )
                         {
@@ -349,13 +346,13 @@ namespace Underworld
                 )
                 {
                     //seg031_2CFA_15A:
-                    UWMotionParamArray.CollisionZposHeightRelated_dseg_67d6_419 = (ushort)(collisionTable[MotionCalcArray.Unk15_base + MotionCalcArray.Unk16_collisionindex_base].zpos - MotionParams.height_23);
+                    UWMotionParamArray.CollisionZposHeightRelated_dseg_67d6_419 = (short)(collisionTable[MotionCalcArray.Unk15_base + MotionCalcArray.Unk16_collisionindex_base].zpos - MotionParams.height_23);
                     UWMotionParamArray.ACollisionIndex_dseg_67d6_416 = (sbyte)(MotionCalcArray.Unk15_base + MotionCalcArray.Unk16_collisionindex_base);
                 }
                 else
                 {
                     //seg031_2CFA_18D:
-                    UWMotionParamArray.CollisionZposHeightRelated_dseg_67d6_419 = (ushort)(0x80 - MotionParams.height_23);
+                    UWMotionParamArray.CollisionZposHeightRelated_dseg_67d6_419 = (short)(0x80 - MotionParams.height_23);
                 }
 
                 //seg031_2CFA_19F:
@@ -798,7 +795,7 @@ namespace Underworld
                     //seg028_2941_E36:
                     //loop the object list on the tile.
                     //var indexByte = tileAtPTR.indexObjectList;
-                    while (next != 0 && si <= 0x40)
+                    while (next != 0 && si < 0x40)
                     {
                         var obj = UWTileMap.current_tilemap.LevelObjects[next];
                         if (next != MotionCalcArray.MotionArrayObjectIndexA)
@@ -1010,7 +1007,7 @@ namespace Underworld
                 else
                 {
                     //seg030_2BB7_3A1
-                    if ((CollidedObject_VarA.OneF0Class & 0x1E) == 0x1A)  //the use of 0x1E here with 1FOclass is different from normal usage
+                    if ((_RES == GAME_UW2) ? ((CollidedObject_VarA.OneF0Class & 0x1E) == 0x1A) : (CollidedObject_VarA.majorclass == 6))  //UW2 triggers only; UW1 any trap or trigger (major class 6)
                     {
                         //object is a trigger
                         //This probably needs to be checked. I may have objects in this function mixed up.
@@ -1071,14 +1068,15 @@ namespace Underworld
                 InitMotionParams(toBounce, newMotionParams);
                 if (newMotionParams.mass_18 != 0)
                 {
-                    var di_mass = (newMotionParams.mass_18 << 6) / newMotionParams.mass_18;
+                    //bounce_obj: the mover's mass over the struck object's, in 16 bits as Turbo C's
+                    var di_mass = (short)(MotionParams.mass_18 << 6) / newMotionParams.mass_18;
                     if (di_mass > 0x80)
                     {
                         di_mass = 0x80;
                     }
                     newMotionParams.heading_1E = MotionParams.heading_1E;
                     newMotionParams.momentum_14 = 0xEB;
-                    newMotionParams.unk_a_pitch = (short)((MotionParams.unk_a_pitch * di_mass) / 0x40);
+                    newMotionParams.unk_a_pitch = (short)((short)(MotionParams.unk_a_pitch * di_mass) / 0x40);
 
                     //vanilla behaviour here is to restore currobj details
 
@@ -1099,25 +1097,28 @@ namespace Underworld
 
 
         static void MaybeReflection_seg031_2CFA_CC6(UWMotionParamArray MotionParams)
-        {
-            MotionParams.unk_a_pitch = 0x8C;
+        {//bounce_that_guy: up (UW2 0xBC, UW1 0xEB) with gravity and a minimum speed, turned at random (UW2 one time in four, UW1 always)
+            MotionParams.unk_a_pitch = (short)(_RES == GAME_UW2 ? 0xBC : 0xEB);
             MotionParams.gravity_10_Z = -4;
-            if (MotionParams.momentum_14 <= 0xEB)
+            if (MotionParams.momentum_14 < 0xEB)
             {
                 MotionParams.momentum_14 = 0xEB;
             }
             MotionParams.tilestate25 = 0x10;
-            if ((Rng.r.Next(0x7fff) & 0x3) != 0)
+            if ((_RES != GAME_UW2) || ((Rng.r.Next(0x8000) & 0x3) == 0))
             {
                 MotionParams.heading_1E -= 0x3000;
                 MotionParams.heading_1E += (short)Rng.r.Next(0x6000);
             }
-            UWMotionParamArray.dseg_67d6_26A4 = 1;
+            if (_RES == GAME_UW2)
+            {
+                UWMotionParamArray.dseg_67d6_26A4 = 1;//hit_obj (UW1 has none)
+            }
         }
 
         static void seg031_2CFA_78A(UWMotionParamArray MotionParams, int arg0)
         {
-            MotionParams.speed_12 -= (sbyte)(UWMotionParamArray.GravityCollisionRelated_dseg_67d6_414 * UWMotionParamArray.dseg_67d6_412);
+            MotionParams.speed_12 -= (short)(UWMotionParamArray.GravityCollisionRelated_dseg_67d6_414 * UWMotionParamArray.dseg_67d6_412);
             if (MotionParams.speed_12 > 0)
             {
                 if (InitialMotionCalc_seg031_2CFA_412(MotionParams, false, arg0))
@@ -1176,205 +1177,81 @@ namespace Underworld
                 }
             }
 
-            //seg031_2CFA_1473: After while loop
-
-            if (MotionCalcArray.z4_base == UWMotionParamArray.CollisionZposHeightRelated_dseg_67d6_419)
+            //seg031_2CFA_1473: After while loop. (get_pcoll: var3 is ok, var4 climb, var5 step, 26A5 hit_flag,
+            //419 the target height, 416 the object to land on (-1 none) and 417 its item, 41D the ceiling, 26A8 targ_ceil)
+            var targz = UWMotionParamArray.CollisionZposHeightRelated_dseg_67d6_419;
+            var hit = UWMotionParamArray.ACollisionIndex_dseg_67d6_416;
+            var hitItem = UWMotionParamArray.CollisionItemID_dseg_67d6_417;
+            if (MotionCalcArray.z4_base != targz)
             {
-                //seg031_2CFA_166F
-                if (UWMotionParamArray.ACollisionIndex_dseg_67d6_416 != -1)
-                {
-                    //seg031_2CFA_1676:
-                    if (commonObjDat.UnknownFlag3_1(UWMotionParamArray.CollisionItemID_dseg_67d6_417))
+                if ((hit == -1) && (var5 != 0))
+                {//onto the floor: within the step height, or resting with ground underfoot
+                    var3 = Math.Abs(MotionCalcArray.z4_base - targz) <= MotionParams.unk_24;
+                    var3 = var3 || ((MotionParams.unk_a_pitch == 0) && ((MotionCalcArray.UnkE_base & 0x800) == 0) && ((MotionCalcArray.UnkC_terrain_base & 4) != 0));
+                }
+                else if (var4 != 0)
+                {//onto a solid object within the step height
+                    var3 = commonObjDat.UnknownFlag3_1(hitItem) && (hit >= 0);//(with no object the original reads the record before the table)
+                    if (var3)
                     {
-                        //seg031_2CFA_168E
-                        if (var4 != 0)
+                        var3 = Math.Abs(MotionCalcArray.z4_base - collisionTable[hit].height) <= MotionParams.unk_24;
+                        if (var3)
                         {
                             si_result |= 0x80;
                         }
-                        si_result &= 0xfffB;
                     }
                 }
-            }
-            else
-            {
-                //seg031_2CFA_1483:
-                if (var5 != 0 && UWMotionParamArray.ACollisionIndex_dseg_67d6_416 == -1)
+                var3 = var3 && (UWMotionParamArray.dseg_67d6_26A8 != 0) && (var6 == 0);
+                if (var3 && (targz >= UWMotionParamArray.dseg_67d6_41D))
                 {
-                    //seg031_2CFA_1493:
-                    if (Math.Abs(MotionCalcArray.z4_base - UWMotionParamArray.CollisionZposHeightRelated_dseg_67d6_419) > MotionParams.unk_24)
-                    {
-                        var3 = false;
-                    }
-                    else
-                    {
-                        var3 = true;
-                    }
-                    //seg031_2CFA_14B7:
-                    if
-                        (
-                            (var3)
-                            ||
-                            (var3 == false && MotionParams.unk_a_pitch == 0 && ((MotionCalcArray.UnkE_base & 0x800) == 0) && (MotionCalcArray.UnkC_terrain_base & 4) == 0)
-                        )
-                    {
-                        var3 = true;//seg031_2CFA_14D3:
-                    }
-                    else
-                    {
-                        var3 = false;//seg031_2CFA_14D8:
-                    }
+                    si_result &= ~0x100;
                 }
-                else
+                else if (!var3 && (MotionCalcArray.Unk11_base > MotionCalcArray.z4_base))
                 {
-                    //seg031_2CFA_14DF
-                    if (var4 != 0)
-                    {
-                        //seg031_2CFA_14EF:
-                        if (commonObjDat.UnknownFlag3_1(UWMotionParamArray.CollisionItemID_dseg_67d6_417))
-                        {
-                            var3 = true;
-                        }
-                        else
-                        {
-                            var3 = false;
-                        }
-
-                        //seg031_2CFA_1504:
-                        if (var3)
-                        {
-                            //seg031_2CFA_1511:
-                            // if (UWMotionParamArray.ACollisionIndex_dseg_67d6_416 < 0)
-                            // {
-                            //temp fix. getting a collisionindex of -1  when I bump into the lurker at 14,25 in UW1 level 1.
-                            // Debug.Print("Warning collision index of -1.");
-                            // var3= false;//?
-                            // }
-                            // else
-                            //{
-                            if (UWMotionParamArray.ACollisionIndex_dseg_67d6_416 >= 0)//this check for index in bounds is in UW1 but not UW2. 
-                            {
-                                var collision = collisionTable[UWMotionParamArray.ACollisionIndex_dseg_67d6_416];
-                                if (Math.Abs(MotionCalcArray.z4_base - collision.height) > MotionParams.unk_24)
-                                {
-                                    var3 = false;
-                                }
-                                else
-                                {
-                                    var3 = true;
-                                }
-                            }
-
-                            if (var3)
-                            {
-                                si_result |= 0x80;
-                            }
-                        }
-                    }
+                    si_result |= 0x100;
                 }
-
-                //seg031_2CFA_154F
-                if (
-                    (var3)
-                    &&
-                    (UWMotionParamArray.dseg_67d6_26A8 != 0)
-                    &&
-                    (var6 == 0)
-                )
+                if (var3 && (targz + MotionParams.height_23 > 0x7F))
                 {
-                    var3 = true;
-                }
-                else
-                {
-                    var3 = false;//seg031_2CFA_156A:   
-                }
-
-                //seg031_2CFA_156F:. GOING WRONG HERE.
-                if ((var3) && (UWMotionParamArray.CollisionZposHeightRelated_dseg_67d6_419 >= UWMotionParamArray.dseg_67d6_41D))
-                {
-                    //seg031_2CFA_157E
-                    si_result &= 0xFEFF;
-                }
-                else
-                {
-                    //seg031_2CFA_1584
-                    if (var3 == false)
-                    {
-                        if (MotionCalcArray.Unk11_base > MotionCalcArray.z4_base)
-                        {
-                            si_result |= 0x100;
-                        }
-                    }
-                }
-
-                //seg031_2CFA_159F:
-                if ((var3) && (UWMotionParamArray.CollisionZposHeightRelated_dseg_67d6_419 + MotionParams.height_23 > 0x7F))
-                {
-                    //seg031_2CFA_15B9:
                     var3 = false;
                     UWMotionParamArray.dseg_67d6_26A5 = 1;
                     si_result |= 0x200;
                 }
-                else
+                else if (var3 && (hit == -1) && (targz + MotionParams.height_23 > UWMotionParamArray.dseg_67d6_41D))
                 {
-                    //seg031_2CFA_15C8
-                    if (var3)
-                    {
-                        //seg031_2CFA_15CE:
-                        if (UWMotionParamArray.ACollisionIndex_dseg_67d6_416 == -1)
-                        {
-                            if (UWMotionParamArray.CollisionZposHeightRelated_dseg_67d6_419 + MotionParams.height_23 > UWMotionParamArray.dseg_67d6_41D)
-                            {
-                                var3 = false;
-                                UWMotionParamArray.dseg_67d6_26A5 = 1;
-                                si_result |= 0x400;
-                            }
-                        }
-                    }
+                    var3 = false;
+                    UWMotionParamArray.dseg_67d6_26A5 = 1;
+                    si_result |= 0x400;
                 }
-
-                //seg031_2CFA_15F7: 
-                if (var3 && ((si_result & 0x400) != 0))
-                {
-                    //goto 1634
+                if (!(var3 && ((si_result & 0x400) != 0)) && var3 && (hit != -1)
+                    && (!commonObjDat.UnknownFlag3_1(hitItem) || (var4 == 0)))
+                {//only onto a solid object, and only when it may climb
+                    var3 = false;
                 }
-                else
-                {
-                    if (var3)
-                    {
-                        //Seg031_1603
-                        if (UWMotionParamArray.ACollisionIndex_dseg_67d6_416 != -1)
-                        {
-                            if (commonObjDat.UnknownFlag3_1(UWMotionParamArray.ACollisionIndex_dseg_67d6_416))
-                            {
-                                if (var4 == 0)
-                                {
-                                    var3 = false;
-                                }
-                            }
-                        }
-                    }
-                }
-                //seg031_2CFA_1634:
                 if (var3)
                 {
-                    MotionCalcArray.z4 = UWMotionParamArray.CollisionZposHeightRelated_dseg_67d6_419;
-                    if (Math.Abs(UWMotionParamArray.CollisionZposHeightRelated_dseg_67d6_419 - MotionCalcArray.Unk10_base) > MotionParams.radius_22)
-                    {
-                        si_result &= 0xFFFB;
-                    }
-                    else
+                    UWMotionParamArray.dseg_67d6_26A5 = 1;
+                    MotionCalcArray.z4_base = (ushort)targz;
+                    if (Math.Abs(targz - MotionCalcArray.Unk10_base) <= MotionParams.radius_22)
                     {
                         si_result |= 4;
                     }
+                    else
+                    {
+                        si_result &= ~4;
+                    }
                 }
             }
+            else if ((hit != -1) && commonObjDat.UnknownFlag3_1(hitItem) && (var4 != 0))
+            {//level with a solid object it may climb: standing on it
+                si_result |= 0x80;
+                si_result &= ~4;
+            }
 
-            //seg031_2CFA_169C after the 2nd big if split.
-            //tested as far as here.
-            if ((UWMotionParamArray.dseg_67d6_26A5 != 0) && (var3))
+            //seg031_2CFA_169C: after a step, the objects now in the way get their hits
+            if ((UWMotionParamArray.dseg_67d6_26A5 != 0) && var3)
             {
                 SortCollisions();
-                si_result &= 0xFBFF;
+                si_result &= ~0x400;
                 var di = 0;
                 while (MotionCalcArray.Unk15_base > di)
                 {
@@ -1387,52 +1264,32 @@ namespace Underworld
                 }
             }
 
-            //seg031_2CFA_16DB:
-            if (((si_result & 0x80) != 0) && (var4 != 0))
+            //seg031_2CFA_16DB: standing on an object (or on ground) cancels the drop
+            if (((si_result & 0x80) != 0) && (var4 != 0) && (hit != -1))
             {
-                if (UWMotionParamArray.ACollisionIndex_dseg_67d6_416 != -1)
+                if (((collisionTable[hit].quality & 0x10) != 0) || ((MotionCalcArray.UnkC_terrain_base & 4) != 0))
                 {
-                    var collision = collisionTable[UWMotionParamArray.ACollisionIndex_dseg_67d6_416];
-                    if (
-                       ((collision.quality & 0x10) != 0)
-                        ||
-                        ((collision.quality & 0x10) == 0) && ((MotionCalcArray.UnkC_terrain_base & 4) == 0)
-                        )
-                    {
-                        si_result &= 0xF7FF;
-                    }
-                }
-                else
-                {
-                    //Debug.Print("colision-1");
+                    si_result &= ~0x800;
                 }
             }
 
-            //seg031_2CFA_170A
-            if (
-                ((MotionCalcArray.UnkE_base & 0x100) != 0)
-                &&
-                (var5 != 0)
-                &&
-                (MotionParams.unk_a_pitch == 0)
-                )
+            //seg031_2CFA_170A: up the step onto the highest floor under the footprint
+            if (((MotionCalcArray.UnkE_base & 0x100) != 0) && (var5 != 0) && (MotionParams.unk_a_pitch == 0)
+                && (MotionParams.unk_24 + MotionCalcArray.z4_base >= MotionCalcArray.Unk11_base))
             {
-                if (MotionParams.unk_24 + MotionCalcArray.z4_base >= MotionCalcArray.Unk11_base)
+                si_result &= ~0x100;
+                MotionCalcArray.z4_base = MotionCalcArray.Unk11_base;
+                if (MotionCalcArray.z4_base == MotionCalcArray.Unk10_base)
                 {
-                    MotionCalcArray.z4_base = MotionCalcArray.Unk11_base;
-                    if (MotionCalcArray.z4_base != MotionCalcArray.Unk10_base)
-                    {
-                        si_result &= 0xFFFB;
-                    }
-                    else
-                    {
-                        si_result |= 4;
-                    }
+                    si_result |= 4;
+                }
+                else
+                {
+                    si_result &= ~4;
                 }
             }
 
             //next join seg031_2CFA_1766:
-
             if ((si_result & 0xFC) == 0)
             {
                 si_result |= 0x1000;
@@ -1475,8 +1332,8 @@ namespace Underworld
         {
             var si = 0;
             while (MotionCalcArray.Unk15_base > si)
-            {
-                var collision = collisionTable[si];
+            {//IsaDoor: the objects in the way start at the first one in the way
+                var collision = collisionTable[si + MotionCalcArray.Unk16_collisionindex_base];
                 var obj = UWTileMap.current_tilemap.LevelObjects[collision.link];
                 DoorX = obj.tileX;
                 DoorY = obj.tileY;
@@ -1614,11 +1471,11 @@ namespace Underworld
                         //seg030_2BB7_1299:
                         var terrainvalue = MotionCalcArray.UnkC_terrain & 0x7;
                         if (terrainvalue == 5)
-                        {//is this uw2 only?
+                        {//water: UW2 splashes (and filanium oil hardens mud); UW1 only sinks it
                          //seg030_2BB7_12AE:
-                            animo.SpawnAnimoInTile(6, projectile.xpos, projectile.ypos, projectile.zpos, projectile.tileX, projectile.tileY);
                             if (_RES == GAME_UW2)
                             {
+                                animo.SpawnAnimoInTile(6, projectile.xpos, projectile.ypos, projectile.zpos, projectile.tileX, projectile.tileY);
                                 OilOnMud(projectile);
                             }
                             var1_destroyobject = true;
@@ -1631,22 +1488,22 @@ namespace Underworld
                             {
                                 //seg030_2BB7_12EC:
                                 if (commonObjDat.qualityclass(projectile.item_id) == 3)
-                                {
-                                    int testdam = 1;
-                                    damage.ScaleDamage(projectile.item_id, ref testdam, 8); //try fire damage
-                                    var1_destroyobject = (testdam >= 1);
+                                {//lava: quality class 3 always survives
+                                    var1_destroyobject = false;
                                     break;//to seg030_2BB7_140A:
                                 }
                                 else
-                                {
-                                    var1_destroyobject = true;
+                                {//anything else only if it resists fire (check_res)
+                                    int testdam = 1;
+                                    damage.ScaleDamage(projectile.item_id, ref testdam, 8);
+                                    var1_destroyobject = (testdam >= 1);
                                     break;//to seg030_2BB7_140A:
                                 }
                             }
                             else
                             {
-                                if (terrainvalue == 7)
-                                {
+                                if ((terrainvalue == 7) && (_RES == GAME_UW2))
+                                {//ice (UW1 has no ice case)
                                     break;//to seg030_2BB7_140A:
                                 }
                                 else
@@ -1668,19 +1525,23 @@ namespace Underworld
                                                 //Seg030_135E
                                                 //make object mobile.
                                                 projectile = MoveObjectToMobileObjectList_seg030_2BB7_B0C(projectile);
-                                                if (UWMotionParamArray.dseg_67d6_25C1 == 0)
-                                                {
-                                                    if (arg8 != 0)
-                                                    {
-                                                        //Seg030_13CE
-                                                        projectile.UnkBit_0X13_Bit0to6 = (short)(1 + Rng.r.Next(3));
-                                                        projectile.Projectile_Pitch = (short)(0xE + Rng.r.Next(3));
-                                                    }
+                                                if (projectile == null)
+                                                {//taken by the garbage collect
+                                                    return null;
                                                 }
-                                                else
-                                                {//seg30_139a
+                                                if (projectile.IsStatic)
+                                                {//no free mobile object: it stays where it is (the original goes on writing through its null pointer)
+                                                    break;
+                                                }
+                                                if (UWMotionParamArray.dseg_67d6_25C1 != 0)
+                                                {//seg30_139a: slides off the edge of what it sat on, turned up to 64 either way
                                                     projectile.UnkBit_0X13_Bit0to6 = 3;
-                                                    projectile.ProjectileHeading = (ushort)(0xC0 + (Rng.r.Next(9) << 4));
+                                                    projectile.ProjectileHeading = (ushort)((projectile.ProjectileHeading + (Rng.r.Next(9) << 4) + 0xC0) & 0xFF);
+                                                }
+                                                if ((arg8 != 0) && ((UWMotionParamArray.dseg_67d6_25C1 == 0) || (_RES != GAME_UW2)))
+                                                {//Seg030_13CE: a little random speed and pitch (UW1 also after sliding off)
+                                                    projectile.UnkBit_0X13_Bit0to6 = (short)(1 + (Rng.r.Next(0x8000) & 3));
+                                                    projectile.Projectile_Pitch = (short)(0xE + (Rng.r.Next(0x8000) & 3));
                                                 }
                                                 break;//to seg030_2BB7_140A:
                                             }
@@ -1730,5 +1591,160 @@ namespace Underworld
             }
         }
 
+
+        /// <summary>
+        /// Whether an object of type item_id (index is its own object number, which the object check skips) fits at
+        /// x, y, z in 1/8 tiles (can_place): not through the ceiling, no wall or high floor under its footprint, nothing
+        /// in its way, and unless a flier not left hanging more than range above what it would rest on.
+        /// Uses its own motion calculation record and restores the current one.
+        /// </summary>
+        /// <summary>can_place's results: the height it would rest on (nvokHgt) and the terrain there (nvokTerr: 1 &lt;&lt; the
+        /// floor's terrain, 0x10 in the air, 1 on an object).</summary>
+        public static int NvokHgt, NvokTerr;
+
+        public static bool CanPlace(int item_id, int index, int x, int y, int z, bool flier, int range)
+        {
+            var oldCalc = MotionCalcArray.PtrToMotionCalc;
+            MotionCalcArray.PtrToMotionCalc = new byte[0x20];
+            try
+            {
+                MotionCalcArray.MotionArrayObjectIndexA = (short)index;
+                MotionCalcArray.Radius8 = (byte)commonObjDat.radius(item_id);
+                MotionCalcArray.Height9 = (byte)commonObjDat.height(item_id);
+                MotionCalcArray.x0 = (ushort)x;
+                MotionCalcArray.y2 = (ushort)y;
+                MotionCalcArray.z4 = (ushort)z;
+                if ((MotionCalcArray.Height9 != 0x80) && (MotionCalcArray.Height9 + z > 0x7F))
+                {//through the ceiling
+                    return false;
+                }
+                ProcessMotionTileHeights_seg028_2941_385(range);//TerrainCheck
+                var hits = MotionCalcArray.UnkC_terrain | MotionCalcArray.UnkE;
+                if ((hits & 0x300) != 0)
+                {//a wall or a floor too high under the footprint
+                    return false;
+                }
+                //the height it would rest on: the highest floor under it if it reaches that, else the centre's
+                int restHeight = (z + range >= MotionCalcArray.Unk11) ? MotionCalcArray.Unk11 : MotionCalcArray.Unk10_relatedtotileheight;
+                var radius = Math.Max((int)MotionCalcArray.Radius8, range);
+                var onFloor = z <= MotionCalcArray.Unk10_relatedtotileheight + radius;
+                NvokHgt = restHeight;
+                NvokTerr = onFloor ? 1 << (MotionCalcArray.UnkC_terrain & 3) : 0x10;
+                ScanForCollisions((onFloor && index >= 256) ? 1 : 0, 1);//ObjectCheck
+                if (MotionCalcArray.Unk14_collisoncount != 0)
+                {
+                    var best = -1;
+                    SortCollisions();//process_objlist
+                    if (MotionCalcArray.Unk15 != 0)
+                    {//something in the way
+                        return false;
+                    }
+                    if (MotionCalcArray.Unk14_collisoncount != 0)
+                    {
+                        for (int i = 0; i < MotionCalcArray.Unk16_collisionindex; i++)
+                        {
+                            if (collisionTable[i].height > restHeight)
+                            {
+                                restHeight = collisionTable[i].height;
+                                best = i;
+                            }
+                        }
+                    }
+                    if (best > -1)
+                    {//resting on an object: only a solid one will do
+                        var under = UWTileMap.current_tilemap.LevelObjects[collisionTable[best].link];
+                        if (!commonObjDat.UnknownFlag3_1(under.item_id))
+                        {
+                            return false;
+                        }
+                        NvokTerr = 1;
+                    }
+                }
+                NvokHgt = restHeight;
+                if (!flier && ((hits & 0x800) != 0) && (z - range > restHeight))
+                {//left hanging over a drop
+                    return false;
+                }
+                return true;
+            }
+            finally
+            {
+                MotionCalcArray.PtrToMotionCalc = oldCalc;
+            }
+        }
+
+        /// <summary>
+        /// Puts an object that is in no list near x, y, z in 1/8 tiles (put_at): up to 24 random spots within range
+        /// (drop_around_place, the exact spot first when stayCentered), each checked with CanPlace, adding it at the end of
+        /// that tile's list and settling a static object with obj_deal; failing those, exactly at x, y unless culling takes
+        /// it (nocull skips that), in which case it is freed. Returns the object as placed, or null.
+        /// </summary>
+        public static uwObject PutAt(uwObject obj, int x, int y, int z, int range, bool nocull, bool stayCentered = false)
+        {
+            var span = range * 2 + 1;
+            for (int tries = 0; tries < 24; tries++)
+            {
+                int tx; int ty;
+                if ((tries == 0) && stayCentered)
+                {
+                    tx = x; ty = y;
+                }
+                else
+                {
+                    tx = x - range + Rng.r.Next(span);
+                    ty = y - range + Rng.r.Next(span);
+                }
+                if (UWTileMap.ValidTile(tx >> 3, ty >> 3) && CanPlace(obj.item_id, obj.index, tx, ty, z, true, 0))
+                {
+                    obj.xpos = (short)(tx & 7); obj.ypos = (short)(ty & 7); obj.zpos = (short)z;
+                    AddAtEndOfTile(obj, tx >> 3, ty >> 3);
+                    if (!obj.IsStatic)
+                    {
+                        obj.npc_xhome = (short)(tx >> 3);
+                        obj.npc_yhome = (short)(ty >> 3);
+                    }
+                    else
+                    {
+                        obj = PlacedObjectCollision_seg030_2BB7_10BC(obj, tx >> 3, ty >> 3, 1);
+                    }
+                    if (obj != null)
+                    {
+                        objectInstance.RedrawFull(obj);
+                    }
+                    return obj;
+                }
+            }
+            if (nocull || !ObjectRemover_OLD.ObjectCullingTest(obj, 10))
+            {//exactly there, at the head of the tile's list
+                var tile = UWTileMap.current_tilemap.Tiles[x >> 3, y >> 3];
+                obj.xpos = (short)(x & 7); obj.ypos = (short)(y & 7);
+                obj.tileX = x >> 3; obj.tileY = y >> 3;
+                obj.next = tile.indexObjectList;
+                tile.indexObjectList = obj.index;
+                objectInstance.RedrawFull(obj);
+                return obj;
+            }
+            ObjectRemover_OLD.ClearContents(obj);
+            ObjectFreeLists.ReleaseFreeObject(obj);
+            return null;
+        }
+
+        static void AddAtEndOfTile(uwObject obj, int tileX, int tileY)
+        {
+            var tile = UWTileMap.current_tilemap.Tiles[tileX, tileY];
+            obj.tileX = tileX; obj.tileY = tileY;
+            obj.next = 0;
+            if (tile.indexObjectList == 0)
+            {
+                tile.indexObjectList = obj.index;
+                return;
+            }
+            var last = UWTileMap.current_tilemap.LevelObjects[tile.indexObjectList];
+            while (last.next != 0)
+            {
+                last = UWTileMap.current_tilemap.LevelObjects[last.next];
+            }
+            last.next = obj.index;
+        }
     }//end class
 }//end namespace

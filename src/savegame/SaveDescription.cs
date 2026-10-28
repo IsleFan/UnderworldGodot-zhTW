@@ -10,8 +10,9 @@ namespace Underworld
     /// Measured from saves written by real DOS, both games: DESC is raw ASCII with no
     /// terminator and is exactly as long as the text typed. Case is preserved. Nothing is
     /// filtered within printable ASCII, so "{|}~" are stored verbatim even though the font
-    /// has no glyphs for them. The limit is 30 characters. An empty description is accepted
-    /// and writes a zero length file, which is not the same as an unused slot.
+    /// has no glyphs for them. The limit is 30 characters. An empty description is accepted:
+    /// UW1 writes a zero length file, which is not the same as an unused slot, and UW2 a single
+    /// space (GAMEWRAP.C SaveGame).
     ///
     /// No Godot types here on purpose, so the headless save tests can reach all of it.
     /// </summary>
@@ -48,7 +49,10 @@ namespace Underworld
         /// </summary>
         public static byte[] Encode(string description)
         {
-            if (string.IsNullOrEmpty(description)) return Array.Empty<byte>();
+            if (string.IsNullOrEmpty(description))
+            {//UW2's SaveGame stores an empty description as one space; UW1 writes it as it is, nothing
+                return UWClass._RES == UWClass.GAME_UW2 ? new byte[] { 0x20 } : Array.Empty<byte>();
+            }
 
             if (description.Length > MaxLength)
             {

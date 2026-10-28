@@ -1,778 +1,321 @@
 using Godot;
 namespace Underworld
 {
+    /// <summary>
+    /// Draws a level's automap the way the original does (AUTOMAP.C ShowDungeonMap, DoTile, ShadeSide, DoDoorTile): on
+    /// the palette indices of the blank map screen, each seen square is three pixels across at (x - 1) * 3 + 10,
+    /// (y - 1) * 3 + 7 (y counted up from the bottom of the 320x200 screen), its colours darkened by adding to the
+    /// index (PixelDarken) or set from the terrain's colours. The result is a 320x200 layer holding only the pixels the
+    /// map changed, laid over the background, so an HD background still shows elsewhere.
+    /// </summary>
     public class AutomapRender : UWClass
     {
-        /// <summary>
-        /// No of pixels wide or tall a tile is draw at.
-        /// </summary>
-        const int TileSize = 4;
-
-        //Wall direction constants.
-        const int NORTH = 0;
-        const int SOUTH = 1;
-        const int EAST = 2;
-        const int WEST = 3;
-        const int NORTHWEST = 4;
-        const int NORTHEAST = 5;
-        const int SOUTHWEST = 6;
-        const int SOUTHEAST = 7;
-
-        public static Color ClearColour = Color.Color8(255, 255, 255, 0);
-        //Colours
-        public static Color[] BackgroundColour = new Color[1];
-
-        /// <summary>
-        /// The open tile colour.
-        /// </summary>
-        /// RGB as follows
-        /// 116,81,56
-        /// 102,70,47
-        /// 107,75,47
-        public static Color[] OpenTileColour =
+        /// <summary>How each tile type is drawn, a 3x3 pattern ([type][row][column]): 1 the terrain's colour, 2 darkened.</summary>
+        static readonly byte[,,] TilePattern =
         {
-            Color.Color8(116,81,56,255),
-            Color.Color8(102,70,47,255),
-            Color.Color8(107,75,47,255)
+            { { 1, 1, 1 }, { 1, 1, 1 }, { 1, 1, 1 } },
+            { { 2, 1, 1 }, { 0, 2, 1 }, { 0, 0, 2 } },
+            { { 1, 1, 2 }, { 1, 2, 0 }, { 2, 0, 0 } },
+            { { 0, 0, 2 }, { 0, 2, 1 }, { 2, 1, 1 } },
+            { { 2, 0, 0 }, { 1, 2, 0 }, { 1, 1, 2 } },
         };
-        //new Color[3];
+        static readonly int[] DiagSide = { 1, 2, 0, 3 };
+        static readonly int[] DoorDy = { -1, 0, -1, 1 };
+        static readonly int[] DoorDx = { 0, -1, -1, -1 };
 
-        /// <summary>
-        /// The water tile colour.
-        /// </summary>
-        /// RGB as follows
-        /// 62,61,134
-        /// 50,51,115
-        public static Color[] WaterTileColour = //new Color[2];
+        static byte[] map;
+        static byte[] screen;
+        static bool[] changed;
+
+        static int Rand() => Rng.r.Next(0x8000);
+
+        static int At(int x, int y) => (x >= 0 && x < 320 && y >= 0 && y < 200) ? (199 - y) * 320 + x : -1;
+
+        static void SetPixel(int x, int y, int colour)
         {
-            Color.Color8(62,61,134,255),
-            Color.Color8(50,51,115,255)
-        };
-        /// <summary>
-        /// The lava tile colour.
-        /// </summary>
-        /// RGB is 
-        /// 115,23,27
-        /// 78,15,14
-        public static Color[] LavaTileColour = //new Color[2];
+            var i = At(x, y);
+            if (i >= 0)
+            {
+                screen[i] = (byte)colour;
+                changed[i] = true;
+            }
+        }
+
+        /// <summary>PixelDarken: the colour at x, y plus base and a random 0 to n.</summary>
+        static void PixelDarken(int x, int y, int b, int n)
         {
-            Color.Color8(115,23,27,255),
-            Color.Color8(78,15,14,255)
-        };
+            var i = At(x, y);
+            if (i < 0)
+            {
+                return;
+            }
+            var d = 0x7FFF / n;
+            Rand();//the original draws a first value it does not use
+            SetPixel(x, y, b + Rand() / d + screen[i]);
+        }
+
+        static int Square(int x, int y) => map[(y << 6) + x];
 
         /// <summary>
-        /// The bridge tile colour.
+        /// Returns the automap of the level as an image the size of the screen.
         /// </summary>
-        /// RGB is 
-        /// 64,28,0
-        /// 59,23,0
-        /// 74,28,0
-        public static Color[] BridgeTileColour = //new Color[3];
-        {
-            Color.Color8(64,28,0,255),
-            Color.Color8(59,23,0,255),
-            Color.Color8(74,28,0,255)
-        };
-
-        /// <summary>
-        /// The stairs tile colour.
-        /// </summary>
-        /// RGB as follows
-        /// 79,52,27
-        /// 70,41,24
-        public static Color[] StairsTileColour = //new Color[2];
-        {
-            Color.Color8(79,52,27,255),
-            Color.Color8(70,41,24,255)
-        };
-
-        /// <summary>
-        /// Wall border colour.
-        /// </summary>
-        /// RBG is
-        /// 66,41,22
-        /// 93,60,37
-        /// 98,65,42
-        /// 88,56,33
-        public static Color[] BorderColour = //new Color[4];
-        {
-            Color.Color8(66,41,22,255),
-            Color.Color8(93,60,37,255),
-            Color.Color8(98,65,42,255),
-            Color.Color8(88,56,33,255)
-        };
-
-        /// <summary>
-        /// The background colour of the map.
-        /// </summary>
-        public static Color[] Background = //new Color[1];
-        {
-            Color.Color8(255,255,255,0)
-        };
-
-
-        /// <summary>
-        /// The icy tile colour.
-        /// </summary>
-        /// RGB as follows
-        /// 48,144,182
-        /// 25,182,252
-        /// 24,116,167
-        public static Color[] IceTileColour = //new Color[3];
-        {
-            Color.Color8(48,144,182,255),
-            Color.Color8(25,182,252,255),
-            Color.Color8(24,116,167,255)
-        };
-
-        /// <summary>
-        /// Reference to track the currently being drawn tilemap
-        /// </summary>
-        static automap mapToRender;    
-
-        /// <summary>
-        /// Returns the automap as an image.
-        /// </summary>
-        /// <param name="levelno"></param>
-        /// <returns></returns>
         public static ImageTexture MapImage(int levelno)
         {
-            //rnd = new System.Random();
-            var OutputTileMapImage = Image.CreateEmpty(64 * TileSize, 64 * TileSize, false, Image.Format.Rgba8);
-            mapToRender = automap.automaps[levelno];
-
-            //Fills in the tile background colour first
-            for (int x = 0; x <= UWTileMap.TileMapSizeX; x++)
+            var background = uimanager.bitmaps.RawScreen(BytLoader.BLNKMAP_BYT);
+            var palette = uimanager.bitmaps.ScreenPalette(BytLoader.BLNKMAP_BYT);
+            var output = Image.CreateEmpty(320, 200, false, Image.Format.Rgba8);
+            if ((background == null) || (background.Length < 320 * 200) || (automap.automaps[levelno] == null))
             {
-                for (int y = 0; y <= UWTileMap.TileMapSizeY; y++)
-                {//If the tile has been visited and can be rendered.
-                    if (mapToRender.tiles[x, y].visited)
-                    {
-                    FillTileColour(OutputTileMapImage, mapToRender.tiles[x, y], x, y);
-                    }
-                }
+                return ImageTexture.CreateFromImage(output);
+            }
+            Draw(automap.automaps[levelno].buffer, background);
+
+            //the player's mark: UW2 only while the player knows where they are, UW1 not in the Ethereal Void
+            if ((levelno == playerdat.dungeon_level - 1)
+                && (_RES == GAME_UW2 ? playerdat.AutomapEnabled : playerdat.dungeon_level != 9))
+            {
+                DrawPlayerMark(((playerdat.playerObject.tileX - 1) * 3) + 10 - 1, ((playerdat.playerObject.tileY - 1) * 3) + 12);
             }
 
-            for (int x = 0; x <= UWTileMap.TileMapSizeX; x++)
+            for (int i = 0; i < 320 * 200; i++)
             {
-                for (int y = 0; y <= UWTileMap.TileMapSizeY; y++)
-                {//If the tile has been visited and can be rendered.
-                    if (mapToRender.tiles[x, y].visited)
-                    {
-                        DrawTileBorder(OutputTileMapImage, mapToRender.tiles[x, y], x, y);
-                    }
-                }
-            }
-
-            //Draw door ways
-            for (int x = 1; x < UWTileMap.TileMapSizeX; x++)
-            {
-                for (int y = 1; y < UWTileMap.TileMapSizeY; y++)
+                if (changed[i])
                 {
-                    if (mapToRender.tiles[x, y].IsDoor)
-                    {
-                        if (mapToRender.tiles[x, y].visited)
-                        {
-                            DrawDoor(OutputTileMapImage, mapToRender.tiles[x, y], x, y,BorderColour);
-                        }
-                    }
+                    output.SetPixel(i % 320, i / 320, palette.ColorAtIndex(screen[i], false, false));
                 }
             }
-
-            if (levelno == playerdat.dungeon_level-1)
-            {
-                var src = new Rect2I(
-                    x: 0, 
-                    y: 0, 
-                    width: uimanager.instance.cross.GetWidth(), 
-                    height: uimanager.instance.cross.GetHeight());
-                var dst = new Vector2I(
-                    x: playerdat.playerObject.tileX*TileSize, 
-                    y: playerdat.playerObject.tileY*TileSize);
-                //Draw player icon at 
-                OutputTileMapImage.BlendRect(uimanager.instance.cross.GetImage(), src, dst);
-            }
-            var tex = new ImageTexture();
-            tex.SetImage(OutputTileMapImage);
-            return tex;
+            map = null; screen = null; changed = null;
+            return ImageTexture.CreateFromImage(output);
         }
 
         /// <summary>
-        /// Files a solid tile with no border with the input colour
+        /// ShowDungeonMap on a copy of the background's indices: returns the drawn indices; Changed then marks the
+        /// pixels the map set (row 0 is the top of the screen).
         /// </summary>
-        /// <param name="OutputTileMapImage"></param>
-        /// <param name="tile"></param>
-        /// <param name="TileX"></param>
-        /// <param name="TileY"></param>
-        /// <param name="InputColour"></param>
-        private static void DrawSolidTile(Image OutputTileMapImage, automaptileinfo tile, int TileX, int TileY, Color[] InputColour)
+        public static byte[] Draw(byte[] mapBuffer, byte[] background)
         {
-            for (int x = 0; x < TileSize; x++)
+            map = mapBuffer;
+            screen = (byte[])background.Clone();
+            changed = new bool[320 * 200];
+            ShowDungeonMap();
+            return screen;
+        }
+
+        /// <summary>The pixels the last Draw changed.</summary>
+        public static bool[] Changed => changed;
+
+        /// <summary>
+        /// pic_to_screen of the buttons' image 0x3F with transparency (colour 0 not drawn), its top left at px, py.
+        /// </summary>
+        static void DrawPlayerMark(int px, int py)
+        {
+            if (uimanager.grButtons == null || !uimanager.grButtons.RawImage(0x3F, out var pixels, out var w, out var h))
             {
-                for (int y = 0; y < TileSize; y++)
+                return;
+            }
+            for (int row = 0; row < h; row++)
+            {
+                for (int col = 0; col < w; col++)
                 {
-                    OutputTileMapImage.SetPixel(x + TileX * TileSize, y + TileY * TileSize, PickColour(InputColour));
+                    var c = pixels[row * w + col];
+                    if (c != 0)
+                    {
+                        SetPixel(px + col, py - row, c);
+                    }
                 }
             }
         }
 
-        /// <summary>
-        /// Fills the tile colour of the tile surface
-        /// </summary>
-        /// <param name="OutputTileMapImage"></param>
-        /// <param name="tile"></param>
-        /// <param name="TileX"></param>
-        /// <param name="TileY"></param>
-        private static void FillTileColour(Image OutputTileMapImage, automaptileinfo tile, int TileX, int TileY)
+        static void ShowDungeonMap()
         {
-            Color[] TileColorPrimary;
-            Color TileColorSecondary;
-            ///Picks which colour to use based on the tile properties.
-            if (tile.IsBridge)
+            var side = new bool[4];
+            for (int y = 1; y < 0x3F; y++)
             {
-                TileColorPrimary = BridgeTileColour;
-                TileColorSecondary = ClearColour;
-            }
-            else if (tile.IsWater)
-            {
-                TileColorPrimary = WaterTileColour;
-                TileColorSecondary = ClearColour;
-            }
-            else if (tile.IsLava)
-            {
-                TileColorPrimary = LavaTileColour;
-                TileColorSecondary = ClearColour;
-            }
-            else if (tile.IsStair)
-            {
-                TileColorPrimary = StairsTileColour;
-                TileColorSecondary = ClearColour;
-            }
-            else if (tile.IsIce)
-            {
-                TileColorPrimary = IceTileColour;
-                TileColorSecondary = ClearColour;
-            }
-            else
-            {
-                TileColorPrimary = OpenTileColour;
-                TileColorSecondary = ClearColour;
-            }
-            switch (tile.tileType)
-            {
-                case automaptileinfo.TILE_SOLID:
+                for (int x = 1; x < 0x3F; x++)
+                {
+                    var t = Square(x, y) & 0xF;
+                    if (t <= 0 || t >= 10)
                     {
-                        break;
+                        continue;
                     }
-                case automaptileinfo.TILE_DIAG_NE:
-                    {//Fills diagonally.
-                        for (int i = 0; i <= TileSize; i++)
+                    DoTile(t, x, y);
+                    System.Array.Clear(side);
+                    if (t >= 2 && t <= 5)
+                    {//a diagonal: only the two sides of its open half
+                        var d = DiagSide[t - 2];
+                        side[d] = ShadeSide(d, x, y);
+                        d = (d + 1) & 3;
+                        side[d] = ShadeSide(d, x, y);
+                    }
+                    else
+                    {
+                        for (int i = 0; i < 4; i++)
                         {
-                            for (int j = 0; j <= TileSize; j++)
-                            {
-                                if (i >= TileSize - j)
-                                {
-                                    OutputTileMapImage.SetPixel(i + TileX * TileSize, j + TileY * TileSize, PickColour(TileColorPrimary));
-                                }
-                                else
-                                {
-                                    OutputTileMapImage.SetPixel(i + TileX * TileSize, j + TileY * TileSize, TileColorSecondary);
-                                }
-                            }
+                            side[i] = ShadeSide(i, x, y);
                         }
-                        break;
                     }
-                case automaptileinfo.TILE_DIAG_NW:
-                    {//Fills diagonally.
-                        for (int i = 0; i <= TileSize; i++)
+                    var px = x * 3 + 10;
+                    var py = y * 3 + 7;
+                    for (int i = 0; i < 4; i++)
+                    {
+                        if (side[i] && side[(i + 1) & 3])
                         {
-                            for (int j = 0; j <= TileSize; j++)
-                            {
-                                if (i <= j)
-                                {
-                                    OutputTileMapImage.SetPixel(i + TileX * TileSize, j + TileY * TileSize, PickColour(TileColorPrimary));
-                                }
-                                else
-                                {
-                                    OutputTileMapImage.SetPixel(i + TileX * TileSize, j + TileY * TileSize, TileColorSecondary);
-                                }
-                            }
+                            PixelDarken(px - ((i & 2) << 1), py - ((i & 2) << 1), 3, 2);
                         }
-                        break;
                     }
-                case automaptileinfo.TILE_DIAG_SE:
-                    {//Fills diagonally.	
-                        for (int i = 0; i <= TileSize; i++)
-                        {
-                            for (int j = 0; j <= TileSize; j++)
-                            {
-                                if (i >= j)
-                                {
-                                    OutputTileMapImage.SetPixel(i + TileX * TileSize, j + TileY * TileSize, PickColour(TileColorPrimary));
-                                }
-                                else
-                                {
-                                    OutputTileMapImage.SetPixel(i + TileX * TileSize, j + TileY * TileSize, TileColorSecondary);
-                                }
-                            }
-                        }
-                        break;
-                    }
-                case automaptileinfo.TILE_DIAG_SW:
-                    {//Fills diagonally.
-                        for (int i = 0; i <= TileSize; i++)
-                        {
-                            for (int j = 0; j <= TileSize; j++)
-                            {
-                                if (TileSize - i >= j)
-                                {
-                                    OutputTileMapImage.SetPixel(i + TileX * TileSize, j + TileY * TileSize, PickColour(TileColorPrimary));
-                                }
-                                else
-                                {
-                                    OutputTileMapImage.SetPixel(i + TileX * TileSize, j + TileY * TileSize, TileColorSecondary);
-                                }
-                            }
-                        }
-                        break;
-                    }
-                case automaptileinfo.TILE_OPEN:
-                case automaptileinfo.TILE_SLOPE_E:
-                case automaptileinfo.TILE_SLOPE_N:
-                case automaptileinfo.TILE_SLOPE_S:
-                case automaptileinfo.TILE_SLOPE_W:
-                    {//Fills an open tile.
-                        DrawSolidTile(OutputTileMapImage, tile, TileX, TileY, TileColorPrimary);
-                        break;
-                    }
-                default:
-                    {//Does not draw anything.
-                        DrawSolidTile(OutputTileMapImage, tile, TileX, TileY, BackgroundColour);
-                        break;
-                    }
+                }
             }
-        }//end  fill colour
+        }
 
         /// <summary>
-        /// Draws the wall borders around the tile
+        /// ShadeSide: an edge along one side unless the square beyond is one of the seen types (1-9); beyond it an
+        /// unexplored open square from a map piece (type 11) gets a lighter one. Returns whether it drew.
         /// </summary>
-        /// <param name="OutputTileMapImage"></param>
-        /// <param name="tile"></param>
-        /// <param name="TileX"></param>
-        /// <param name="TileY"></param>
-        private static void DrawTileBorder(Image OutputTileMapImage, automaptileinfo tile, int TileX, int TileY)
+        static bool ShadeSide(int s, int x, int y)
         {
-            if (tile.visited)
+            var px = (x - 1) * 3 + 10;
+            var py = (y - 1) * 3 + 7;
+            switch (s)
             {
-                switch (tile.tileType)
+                case 0: y++; break;
+                case 1: x++; break;
+                case 2: y--; break;
+                case 3: x--; break;
+            }
+            var t = Square(x, y) & 0xF;
+            if (t > 0 && t < 10)
+            {
+                return false;
+            }
+            int a = 6, b = 2;
+            if (t == 11)
+            {
+                a = 0; b = 4;
+            }
+            switch (s)
+            {
+                case 0:
+                case 2:
+                    py += (s == 0) ? 3 : -1;
+                    for (int i = 0; i < 3; i++)
+                    {
+                        PixelDarken(px + i, py, a, b);
+                    }
+                    break;
+                case 1:
+                case 3:
+                    px += (s == 1) ? 3 : -1;
+                    for (int i = 0; i < 3; i++)
+                    {
+                        PixelDarken(px, py + i, a, b);
+                    }
+                    break;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// DoTile: the pattern of the type (slopes drawn as open), coloured by the terrain, then the kind: dark (a stairs
+        /// texture), the 0xE9 colours (a bridge) or a door. UW1 keeps the terrain in bits 4-5 and the kind in 6-7, UW2 the
+        /// other way round, where a bridge or stairs takes no terrain colour and ice has colours of its own.
+        /// </summary>
+        static void DoTile(int type, int x, int y)
+        {
+            var b = Square(x, y);
+            int shade, kind;
+            if (_RES == GAME_UW2)
+            {
+                shade = b >> 6;
+                kind = (b >> 4) & 3;
+                if (kind == 3 || kind == 2)
                 {
-                    case automaptileinfo.TILE_SOLID://Solid
-                        {//no need to draw
-                            break;
-                        }
-                    case automaptileinfo.TILE_OPEN://Open
-                    case automaptileinfo.TILE_SLOPE_E:
-                    case automaptileinfo.TILE_SLOPE_W:
-                    case automaptileinfo.TILE_SLOPE_S:
-                    case automaptileinfo.TILE_SLOPE_N:
-                        {
-                            DrawOpenTileBorder(OutputTileMapImage, tile, TileX, TileY, BorderColour);
-                            break;
-                        }
-                    case automaptileinfo.TILE_DIAG_NE:
-                        {
-                            DrawDiagNEBorder(OutputTileMapImage, tile, TileX, TileY, BorderColour);
-                            break;
-                        }
-                    case automaptileinfo.TILE_DIAG_SE:
-                        {
-                            DrawDiagSEBorder(OutputTileMapImage, tile, TileX, TileY, BorderColour);
-                            break;
-                        }
-                    case automaptileinfo.TILE_DIAG_NW:
-                        {
-                            DrawDiagNWBorder(OutputTileMapImage, tile, TileX, TileY, BorderColour);
-                            break;
-                        }
-                    case automaptileinfo.TILE_DIAG_SW:
-                        {
-                            DrawDiagSWBorder(OutputTileMapImage, tile, TileX, TileY, BorderColour);
-                            break;
-                        }
-                    default:
-                        {
-                            //no need to draw
-                            break;
-                        }
+                    shade = 0;
                 }
             }
             else
             {
-                DrawSolidTile(OutputTileMapImage, tile, TileX, TileY, Background);
+                shade = (b >> 4) & 3;
+                kind = b >> 6;
             }
-        }
-
-        
-        /// <summary>
-        /// Draws the wall border for an open tile
-        /// </summary>
-        /// <param name="OutputTileMapImage"></param>
-        /// <param name="tile"></param>
-        /// <param name="TileX"></param>
-        /// <param name="TileY"></param>
-        /// <param name="InputColour"></param>
-        private static void DrawOpenTileBorder(Image OutputTileMapImage, automaptileinfo tile, int TileX, int TileY, Color[] InputColour)
-        {
-            //Check the tile to the north
-            if (TileY < UWTileMap.TileMapSizeY)
+            var px = (x - 1) * 3 + 10;
+            var py = (y - 1) * 3 + 7;
+            if (type >= 6)
             {
-                if (mapToRender.tiles[TileX, TileY + 1].IsSolidWall)
-                {//Solid tile to the north.
-                    DrawLine(OutputTileMapImage, TileX, TileY, InputColour, NORTH);
-                }
+                type = 1;
             }
-            //Check the tile to the south
-            if (TileY > 0)
+            type--;
+            for (int i = 0; i < 3; i++)
             {
-                if (mapToRender.tiles[TileX, TileY - 1].IsSolidWall)
-                {//Solid tile to the south.
-                    DrawLine(OutputTileMapImage, TileX, TileY, InputColour, SOUTH);
-                }
-            }
-            //Check the tile to the east
-            if (TileX < UWTileMap.TileMapSizeX)
-            {
-                if (mapToRender.tiles[TileX + 1, TileY].IsSolidWall)
+                for (int j = 0; j < 3; j++)
                 {
-                    DrawLine(OutputTileMapImage, TileX, TileY, InputColour, EAST);
-                }
-            }
-            //Check the tile to the west
-            if (TileX > 0)
-            {
-                if (mapToRender.tiles[TileX - 1, TileY].IsSolidWall)
-                {
-                    DrawLine(OutputTileMapImage, TileX, TileY, InputColour, WEST);
-                }
-            }
-        }
-
-
-        /// <summary>
-        /// Draws the border for the diag sw tile type
-        /// </summary>
-        /// <param name="OutputTileMapImage"></param>
-        /// <param name="tile"></param>
-        /// <param name="TileX"></param>
-        /// <param name="TileY"></param>
-        /// <param name="InputColour"></param>
-        static void DrawDiagSWBorder(Image OutputTileMapImage, automaptileinfo tile, int TileX, int TileY, Color[] InputColour)
-        {
-            DrawLine(OutputTileMapImage, TileX, TileY, InputColour, SOUTHWEST);
-
-            //Check the tiles to the north and east of this tile to see what needs to be drawn for borders
-            if (TileY < UWTileMap.TileMapSizeY)
-            {//north
-                var TileToTest = mapToRender.tiles[TileX, TileY + 1];
-                if (TileToTest.IsOpen || TileToTest.tileType == automaptileinfo.TILE_DIAG_SW)
-                {
-                    DrawLine(OutputTileMapImage, TileX, TileY, InputColour, NORTH);
-                }
-            }
-            if (TileX < UWTileMap.TileMapSizeX)
-            {//east
-                var TileToTest = mapToRender.tiles[TileX + 1, TileY];
-                if (TileToTest.IsOpen || TileToTest.tileType == automaptileinfo.TILE_DIAG_SW)
-                {
-                    DrawLine(OutputTileMapImage, TileX, TileY, InputColour, EAST);
-                }
-            }
-
-            //Check South and East for solids.
-            if (TileY > 0)
-            {//South
-                if (mapToRender.tiles[TileX, TileY - 1].tileType == automaptileinfo.TILE_SOLID)
-                {
-                    DrawLine(OutputTileMapImage, TileX, TileY, InputColour, SOUTH);
-                }
-            }
-
-            if (TileX > 0)
-            {//West
-                if (mapToRender.tiles[TileX - 1, TileY].tileType == automaptileinfo.TILE_SOLID)
-                {
-                    DrawLine(OutputTileMapImage, TileX, TileY, InputColour, WEST);
-                }
-            }
-        }
-
-        /// <summary>
-        /// Draws the border for the diag ne tile
-        /// </summary>
-        /// <param name="OutputTileMapImage"></param>
-        /// <param name="tile"></param>
-        /// <param name="TileX"></param>
-        /// <param name="TileY"></param>
-        /// <param name="InputColour"></param>
-        static void DrawDiagNEBorder(Image OutputTileMapImage, automaptileinfo tile, int TileX, int TileY, Color[] InputColour)
-        {
-            DrawLine(OutputTileMapImage, TileX, TileY, InputColour, NORTHEAST);
-
-            //Check the tiles to the south and west of this tile to see what needs to be drawn.
-            if (TileY > 0)
-            {//South
-                var TileToTest = mapToRender.tiles[TileX, TileY - 1];
-                if (TileToTest.IsOpen || TileToTest.tileType == automaptileinfo.TILE_DIAG_NE)
-                {
-                    DrawLine(OutputTileMapImage, TileX, TileY, InputColour, SOUTH);
-                }
-            }
-            if (TileX > 0)
-            {//West
-                var TileToTest = mapToRender.tiles[TileX - 1, TileY];
-                if (TileToTest.IsOpen || TileToTest.tileType == automaptileinfo.TILE_DIAG_NE)
-                {
-                    DrawLine(OutputTileMapImage, TileX, TileY, InputColour, WEST);
-                }
-            }
-
-            //Check North and East for solids.
-            if (TileY < UWTileMap.TileMapSizeY)
-            {//North
-                if (mapToRender.tiles[TileX, TileY + 1].tileType == automaptileinfo.TILE_SOLID)
-                {
-                    DrawLine(OutputTileMapImage, TileX, TileY, InputColour, NORTH);
-                }
-            }
-
-            if (TileX < UWTileMap.TileMapSizeX)
-            {//East
-                if (mapToRender.tiles[TileX + 1, TileY].tileType == automaptileinfo.TILE_SOLID)
-                {
-                    DrawLine(OutputTileMapImage, TileX, TileY, InputColour, EAST);
-                }
-            }
-        }
-
-        /// <summary>
-        /// Draws the border for the diag se tile
-        /// </summary>
-        /// <param name="OutputTileMapImage"></param>
-        /// <param name="tile"></param>
-        /// <param name="TileX"></param>
-        /// <param name="TileY"></param>
-        /// <param name="InputColour"></param>
-        static void DrawDiagSEBorder(Image OutputTileMapImage, automaptileinfo tile, int TileX, int TileY, Color[] InputColour)
-        {
-            DrawLine(OutputTileMapImage, TileX, TileY, InputColour, SOUTHEAST);
-
-            //Check the tiles to the north and west of this tile
-            if (TileY < UWTileMap.TileMapSizeY)
-            {//north
-                var TileToTest = mapToRender.tiles[TileX, TileY + 1];
-                if (TileToTest.IsOpen || TileToTest.tileType == automaptileinfo.TILE_DIAG_SE)
-                {
-                    DrawLine(OutputTileMapImage, TileX, TileY, InputColour, NORTH);
-                }
-            }
-
-            if (TileX > 0)
-            {//West
-                var TileToTest = mapToRender.tiles[TileX - 1, TileY];
-                if (TileToTest.IsOpen || TileToTest.tileType == automaptileinfo.TILE_DIAG_SE)
-                {
-                    DrawLine(OutputTileMapImage, TileX, TileY, InputColour, WEST);
-                }
-            }
-
-            //Check South and East for solids.
-            if (TileY > 0)
-            {//South
-                if (mapToRender.tiles[TileX, TileY - 1].tileType == automaptileinfo.TILE_SOLID)
-                {
-                    DrawLine(OutputTileMapImage, TileX, TileY, InputColour, SOUTH);
-                }
-            }
-
-            if (TileX < UWTileMap.TileMapSizeX)
-            {//East
-                if (mapToRender.tiles[TileX + 1, TileY].tileType == automaptileinfo.TILE_SOLID)
-                {
-                    DrawLine(OutputTileMapImage, TileX, TileY, InputColour, EAST);
-                }
-            }
-        }
-
-
-        /// <summary>
-        /// Draws the border for the diag nw tile
-        /// </summary>
-        /// <param name="OutputTileMapImage"></param>
-        /// <param name="tile"></param>
-        /// <param name="TileX"></param>
-        /// <param name="TileY"></param>
-        /// <param name="InputColour"></param>
-        static void DrawDiagNWBorder(Image OutputTileMapImage, automaptileinfo tile, int TileX, int TileY, Color[] InputColour)
-        {
-            DrawLine(OutputTileMapImage, TileX, TileY, InputColour, NORTHWEST);
-
-            //Check the tiles to the south and east of this tile
-            if (TileY > 0)
-            {//South
-                var TileToTest = mapToRender.tiles[TileX, TileY - 1];
-                if (TileToTest.IsOpen || TileToTest.tileType == automaptileinfo.TILE_DIAG_NW)
-                {
-                    DrawLine(OutputTileMapImage, TileX, TileY, InputColour, SOUTH);
-                }
-            }
-            if (TileX < UWTileMap.TileMapSizeX)
-            {//East
-                var TileToTest = mapToRender.tiles[TileX + 1, TileY];
-                if (TileToTest.IsOpen || TileToTest.tileType == automaptileinfo.TILE_DIAG_NW)
-                {
-                    DrawLine(OutputTileMapImage, TileX, TileY, InputColour, EAST);
-                }
-            }
-
-            //Check North and West for solids.
-            if (TileY < UWTileMap.TileMapSizeY)
-            {//North
-                if (mapToRender.tiles[TileX, TileY + 1].tileType == automaptileinfo.TILE_SOLID)
-                {
-                    DrawLine(OutputTileMapImage, TileX, TileY, InputColour, NORTH);
-                }
-            }
-
-            if (TileX > 0)
-            {//West
-                if (mapToRender.tiles[TileX - 1, TileY].tileType == automaptileinfo.TILE_SOLID)
-                {
-                    DrawLine(OutputTileMapImage, TileX, TileY, InputColour, WEST);
-                }
-            }
-        }
-        
-        /// <summary>
-        /// Draws a horizontal, vertical or diagonal border line relative to the tile using the direction specified 
-        /// </summary>
-        /// <param name="OutputTileMapImage"></param>
-        /// <param name="TileX"></param>
-        /// <param name="TileY"></param>
-        /// <param name="InputColour"></param>
-        /// <param name="Direction"></param>
-        private static void DrawLine(Image OutputTileMapImage, int TileX, int TileY, Color[] InputColour, int Direction)
-        {
-            switch (Direction)
-            {
-                case NORTH:
-                    {//Border to the north.
-                        for (int i = 0; i < TileSize; i++)
-                        {
-                            OutputTileMapImage.SetPixel(i + TileX * TileSize, TileSize + TileY * TileSize, PickColour(InputColour));
-                        }
-                        break;
-                    }
-                case SOUTH:
-                    {//Border to the south.
-                        for (int i = 0; i < TileSize; i++)
-                        {
-                            OutputTileMapImage.SetPixel(i + TileX * TileSize, 0 + TileY * TileSize, PickColour(InputColour));
-                        }
-                        break;
-                    }
-                case EAST:
-                    {//Border to the east.
-                        for (int j = 0; j < TileSize; j++)
-                        {
-                            OutputTileMapImage.SetPixel(TileSize + TileX * TileSize, j + TileY * TileSize, PickColour(InputColour));
-                        }
-                        break;
-                    }
-                case WEST:
-                    {//Border to the west.
-                        for (int j = 0; j < TileSize; j++)
-                        {
-                            OutputTileMapImage.SetPixel(0 + TileX * TileSize, j + TileY * TileSize, PickColour(InputColour));
-                        }
-                        break;
-                    }
-                case NORTHEAST:
-                    {//Diagonal
-                        for (int k = 0; k <= TileSize; k++)
-                        {
-                            OutputTileMapImage.SetPixel((TileSize - k) + TileX * TileSize, k + TileY * TileSize, PickColour(InputColour));
-                        }
-                        break;
-                    }
-                case SOUTHWEST:
-                    {//Diagonal
-                        for (int k = 0; k <= TileSize; k++)
-                        {
-                            OutputTileMapImage.SetPixel(k + TileX * TileSize, (TileSize - k) + TileY * TileSize, PickColour(InputColour));
-                        }
-                        break;
-                    }
-                case NORTHWEST:
-                    {//Diagonal
-                        for (int k = 0; k <= TileSize; k++)
-                        {
-                            OutputTileMapImage.SetPixel(k + TileX * TileSize, k + TileY * TileSize, PickColour(InputColour));
-                        }
-                        break;
-                    }
-                case SOUTHEAST:
-                    {//Diagonal
-                        for (int k = 0; k <= TileSize; k++)
-                        {
-                            OutputTileMapImage.SetPixel(k + TileX * TileSize, k + TileY * TileSize, PickColour(InputColour));
-                        }
-                        break;
-                    }
-            }
-        }
-
-        /// <summary>
-        /// Draws the door at the specified location.
-        /// </summary>
-        /// <param name="OutputTileMapImage"></param>
-        /// <param name="tile"></param>
-        /// <param name="TileX"></param>
-        /// <param name="TileY"></param>
-        /// <param name="InputColour"></param>
-        private static void DrawDoor(Image OutputTileMapImage, automaptileinfo tile, int TileX, int TileY, Color[] InputColour)
-        {
-            bool TileTypeNorth = mapToRender.tiles[TileX, TileY + 1].IsOpen;
-            bool TileTypeSouth = mapToRender.tiles[TileX, TileY - 1].IsOpen;
-            bool TileTypeEast = mapToRender.tiles[TileX + 1, TileY].IsOpen;
-            bool TileTypeWest = mapToRender.tiles[TileX - 1, TileY].IsOpen;
-            
-            if (tile.IsOpen)
-            {   //Don't display if the door is currently in a solid tile
-                if (TileTypeEast || TileTypeWest)
-                {
-                    for (int j = 0; j < TileSize; j++)
+                    switch (TilePattern[type, j, i])
                     {
-                        OutputTileMapImage.SetPixel( TileSize / 2 + TileX * ( TileSize), j + TileY * TileSize, PickColour(InputColour));
-                    }
-                }
-                else if (TileTypeNorth || TileTypeSouth)
-                {
-                    for (int i = 0; i < TileSize; i++)
-                    {
-                        OutputTileMapImage.SetPixel(i + TileX *  TileSize,  TileSize / 2 + TileY *  TileSize, PickColour(InputColour));
+                        case 1:
+                            switch (shade)
+                            {
+                                case 0:
+                                    PixelDarken(px + i, py + j, 2, 3);
+                                    break;
+                                case 1:
+                                    SetPixel(px + i, py + j, Rand() % (_RES == GAME_UW2 ? 3 : 2) + 0xB1);
+                                    break;
+                                case 2:
+                                    SetPixel(px + i, py + j, Rand() % (_RES == GAME_UW2 ? 3 : 2) + 0xB5);
+                                    break;
+                                case 3:
+                                    if (_RES == GAME_UW2)
+                                    {
+                                        SetPixel(px + i, py + j, Rand() % 3 + 0xB9);
+                                    }
+                                    break;
+                            }
+                            break;
+                        case 2:
+                            PixelDarken(px + i, py + j, 6, 2);
+                            break;
                     }
                 }
             }
+            switch (kind)
+            {
+                case automaptileinfo.KindStair:
+                    for (int i = 0; i < 3; i++)
+                    {
+                        for (int j = 0; j < 3; j++)
+                        {
+                            PixelDarken(px + i, py + j, 6, 3);
+                        }
+                    }
+                    break;
+                case automaptileinfo.KindBridge:
+                    for (int j = 0; j < 3; j++)
+                    {
+                        for (int i = 0; i < 3; i++)
+                        {
+                            SetPixel(px + i, py + j, (int)((long)Rand() * 3 / 0x8000) + 0xE9);
+                        }
+                    }
+                    break;
+                case automaptileinfo.KindDoor:
+                    DoDoorTile(x, y, px, py);
+                    break;
+            }
         }
 
-        /// <summary>
-        /// Picks a random colour from the array of colours. Use to create the shading variation for the map
-        /// </summary>
-        /// <returns>The colour selected</returns>
-        /// <param name="Selection">Selection.</param>
-        static Color PickColour(Color[] Selection)
+        /// <summary>DoDoorTile: a dark centre and two dark pixels across the passage, facing open (type 1) neighbours.</summary>
+        static void DoDoorTile(int x, int y, int px, int py)
         {
-            return Selection[Rng.r.Next(0, Selection.GetUpperBound(0) + 1)];
+            PixelDarken(++px, ++py, 6, 3);
+            for (int dir = 0; dir < 4; dir++)
+            {
+                if (((Square(x + DoorDx[dir], y + DoorDy[dir]) & 0xF) == 1)
+                    || ((Square(x - DoorDx[dir], y - DoorDy[dir]) & 0xF) == 1))
+                {
+                    PixelDarken(px + DoorDy[dir], py + DoorDx[dir], 6, 3);
+                    PixelDarken(px - DoorDy[dir], py - DoorDx[dir], 6, 3);
+                    break;
+                }
+            }
         }
     } //end class
-}//end namespace
+}

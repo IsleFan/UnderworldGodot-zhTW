@@ -38,6 +38,12 @@ namespace Underworld
                     return true;//You can't use yourself
                 }
                 trap.ObjectThatStartedChain = ObjectUsed.index;
+                //UseObj: wands, food (and UW1's potions), UW2's potions and books handle traps and spells themselves or not at all
+                var checkTrapAndSpell = !(
+                    ((ObjectUsed.majorclass == 2) && (ObjectUsed.minorclass == 1) && (ObjectUsed.classindex >= 8))
+                    || ((ObjectUsed.majorclass == 2) && (ObjectUsed.minorclass == 3))
+                    || ((_RES == GAME_UW2) && (ObjectUsed.item_id >= 0xE1) && (ObjectUsed.item_id <= 0xE7))
+                    || ((ObjectUsed.majorclass == 4) && (ObjectUsed.minorclass == 3)));
                 //var obj = objList[index];
                 Debug.Print($"Object {ObjectUsed.majorclass}-{ObjectUsed.minorclass}-{ObjectUsed.classindex} {ObjectUsed.a_name}");
                 switch (ObjectUsed.majorclass)
@@ -91,7 +97,7 @@ namespace Underworld
                         }
                 }
                 //Check for use trigger on this action and try activate if so.
-                if (!UseTriggerHasBeenActivated)
+                if (!UseTriggerHasBeenActivated && checkTrapAndSpell)
                 {
                     trigger.TriggerObjectLink
                     (
@@ -116,7 +122,7 @@ namespace Underworld
                     }
                 }
                 //check for a spell
-                if (!SpellHasBeenCast)
+                if (!SpellHasBeenCast && checkTrapAndSpell)
                 {
                     if (ObjectUsed != null)
                     {
@@ -124,11 +130,8 @@ namespace Underworld
                         {
                             switch (ObjectUsed.majorclass)
                             {
-                                case 0:
-                                case 1:
-                                case 5:
-                                case 6:
-                                case 7://do not cast spell from these objects major classes
+                                case 1://(talking returns before this)
+                                case 6://decode_obj_spell: traps carry no spell to cast
                                     break;
                                 default:
                                     {
@@ -247,9 +250,17 @@ namespace Underworld
         public static bool UseItemCastSpell(uwObject[] objList, bool WorldObject, bool result, uwObject obj)
         {
             var spell = MagicEnchantment.GetSpellEnchantment(obj, objList);
-            if (spell != null)
-            {
-                MagicEnchantment.CastObjectSpell(obj, spell);
+            if ((spell != null) && spell.IsFlagBit2Set)
+            {//checkSpell: only a spell cast on use (id bit 11); the cooldown applies to a use from the inventory, and the
+             //player touching an unbroken wand in the world casts nothing
+                if (WorldObject && (obj.item_id >= 0x98) && (obj.item_id <= 0x9B))
+                {
+                    return false;
+                }
+                if (!MagicEnchantment.CastObjectSpell(obj, spell, cooldown: !WorldObject, fromTheObject: WorldObject))
+                {
+                    return true;//too soon: nothing cast, no charge spent
+                }
                 if (spell.LinkedSpellObject != null)
                 {
                     MagicEnchantment.DecrementSpellQuality(
@@ -269,6 +280,20 @@ namespace Underworld
         {
             switch (ObjectUsed.minorclass)
             {
+                case 0:
+                    {//UseUtil: skulls and bones (0xC2-0xC6) ask for a target; the plants 0xCE and 0xCF are eaten from the inventory
+                        switch (ObjectUsed.classindex)
+                        {
+                            case >= 2 and <= 6:
+                                return bones.Use(ObjectUsed, WorldObject);
+                            case 0xE:
+                            case 0xF:
+                                if (WorldObject)
+                                    return true;
+                                return Food.SpecialFoodCases(ObjectUsed, true);
+                        }
+                        break;
+                    }
                 case 1:
                     {//some misc items                    
                         switch (ObjectUsed.classindex)
@@ -277,6 +302,14 @@ namespace Underworld
                                 return anvil.Use(ObjectUsed, WorldObject);
                             case 8:
                                 return pole.Use(ObjectUsed, WorldObject);
+                            case 9://UW1 dead rotworm (0xD9), eaten from the inventory
+                                if (_RES != GAME_UW2)
+                                {
+                                    if (WorldObject)
+                                        return true;
+                                    return Food.SpecialFoodCases(ObjectUsed, true);
+                                }
+                                break;
                         }
                         break;
                     }
@@ -288,22 +321,12 @@ namespace Underworld
                             {
                                 case 7://key of infinity
                                     return key_of_infinity.Use(ObjectUsed, WorldObject);
-                                case 0xE://plant (0xCE)
-                                case 0xF://plant (0xCF)
-                                    if (WorldObject)
-                                        return true;
-                                    return Food.SpecialFoodCases(ObjectUsed, true);
                             }
                         }
                         else
                         {
                             switch (ObjectUsed.classindex)
                             {
-                                case 0xE://thorny flower (0xCE)
-                                case 0xF://plant (0xCF)
-                                    if (WorldObject)
-                                        return true;
-                                    return Food.SpecialFoodCases(ObjectUsed, true);
                                 case > 0 and <= 7://a range of potions.
                                     return potion.Use(ObjectUsed, WorldObject);
                             }
@@ -381,30 +404,14 @@ namespace Underworld
         {
             switch (ObjectUsed.minorclass)
             {
-                case 0: //keys up to 0xE
+                case 0: //UseKey: the lockpick (0x101) and every key below the lock (0x10F) ask for a target; the lock does nothing
                     {
-                        if (_RES == GAME_UW2)
+                        switch (ObjectUsed.classindex)
                         {
-                            switch (ObjectUsed.classindex)
-                            {
-                                case 0:
-                                case 1:
-                                    //LOCKPICK and curious implement.
-                                    return lockpick.Use(ObjectUsed, WorldObject);
-                                case > 1 and <= 0xE://keys
-                                    return doorkey.Use(ObjectUsed, WorldObject);
-                            }
-                        }
-                        else
-                        {
-                            switch (ObjectUsed.classindex)
-                            {
-                                case 0:
-                                case > 1 and < 0xE://keys
-                                    return doorkey.Use(ObjectUsed, WorldObject);
-                                case 1://lockpick
-                                    return lockpick.Use(ObjectUsed, WorldObject);
-                            }
+                            case 1:
+                                return lockpick.Use(ObjectUsed, WorldObject);
+                            case < 0xF:
+                                return doorkey.Use(ObjectUsed, WorldObject);
                         }
                         break;
                     }
@@ -607,7 +614,14 @@ namespace Underworld
             {
                 case 9://fountain animo.
                     return fountain.FountainAnimoUse(ObjectUsed);
+                case 0xA://UW1 silver tree: using it in the world takes it back as a seed on the cursor (using_punt, place_new)
+                    if ((_RES != GAME_UW2) && WorldObject && (playerdat.ObjectInHand == -1))
+                    {
+                        return pickup.PickUp(ObjectUsed.index, UWTileMap.current_tilemap.LevelObjects);
+                    }
+                    break;
             }
+            //0xF, a door swinging (UseObj closes or opens it): doors here move in place and never become animation objects
             return false;
         }
 

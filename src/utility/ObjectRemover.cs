@@ -359,7 +359,7 @@ namespace Underworld
                         {
                             RemoveTriggersPointingAtTrap(
                                 ToRemove: trapObj.index,
-                                ptrListHead: tile.indexObjectList);
+                                ptrListHead: tile.Ptr + 2);//the tile's list head, not its first object
                             // RemoveTriggersPointingAtTrap(
                             //     listhead: tile.indexObjectList,
                             //     trapObjIndex: trapObj.index,
@@ -438,11 +438,22 @@ namespace Underworld
             }
         }
 
-        static void RemoveObjectAndChainFromLists(uwObject toRemove, long ptrListHead)
+        /// <summary>
+        /// Frees everything in an object, leaving the object itself (Obj_FreeChain on its link).
+        /// </summary>
+        public static void ClearContents(uwObject obj)
+        {
+            if (obj.is_quant == 0 && obj.link != 0)
+            {
+                ClearLinkedList(obj.PTR + 6);
+            }
+        }
+
+        public static void RemoveObjectAndChainFromLists(uwObject toRemove, long ptrListHead)
         {
             if (toRemove.is_quant == 0 && toRemove.link != 0)
             {
-                ClearLinkedList(toRemove.link);
+                ClearLinkedList(toRemove.PTR + 6);//its link field, not the index it holds
             }
             if (ptrListHead != 0)
             {
@@ -566,9 +577,9 @@ namespace Underworld
                     }
                 }
                 //handle timer triggers
-                if (triggerObjectDat.triggertype(TriggerHeadObj.item_id) == (int)triggerObjectDat.triggertypes.TIMER)
+                if ((_RES == GAME_UW2) && (triggerObjectDat.triggertype(TriggerHeadObj.item_id) == (int)triggerObjectDat.triggertypes.TIMER))
                 {
-                    Debug.Print("Special handling for deleting timer triggers");
+                    timers.RemoveTimerTrigger(TriggerHeadObj.index);
                 }
             }
         }
@@ -581,6 +592,7 @@ namespace Underworld
             {
                 //get the next of the object
                 var NextObject = GetLinkNextObject(Obj.PTR + 4); //get the next object.
+                var removed = false;
 
                 if (Obj.IsTrigger)
                 {
@@ -590,7 +602,7 @@ namespace Underworld
                         {
                             if (triggerObjectDat.triggertype(Obj.item_id) == 0xA)
                             {
-                                Debug.Print("TODO special handling for deleting timer triggers.");
+                                timers.RemoveTimerTrigger(Obj.index);
                             }
                         }
                         //unlink object and replace with it's next
@@ -599,7 +611,8 @@ namespace Underworld
                         DataLoader.setAt16(UWTileMap.current_tilemap.lev_ark_block.Data, (int)ptrListHead, (int)tmp);
                         Obj.link = 0;
                         ObjectFreeLists.ReleaseFreeObject(Obj);
-
+                        RemoveTrapFlags--;
+                        removed = true;
                     }
                 }
 
@@ -613,7 +626,10 @@ namespace Underworld
                     }
                 }
 
-                ptrListHead = Obj.PTR + 4; //set to the int16 that contains the next value.
+                if (!removed)
+                {//after a removal the next object has taken its place behind the same link (kill_triggers)
+                    ptrListHead = Obj.PTR + 4; //set to the int16 that contains the next value.
+                }
                 Obj = NextObject;
             }
         }
@@ -787,6 +803,46 @@ namespace Underworld
                 }
             }
             return false;
+        }
+
+        /// <summary>
+        /// Deletes up to count objects, with what they hold, from the tiles more than 10 - range tiles from the player
+        /// (taxicab distance), row by row and each tile's list in order, as culling at that range allows
+        /// (Obj_GarbageCollect). Sleep calls it with range 1 for 20 objects. Returns how many went.
+        /// </summary>
+        public static int GarbageCollect(int range, int count)
+        {
+            var px = playerdat.playerObject.tileX;
+            var py = playerdat.playerObject.tileY;
+            var freed = 0;
+            for (int y = 0; y < 64; y++)
+            {
+                var dy = System.Math.Abs(py - y);
+                for (int x = 0; x < 64; x++)
+                {
+                    if (dy + System.Math.Abs(px - x) <= 10 - range)
+                    {
+                        continue;
+                    }
+                    var index = UWTileMap.current_tilemap.Tiles[x, y].indexObjectList;
+                    while (index > 0)
+                    {
+                        var obj = UWTileMap.current_tilemap.LevelObjects[index];
+                        index = obj.next;
+                        if ((obj.index != 1) && ObjectCullingTest(obj, range))
+                        {
+                            ClearContents(obj);
+                            DeleteObjectFromTile_DEPRECIATED(x, y, obj.index);
+                            freed++;
+                            if (freed >= count)
+                            {
+                                return freed;
+                            }
+                        }
+                    }
+                }
+            }
+            return freed;
         }
 
         /// <summary>

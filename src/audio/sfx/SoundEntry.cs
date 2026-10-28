@@ -12,8 +12,12 @@ public readonly record struct SoundEntry(
     byte PatchNum,      // TVFX patch number (bank=1 for SFX).
     byte Note,          // MIDI note — used by MT-32 backend; TVFX engine ignores it.
     byte Velocity,      // 0..127, clamped on trigger after any per-call offset.
-    ushort DurationWord // Duration word from SOUNDS.DAT bytes 3..4, big-endian in both
+    ushort DurationWord,// Duration word from SOUNDS.DAT bytes 3..4, big-endian in both
                         // games (SoundsDatLoader). The voice's length in 1/256 s, counted
                         // down at 16 Hz after a divide by 16 (seg014_F69 etc.).
                         // 0xFFFF = infinite (caller stops externally).
+    bool Digi = true,   // UW2 byte 5: the effect has a .VOC; without it the original plays the
+                        // MIDI patch even when an SPnn.VOC exists (SOUND.C play_effect). UW1 has none.
+    int Priority = 0    // UW2 bytes 6 and 7, low + high * 200 (read_fx_data): with the sound's volume,
+                        // whether it may take the digital channel from the sound playing (digi_fx_play).
 );

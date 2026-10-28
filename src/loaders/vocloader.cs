@@ -87,10 +87,11 @@ namespace Underworld
                                 addptr += 3;
                                 Result.FreqDivisor = buffer[addptr++];
                                 Result.Codec = buffer[addptr++];
-                                //then sound data.
-                                int ubound = addptr + BlockSize;
+                                //then sound data: the block's size counts the two bytes above, so reading BlockSize bytes took in the
+                                //terminator (0, a full scale spike once centred), a click at the end of every sample
+                                int ubound = addptr + BlockSize - 2;
                                 int OutPtr = 0;
-                                Result.AudioBuffer = new byte[BlockSize]; //What would happen here if there were more than 1 audio block. Should I resize the array if already existing
+                                Result.AudioBuffer = new byte[BlockSize - 2]; //What would happen here if there were more than 1 audio block. Should I resize the array if already existing
                                 while ((addptr < ubound) && (addptr < buffer.Length))
                                 {
                                     Result.AudioBuffer[OutPtr++] = ((byte)(buffer[addptr++] - 128));

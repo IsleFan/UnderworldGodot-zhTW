@@ -12,8 +12,8 @@ namespace Underworld
 
             playerdat.SetQuest(54,1);
             playerdat.IncrementXClock(15);
-            if (isEnteringLevel)
-            {
+            if (!isEnteringLevel)
+            {//the schedules catch up, unless the player is changing level (Killorn_just_crashed)
                 scd.ProcessSCDArk(1);
             }
         }

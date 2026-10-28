@@ -43,6 +43,7 @@ namespace Underworld
                                     {
                                         implemented = true;
                                         a_teleport_trap.Activate(
+                                                character: character,
                                                 trapObj: trapObj,
                                                 objList: objList);
                                         break;
@@ -114,11 +115,14 @@ namespace Underworld
                                 case 8://door trap
                                     {
                                         implemented = true;
-                                        a_door_trap.Activate(
+                                        if (a_door_trap.Activate(
                                             triggerX: triggerX,
                                             triggerY: triggerY,
                                             trapObj: trapObj,
-                                            objList: objList);
+                                            objList: objList))
+                                        {
+                                            triggerNextIndex = 0;
+                                        }
                                         break;
                                     }
                                 case 0x9: //6-0-9
@@ -301,37 +305,35 @@ namespace Underworld
             {
                 Debug.Print($"Unknown/unimplemented Trap Class {trapObj.majorclass} {trapObj.minorclass} {trapObj.classindex} {trapObj.a_name} i:{trapObj.index} Q:{trapObj.quality}");
             }
-            else
+            //the chain goes on whatever the trap was (UseTrap); only the traps that end it clear triggerNextIndex
+            if (triggerNextIndex != 0)
             {
-                if (triggerNextIndex != 0)
+                var triggerNextObject = objList[triggerNextIndex];
+                if (triggerNextObject != null)
                 {
-                    var triggerNextObject = objList[triggerNextIndex];
-                    if (triggerNextObject != null)
+                    if (triggerNextObject.majorclass == 6)//only trigger next a trap/trigger.
                     {
-                        if (triggerNextObject.majorclass == 6)//only trigger next a trap/trigger.
+                        switch (triggerNextObject.minorclass)
                         {
-                            switch (triggerNextObject.minorclass)
-                            {
-                                case 0:
-                                case 1://traps
-                                    ActivateTrap(
-                                        character: character,
-                                        trapObj: triggerNextObject,
-                                        triggerX: triggerX,
-                                        triggerY: triggerY,
-                                        ObjectUsed: ObjectUsed,
-                                        objList: objList); //am i right re-using the original trigger?
-                                    break;
-                                case 2:
-                                case 3://triggers
-                                    trigger.RunTrigger(character: character,
-                                        ObjectUsed: ObjectUsed,
-                                        TriggerObject: triggerNextObject,
-                                        triggerType: (int)triggerObjectDat.triggertypes.ALL,
-                                        objList: objList);
-                                    break;
+                            case 0:
+                            case 1://traps
+                                ActivateTrap(
+                                    character: character,
+                                    trapObj: triggerNextObject,
+                                    triggerX: triggerX,
+                                    triggerY: triggerY,
+                                    ObjectUsed: ObjectUsed,
+                                    objList: objList); //am i right re-using the original trigger?
+                                break;
+                            case 2:
+                            case 3://triggers
+                                trigger.RunTrigger(character: character,
+                                    ObjectUsed: ObjectUsed,
+                                    TriggerObject: triggerNextObject,
+                                    triggerType: (int)triggerObjectDat.triggertypes.ALL,
+                                    objList: objList);
+                                break;
 
-                            }
                         }
                     }
                 }

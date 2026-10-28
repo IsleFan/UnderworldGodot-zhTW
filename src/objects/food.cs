@@ -15,6 +15,14 @@ namespace Underworld
             {
                 return true; // suppress any do not use message.
             }
+            if ((obj.index == playerdat.ObjectInHand) && (obj.ObjectQuantity > 1))
+            {//UseFood: a stack on the cursor cannot be eaten (UW1 says so)
+                if (_RES != GAME_UW2)
+                {
+                    uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, 0x77));
+                }
+                return true;
+            }
 
             if (_RES == GAME_UW2)
             {
@@ -58,8 +66,9 @@ namespace Underworld
                     case 7:// some_popcorn&bunches of popcorn
 
                     case 9:// a_toadstool
-                        EatFood(obj, !WorldObject); break;
+                        EatToadstool(obj, !WorldObject); break;
                     case 0xA:// a_bottle of ale&bottles of ale
+                        DrinkLiquid(obj, !WorldObject); break;
                     case 0xB:// a_red potion
                     case 0xC:// a_green potion
                         potion.QuaffPotion(obj, !WorldObject);
@@ -115,11 +124,10 @@ namespace Underworld
         /// <param name="obj"></param>
         private static void TasteDescriptionString(uwObject obj)
         {
-            var objname = "That " + GameStrings.GetObjectNounUW(obj.item_id, 1);
+            var objname = "That " + GameStrings.GetName(obj.item_id, article: false, plural: false);//get_name(0, 0)
             // Build the string for the taste description.
-            var r = new Random();
-            //Taste string
-            var taste = (obj.quality + r.Next(0, 0x14)) >> 4;
+            //Taste string: (rand() * 20 / 0x8000 + quality) >> 4
+            var taste = (obj.quality + Rng.r.NextScaled(0x14)) >> 4;
             if (taste > 4) { taste = 4; }
 
             //;  tasted putrid. \n
@@ -147,7 +155,10 @@ namespace Underworld
         /// </summary>
         private static void PlayEatingSounds()
         {
-           
+            if (_RES != GAME_UW2)
+            {//UW1 eats silently
+                return;
+            }
             if (playerdat.play_hunger >= 192)
             {
                 Debug.Print("Play Sound Effect 0x25 (eating)");
@@ -180,8 +191,7 @@ namespace Underworld
             {
                 switch (foodItemId)
                 {
-                    case 0xB0://piece of meat
-                    case 0xB1:
+                    case 0xB0://piece of meat (only this one leaves a bone)
                         leftOvers = 0xC5; break;
                     case 0xBA://candle
                         leftOvers = 0xD2; break;
@@ -211,38 +221,52 @@ namespace Underworld
         /// <param name="obj"></param>
         /// <param name="UsedFromInventory"></param>
         static void DrinkLiquid(uwObject obj, bool UsedFromInventory)
-        {
-            var nutrition = -foodObjectDat.nutrition(obj.item_id);
-            //play drinking sound.
-            UWsoundeffects.PlaySoundEffectAtAvatar(0x1E, 0x40, 0);
-            //intoxication change is -nutrition
-            playerdat.intoxication += (nutrition);
-            //do a strength skill check against drunkeness
-            var result = playerdat.SkillCheck(playerdat.STR, playerdat.intoxication);
-            //print message base on the skill check
-            switch (result)
+        {//UseFood with a negative nutrition: the taste line, then alcohol only for -0x7F < nutrition < -1 (not water)
+            var nutrition = foodObjectDat.nutrition(obj.item_id);
+            if (_RES == GAME_UW2)
             {
-                case playerdat.SkillCheckResult.CritFail:
-                    {
-                        sleep.Sleep(-2);
-                        if (playerdat.play_hp > 0)
-                        {
-                            uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, 0x102));// You wake feeling somewhat unstable but better
+                UWsoundeffects.PlaySoundEffectAtAvatar(0x1E, 0x40, 0);
+            }
+            //taste: UW2 0xFC water, 0xFD wine, 0xFE ale; UW1 0xED water, 0xEE port, 0xEF ale
+            int taste;
+            if (_RES == GAME_UW2)
+            {
+                taste = obj.item_id == 0xBB ? 0xFE : obj.item_id == 0xBD ? 0xFD : 0xFC;
+            }
+            else
+            {
+                taste = obj.item_id == 0xBA ? 0xEF : obj.item_id == 0xBE ? 0xEE : 0xED;
+            }
+            uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, taste));
+            if ((nutrition < -1) && (nutrition > -0x7F))
+            {
+                playerdat.intoxication = System.Math.Min(playerdat.intoxication - nutrition, 0x3F);//to at most 0x3F
+                //a strength check against how drunk
+                switch (playerdat.SkillCheck(playerdat.STR, playerdat.intoxication))
+                {
+                    case playerdat.SkillCheckResult.CritFail:
+                        {//As the alcohol hits you, you stumble and collapse into sleep.
+                            uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, _RES == GAME_UW2 ? 0x100 : 0xF1));
+                            sleep.Sleep(-2);
+                            if (playerdat.play_hp > 0)
+                            {//You wake feeling somewhat unstable but better
+                                uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, _RES == GAME_UW2 ? 0x102 : 0xF3));
+                                motion.SetScreenShake(TypeOfShake: 0x40, duration: (byte)(0xA + (playerdat.intoxication / 6)));
+                            }
+                            break;
                         }
-                        motion.SetScreenShake (TypeOfShake: 0x40, duration: (byte)(0xA + (playerdat.intoxication / 6)));
-                        break;
-                    }
-                case playerdat.SkillCheckResult.CritSucess:
-                    {//The drink makes you feel a little better for now.
-                        uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, 0x101));
-                        playerdat.play_hp += 2;
-                        break;
-                    }
-                case playerdat.SkillCheckResult.Fail:
-                    {
-                        motion.SetScreenShake (TypeOfShake: 0x40, duration: (byte)(0xA + (playerdat.intoxication / 6)));
-                        break;
-                    }
+                    case playerdat.SkillCheckResult.CritSucess:
+                        {//The drink makes you feel a little better for now.
+                            uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, _RES == GAME_UW2 ? 0x101 : 0xF2));
+                            playerdat.play_hp = (byte)System.Math.Min(playerdat.play_hp + 2, playerdat.max_hp);
+                            break;
+                        }
+                    case playerdat.SkillCheckResult.Fail:
+                        {
+                            motion.SetScreenShake(TypeOfShake: 0x40, duration: (byte)(playerdat.intoxication / 6));
+                            break;
+                        }
+                }
             }
             var foodItemID = obj.item_id;
             ObjectCreator.Consume(obj, UsedFromInventory);
@@ -253,16 +277,43 @@ namespace Underworld
         }
 
         /// <summary>
+        /// UW1 toadstool: taste 0xE7, then poison to at least 4, or 2 more up to 0xD.
+        /// </summary>
+        static void EatToadstool(uwObject obj, bool UsedFromInventory)
+        {
+            var nutrition = foodObjectDat.nutrition(obj.item_id);
+            if ((nutrition > 0) && (playerdat.play_hunger + nutrition > 255))
+            {
+                uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, GameStrings.str_you_are_too_full_to_eat_that_now_));
+                return;
+            }
+            if (nutrition > 0)
+            {
+                playerdat.ChangeHunger(nutrition);
+            }
+            uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, 0xE7));
+            if (playerdat.play_poison < 4)
+            {
+                playerdat.play_poison = 4;
+            }
+            else if (playerdat.play_poison < 0xD)
+            {
+                playerdat.play_poison = (byte)(playerdat.play_poison + 2);
+            }
+            ObjectCreator.Consume(obj, UsedFromInventory);
+        }
+
+        /// <summary>
         /// Applies the effects of mushroom consumption.
         /// </summary>
         /// <param name="obj"></param>
         /// <param name="UsedFromInventory"></param>
         static void TakeShrooms(uwObject obj, bool UsedFromInventory)
         {
-            var SkillCheckResult = playerdat.SkillCheck(playerdat.INT, 0x14);
-            var manachange = Rng.r.Next(1, 4) * (int)SkillCheckResult;
-
-            playerdat.ManaRegenChange(manachange);
+            if (playerdat.SkillCheck(playerdat.INT, 0x14) != playerdat.SkillCheckResult.Fail)
+            {//anything but a plain failure restores a flat 0 to 2 mana
+                playerdat.ManaRegenChange(-Rng.r.NextScaled(3));
+            }
 
             playerdat.shrooms = Math.Min(3, playerdat.shrooms + 1);
             uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, GameStrings.str_the_mushroom_causes_your_head_to_spin_and_your_vision_to_blur_));

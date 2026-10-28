@@ -10,17 +10,14 @@ namespace Underworld
         public static void Activate(uwObject trapObj, int character)
         {
             Debug.Print("UNTESTED HACK TRAP CHANGE GOAL. HAS LORD BRITISH TRIGGERED THIS?");
-            var linkedObj = UWTileMap.current_tilemap.LevelObjects[trapObj.link];            
-           
-            if (linkedObj.index != character)
+            //hack 62: when the trap links to whoever set it off, or link is 1, it is the one who set it off that gets the goal
+            if ((trapObj.link != character) && (trapObj.link != 1))
             {
-                if (trapObj.link !=1)
-                {
-                    return;
-                }
+                return;
             }
-            Debug.Print($"Running change goal to {trapObj.owner} on {linkedObj.a_name}");
-            linkedObj.npc_goal = (byte)trapObj.owner;
+            var triggeringObj = UWTileMap.current_tilemap.LevelObjects[character];
+            Debug.Print($"Running change goal to {trapObj.owner} on {triggeringObj.a_name}");
+            triggeringObj.npc_goal = (byte)trapObj.owner;
         }
     }
 }

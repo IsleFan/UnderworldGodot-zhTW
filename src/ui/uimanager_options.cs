@@ -283,6 +283,166 @@ namespace Underworld
         }
 
 
+        /// <summary>
+        /// A button of the options panel's top page: 0 save, 1 restore, 2 music, 3 sound, 4 detail, 5 return to the
+        /// game, 6 quit.
+        /// </summary>
+        static void PressMainOptionButton(long button)
+        {
+            switch (button)
+            {
+                case 0://switch to save menu
+                    {
+                        //check_save: not partway through an action (UW2 0xAE, UW1 0xA0), and not in the UW1 Ethereal Void (0x9F)
+                        var refusal = 0;
+                        if ((playerdat.ObjectInHand != -1) || (useon.CurrentItemBeingUsed != null))
+                        {
+                            refusal = UWClass._RES == UWClass.GAME_UW2 ? 0xAE : 0xA0;
+                        }
+                        if ((UWClass._RES != UWClass.GAME_UW2) && (playerdat.dungeon_level == 9))
+                        {
+                            refusal = 0x9F;
+                        }
+                        if (refusal != 0)
+                        {
+                            AddToMessageScroll(GameStrings.GetDisplayString(1, refusal));
+                            if (UWClass._RES == UWClass.GAME_UW2)
+                            {//save_opt: UW2 closes the options panel (gameopts_done); UW1 stays on its top page
+                                ReturnToGameFromOptions();
+                            }
+                            break;
+                        }
+                        CurrentGameOptionMenu = OptionMenus.SaveMenu;
+                        SetGameOptionsBackground((int)OptionButtonIndices.AllSaveButtons);
+                        SetGameOptionButtons(
+                            new int[]{
+                                (int)OptionButtonIndices.SaveGameOff,
+                                (int)OptionButtonIndices.Save1Off,
+                                (int)OptionButtonIndices.Save2Off,
+                                (int)OptionButtonIndices.Save3Off,
+                                (int)OptionButtonIndices.Save4Off,
+                                (int)OptionButtonIndices.CancelOff,
+                                -1});
+                        listsaves();
+                        break;
+                    }
+                case 1://switch to restore menu
+                    {
+                        CurrentGameOptionMenu = OptionMenus.RestoreMenu;
+                        SetGameOptionsBackground((int)OptionButtonIndices.AllSaveButtons);
+                        SetGameOptionButtons(
+                            new int[]{
+                                (int)OptionButtonIndices.RestoreGameLabel,
+                                (int)OptionButtonIndices.Save1Off,
+                                (int)OptionButtonIndices.Save2Off,
+                                (int)OptionButtonIndices.Save3Off,
+                                (int)OptionButtonIndices.Save4Off,
+                                (int)OptionButtonIndices.CancelOff,
+                                -1});
+                        listsaves();
+                        break;
+                    }
+                case 2: // switch to music options
+                    {
+                        CurrentGameOptionMenu = OptionMenus.MusicMenu;
+                        SetGameOptionsBackground((int)OptionButtonIndices.MusicButtons);
+                        if (playerdat.MusicEnabled)
+                        {
+                            SetGameOptionButtons(new int[]{
+                                (int)OptionButtonIndices.MusicIsOnLabel,
+                                (int)OptionButtonIndices.TurnMusicLabel,
+                                (int)OptionButtonIndices.OnButtonOn,
+                                (int)OptionButtonIndices.OffButtonOff,
+                                (int)OptionButtonIndices.DoneOff,
+                                -1,-1 });
+                        }
+                        else
+                        {
+                            SetGameOptionButtons(new int[]{
+                                (int)OptionButtonIndices.MusicIsOffLabel,
+                                (int)OptionButtonIndices.TurnMusicLabel,
+                                (int)OptionButtonIndices.OnButtonOff,
+                                (int)OptionButtonIndices.OffButtonOn,
+                                (int)OptionButtonIndices.DoneOff,
+                                -1,-1 });
+                        }
+
+                        break;
+                    }
+                case 3: // switch to sound options
+                    {
+                        CurrentGameOptionMenu = OptionMenus.SoundMenu;
+                        SetGameOptionsBackground((int)OptionButtonIndices.MusicButtons);
+                        if (playerdat.SoundEffectsEnabled)
+                        {
+                            SetGameOptionButtons(new int[]{
+                                (int)OptionButtonIndices.SoundIsOnLabel,
+                                (int)OptionButtonIndices.TurnSoundLabel,
+                                (int)OptionButtonIndices.OnButtonOn,
+                                (int)OptionButtonIndices.OffButtonOff,
+                                (int)OptionButtonIndices.DoneOff,
+                                -1,-1 });
+                        }
+                        else
+                        {
+                            SetGameOptionButtons(new int[]{
+                                (int)OptionButtonIndices.SoundIsOffLabel,
+                                (int)OptionButtonIndices.TurnSoundLabel,
+                                (int)OptionButtonIndices.OnButtonOff,
+                                (int)OptionButtonIndices.OffButtonOn,
+                                (int)OptionButtonIndices.DoneOff,
+                                -1,-1 });
+                        }
+
+                        break;
+                    }
+                case 4: //detail options.
+                    {
+                        SetupDetailMenu();
+                        break;
+                    }
+                case 5: // return to game
+                    {
+                        ReturnToGameFromOptions();
+                        break;
+                    }
+                case 6://quit game
+                    {
+                        CurrentGameOptionMenu = OptionMenus.ConfirmQuit;
+                        SetGameOptionsBackground((int)OptionButtonIndices.QuitGame);
+                        SetGameOptionButtons(
+                            new int[]{
+                                -1,
+                                -1,
+                                (int)OptionButtonIndices.YesOff,
+                                (int)OptionButtonIndices.NoOff,
+                                -1,
+                                -1,
+                                -1});
+                        break;
+                    }
+            }
+        }
+
+        /// <summary>
+        /// The Ctrl shortcuts (do_option_shortcut): open the options panel and press button on its top page, refused
+        /// partway through an action (UW2 0xAE, UW1 0xA0).
+        /// </summary>
+        public static void OptionShortcut(int button)
+        {
+            if (CurrentGameMode != GameModes.GAME || InteractionMode == InteractionModes.ModeOptions)
+            {
+                return;
+            }
+            if ((playerdat.ObjectInHand != -1) || (UsageMode != 0))
+            {
+                AddToMessageScroll(GameStrings.GetDisplayString(1, UWClass._RES == UWClass.GAME_UW2 ? 0xAE : 0xA0));
+                return;
+            }
+            InteractionModeToggle(InteractionModes.ModeOptions);
+            PressMainOptionButton(button);
+        }
+
         private void _on_game_options_input(InputEvent @event, long extra_arg_0)
         {
             // These buttons get gui_input straight from the scene, so the usual input block
@@ -292,125 +452,75 @@ namespace Underworld
 
             if (@event is InputEventMouseButton eventMouseButton && eventMouseButton.Pressed)
             {
+                PressOptionButton(extra_arg_0);
+            }
+        }
+
+        /// <summary>The options panel's highlighted button for the keys (busywaiting_new_options).</summary>
+        static int OptionHighlight = 0;
+
+        /// <summary>
+        /// The options panel's keys: up, left (and the keypad's) move the highlight back, space, right and down on; Enter
+        /// presses it; Escape returns to the game. Returns whether the panel took the key.
+        /// </summary>
+        public static bool OptionsPanelKey(InputEventKey key)
+        {
+            if (InteractionMode != InteractionModes.ModeOptions || SaveDescriptionPromptActive || !key.Pressed)
+            {
+                return false;
+            }
+            var visible = new System.Collections.Generic.List<int>();
+            for (int i = 0; i <= GameOptionButtons.GetUpperBound(0); i++)
+            {
+                if (GameOptionButtons[i].Visible)
+                {
+                    visible.Add(i);
+                }
+            }
+            switch (key.Keycode)
+            {
+                case Key.Up: case Key.Left: case Key.Kp8: case Key.Kp4:
+                case Key.Space: case Key.Right: case Key.Down: case Key.Kp2: case Key.Kp6:
+                    if (visible.Count > 0)
+                    {
+                        var back = key.Keycode == Key.Up || key.Keycode == Key.Left || key.Keycode == Key.Kp8 || key.Keycode == Key.Kp4;
+                        var at = System.Math.Max(0, visible.IndexOf(OptionHighlight));
+                        at = (at + (back ? visible.Count - 1 : 1)) % visible.Count;
+                        HighlightOptionButton(visible[at]);
+                    }
+                    return true;
+                case Key.Enter:
+                case Key.KpEnter:
+                    if (visible.Contains(OptionHighlight))
+                    {
+                        instance.PressOptionButton(OptionHighlight);
+                    }
+                    return true;
+                case Key.Escape:
+                    instance.scroll.Clear();
+                    ReturnToGameFromOptions();
+                    return true;
+            }
+            return false;
+        }
+
+        static void HighlightOptionButton(int index)
+        {
+            OptionHighlight = index;
+            for (int i = 0; i <= GameOptionButtons.GetUpperBound(0); i++)
+            {//the lit picture is not used here: the highlighted button is drawn brighter
+                GameOptionButtons[i].Modulate = i == index ? new Color(1.3f, 1.3f, 1.3f) : Colors.White;
+            }
+        }
+
+        void PressOptionButton(long extra_arg_0)
+        {
+            {
                 switch (CurrentGameOptionMenu)
                 {
                     case OptionMenus.MainOptionMenu:
-                        {   //at main menu. will switch to menu specified by arg0
-                            switch (extra_arg_0)
-                            {
-                                case 0://switch to save menu
-                                    {
-                                        CurrentGameOptionMenu = OptionMenus.SaveMenu;
-                                        SetGameOptionsBackground((int)OptionButtonIndices.AllSaveButtons);
-                                        SetGameOptionButtons(
-                                            new int[]{
-                                                (int)OptionButtonIndices.SaveGameOff,
-                                                (int)OptionButtonIndices.Save1Off,
-                                                (int)OptionButtonIndices.Save2Off,
-                                                (int)OptionButtonIndices.Save3Off,
-                                                (int)OptionButtonIndices.Save4Off,
-                                                (int)OptionButtonIndices.CancelOff,
-                                                -1});
-                                        listsaves();
-                                        break;
-                                    }
-                                case 1://switch to restore menu
-                                    {
-                                        CurrentGameOptionMenu = OptionMenus.RestoreMenu;
-                                        SetGameOptionsBackground((int)OptionButtonIndices.AllSaveButtons);
-                                        SetGameOptionButtons(
-                                            new int[]{
-                                                (int)OptionButtonIndices.RestoreGameLabel,
-                                                (int)OptionButtonIndices.Save1Off,
-                                                (int)OptionButtonIndices.Save2Off,
-                                                (int)OptionButtonIndices.Save3Off,
-                                                (int)OptionButtonIndices.Save4Off,
-                                                (int)OptionButtonIndices.CancelOff,
-                                                -1});
-                                        listsaves();
-                                        break;
-                                    }
-                                case 2: // switch to music options
-                                    {
-                                        CurrentGameOptionMenu = OptionMenus.MusicMenu;
-                                        SetGameOptionsBackground((int)OptionButtonIndices.MusicButtons);
-                                        if (playerdat.MusicEnabled)
-                                        {
-                                            SetGameOptionButtons(new int[]{
-                                                (int)OptionButtonIndices.MusicIsOnLabel,
-                                                (int)OptionButtonIndices.TurnMusicLabel,
-                                                (int)OptionButtonIndices.OnButtonOn,
-                                                (int)OptionButtonIndices.OffButtonOff,
-                                                (int)OptionButtonIndices.DoneOff,
-                                                -1,-1 });
-                                        }
-                                        else
-                                        {
-                                            SetGameOptionButtons(new int[]{
-                                                (int)OptionButtonIndices.MusicIsOffLabel,
-                                                (int)OptionButtonIndices.TurnMusicLabel,
-                                                (int)OptionButtonIndices.OnButtonOff,
-                                                (int)OptionButtonIndices.OffButtonOn,
-                                                (int)OptionButtonIndices.DoneOff,
-                                                -1,-1 });
-                                        }
-
-                                        break;
-                                    }
-                                case 3: // switch to sound options
-                                    {
-                                        CurrentGameOptionMenu = OptionMenus.SoundMenu;
-                                        SetGameOptionsBackground((int)OptionButtonIndices.MusicButtons);
-                                        if (playerdat.SoundEffectsEnabled)
-                                        {
-                                            SetGameOptionButtons(new int[]{
-                                                (int)OptionButtonIndices.SoundIsOnLabel,
-                                                (int)OptionButtonIndices.TurnSoundLabel,
-                                                (int)OptionButtonIndices.OnButtonOn,
-                                                (int)OptionButtonIndices.OffButtonOff,
-                                                (int)OptionButtonIndices.DoneOff,
-                                                -1,-1 });
-                                        }
-                                        else
-                                        {
-                                            SetGameOptionButtons(new int[]{
-                                                (int)OptionButtonIndices.SoundIsOffLabel,
-                                                (int)OptionButtonIndices.TurnSoundLabel,
-                                                (int)OptionButtonIndices.OnButtonOff,
-                                                (int)OptionButtonIndices.OffButtonOn,
-                                                (int)OptionButtonIndices.DoneOff,
-                                                -1,-1 });
-                                        }
-
-                                        break;
-                                    }
-                                case 4: //detail options.
-                                    {
-                                        SetupDetailMenu();
-                                        break;
-                                    }
-                                case 5: // return to game
-                                    {
-                                        ReturnToGameFromOptions();
-                                        break;
-                                    }
-                                case 6://quit game
-                                    {
-                                        CurrentGameOptionMenu = OptionMenus.ConfirmQuit;
-                                        SetGameOptionsBackground((int)OptionButtonIndices.QuitGame);
-                                        SetGameOptionButtons(
-                                            new int[]{
-                                                -1,
-                                                -1,
-                                                (int)OptionButtonIndices.YesOff,
-                                                (int)OptionButtonIndices.NoOff,
-                                                -1,
-                                                -1,
-                                                -1});
-                                        break;
-                                    }
-                            }
-
+                        {   //at main menu. will switch to menu specified by arg0 (UW2's buttons 5 and 6 are quit and return)
+                            PressMainOptionButton((UWClass._RES == UWClass.GAME_UW2) && (extra_arg_0 == 5 || extra_arg_0 == 6) ? 11 - extra_arg_0 : extra_arg_0);
                             break;
                         }
                     case OptionMenus.SaveMenu:
@@ -427,9 +537,10 @@ namespace Underworld
                                         BeginSaveDescription((int)extra_arg_0);
                                         break;
                                     }
-                                case 5://cancel and return to top
+                                case 5://cancel: back to the game (resume_play_opt), clearing the save list from the scroll
                                     {
-                                        ReturnToTopOptionsMenu();
+                                        instance.scroll.Clear();
+                                        ReturnToGameFromOptions();
                                         break;
                                     }
                             }
@@ -444,16 +555,28 @@ namespace Underworld
                                 case 3:
                                 case 4://try and restore game
                                     {
-                                        var path = System.IO.Path.Combine(SlotTransaction.SlotDirectory(UWClass.BasePath, (int)extra_arg_0), "LEV.ARK");
-                                        if (System.IO.File.Exists(path))
+                                        //DoSaveRest: a slot is used when it has a DESC (get_save_descs); RestoreGame prints
+                                        //"Restoring Game " and "..." after each of its four steps, then complete or failed
+                                        var slotDir = SlotTransaction.SlotDirectory(UWClass.BasePath, (int)extra_arg_0);
+                                        var uw2 = UWClass._RES == UWClass.GAME_UW2;
+                                        instance.scroll.Clear();
+                                        if (!System.IO.File.Exists(System.IO.Path.Combine(slotDir, "DESC")))
                                         {
-                                            JourneyOnwards($"SAVE{extra_arg_0}");
-                                            instance.scroll.Clear();
+                                            AddToMessageScroll(GameStrings.GetDisplayString(1, GameStrings.str_no_save_game_there_));
+                                        }
+                                        else if (!System.IO.File.Exists(System.IO.Path.Combine(slotDir, "LEV.ARK"))
+                                            || !System.IO.File.Exists(System.IO.Path.Combine(slotDir, "PLAYER.DAT")))
+                                        {
+                                            AddToMessageScroll(GameStrings.GetDisplayString(1, uw2 ? 0xB5 : 0xA6));//Restoring Game
+                                            AddToMessageScroll(GameStrings.GetDisplayString(1, uw2 ? 0xB1 : 0xA3));//Restore game failed.
                                         }
                                         else
                                         {
+                                            JourneyOnwards($"SAVE{extra_arg_0}");
                                             instance.scroll.Clear();
-                                            AddToMessageScroll(GameStrings.GetDisplayString(1, GameStrings.str_no_save_game_there_));
+                                            var dots = GameStrings.GetDisplayString(1, uw2 ? 0xB9 : 0xAA);
+                                            AddToMessageScroll(GameStrings.GetDisplayString(1, uw2 ? 0xB5 : 0xA6) + dots + dots + dots + dots);//Restoring Game ...
+                                            AddToMessageScroll(GameStrings.GetDisplayString(1, GameStrings.str_restore_game_complete_));//Restore game complete.
                                         }
                                         ReturnToGameFromOptions();
                                         if (UWClass._RES != UWClass.GAME_UW2)
@@ -463,9 +586,10 @@ namespace Underworld
                                         }
                                         break;
                                     }
-                                case 5://cancel and return to top
+                                case 5://cancel: back to the game (resume_play_opt), clearing the save list from the scroll
                                     {
-                                        ReturnToTopOptionsMenu();
+                                        instance.scroll.Clear();
+                                        ReturnToGameFromOptions();
                                         break;
                                     }
                             }
@@ -532,6 +656,7 @@ namespace Underworld
                                 case 3: //turn off
                                     {
                                         playerdat.SoundEffectsEnabled = false;
+                                        UWsoundeffects.KillAllEffects();//turn_fx(0)
                                         SetGameOptionButtons(new int[]{
                                             (int)OptionButtonIndices.SoundIsOffLabel,
                                             (int)OptionButtonIndices.TurnSoundLabel,
@@ -594,8 +719,8 @@ namespace Underworld
                                         GetTree().Quit();
                                     }
                                     break;
-                                case 3://cancel quit
-                                    ReturnToTopOptionsMenu();
+                                case 3://No: the options panel closes, back to the game (quit_do_opt)
+                                    ReturnToGameFromOptions();
                                     break;
                             }
                             break;
@@ -633,6 +758,7 @@ namespace Underworld
 
         public static void ReturnToGameFromOptions()
         {
+            HighlightOptionButton(-1);//no key highlight left over for the next time
             uimanager.CurrentGameMode = GameModes.GAME;
             if (UWClass._RES == UWClass.GAME_UW2)
             {
@@ -697,8 +823,9 @@ namespace Underworld
                     (int)OptionButtonIndices.MusicOff,
                     (int)OptionButtonIndices.SoundOff,
                     (int)OptionButtonIndices.DetailOff,
-                    (int)OptionButtonIndices.ReturnToGameOff,
-                    (int)OptionButtonIndices.QuitGameOff});
+                    //gameopts_buttongroup: UW1 return then quit, UW2 quit (button 5) then return (6)
+                    (int)(UWClass._RES == UWClass.GAME_UW2 ? OptionButtonIndices.QuitGameOff : OptionButtonIndices.ReturnToGameOff),
+                    (int)(UWClass._RES == UWClass.GAME_UW2 ? OptionButtonIndices.ReturnToGameOff : OptionButtonIndices.QuitGameOff)});
         }
 
         // ---- save description prompt ------------------------------------------------
@@ -991,6 +1118,39 @@ namespace Underworld
             string description = SaveDescription_Prompt.Commit();
             CloseSaveDescriptionField();
 
+            if (!LevArkWriter.UW2ObjectListsOkay())
+            {//Map_Save: ObjCrunch found the lists corrupted, so the player is asked (wyorn 0x96, "no" to begin with)
+                _ = Peaky.Coroutines.Coroutine.Run(ConfirmCorruptSave(slot, description), main.instance);
+                return;
+            }
+            SaveAndReport(slot, description);
+        }
+
+        static System.Collections.IEnumerator ConfirmCorruptSave(int slot, string description)
+        {
+            instance.TypedInput.Text = "No";
+            MessageDisplay.YesNoOption = "No";
+            MessageDisplay.WaitingForYesOrNo = true;
+            AddToMessageScroll($"{GameStrings.GetDisplayString(1, 0x96)}{{TYPEDINPUT}}", mode: MessageDisplay.MessageDisplayMode.TypedInput);
+            while (MessageDisplay.WaitingForYesOrNo)
+            {
+                yield return new Peaky.Coroutines.WaitOneFrame();
+            }
+            if (instance.TypedInput.Text.ToUpper() == "YES")
+            {
+                SaveAndReport(slot, description);
+            }
+            else
+            {//a "no" abandons the save
+                listsaves();
+                instance.scroll.Clear();
+                AddToMessageScroll(GameStringFormat.StripDisplayCodes(GameStrings.GetDisplayString(1, GameStrings.str_save_game_failed_)));
+                ReturnToGameFromOptions();
+            }
+        }
+
+        static void SaveAndReport(int slot, string description)
+        {
             int stringId;
             try
             {
@@ -1022,7 +1182,8 @@ namespace Underworld
 
             listsaves();
             instance.scroll.Clear();
-            AddToMessageScroll(GameStringFormat.StripDisplayCodes(GameStrings.GetDisplayString(1, GameStrings.str_save_game_failed_)));
+            //UW2 says "Save Game Aborted." (0xB4); UW1 reports the save failed
+            AddToMessageScroll(GameStringFormat.StripDisplayCodes(GameStrings.GetDisplayString(1, UWClass._RES == UWClass.GAME_UW2 ? 0xB4 : GameStrings.str_save_game_failed_)));
             ReturnToGameFromOptions();
         }
 
@@ -1042,6 +1203,10 @@ namespace Underworld
             // \2, a flat black in both games. See issue #82.
             string[] romannumerals = new string[] { "I", "II", "III", "IV" };
             instance.scroll.Clear();
+            //ShowSaveRest's heading: UW2 string 0x120, UW1 the same words written into the code
+            AddToMessageScroll(UWClass._RES == UWClass.GAME_UW2
+                ? GameStrings.GetDisplayString(1, 0x120)
+                : "\\6    " + (ZhText.Enabled ? ZhText.Compose("存檔說明") : "Save Game Descriptions"));
             for (int i = 1; i <= 4; i++)
             {
                 var path = System.IO.Path.Combine(SlotTransaction.SlotDirectory(UWClass.BasePath, i), "DESC");

@@ -49,9 +49,12 @@ namespace Underworld
                 case 0x19F://tym rune
                     if (usingObject.index == 1)
                     {
-                        var duration = 4 + Rng.r.Next(0xF);
-                        //set paralyse timer
+                        var duration = 4 + (Rng.r.Next(0x8000) & 0xF);//4 to 19
+                        //set paralyse timer, and the player stops dead
                         playerdat.ParalyseTimer = duration;
+                        motion.playerMotionParams.unk_6_x = 0;
+                        motion.playerMotionParams.unk_8_y = 0;
+                        motion.playerMotionParams.momentum_14 = 0;
                         uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, 0x163));//your limbs stiffen
                     }
                     else
@@ -59,7 +62,7 @@ namespace Underworld
                         //paralyse
                         if (usingObject.majorclass == 1)//npc only
                         {
-                            var duration = 64 + (Rng.r.Next(63) >> 2);
+                            var duration = (byte)(((Rng.r.Next(0x8000) & 0x3F) << 2) + 0x40);//kept in a byte, as the original's
                             SpellCasting.ApplyAIChangingSpell(
                                 targetObject: usingObject,
                                 newgoal: (byte)npc.npc_goals.npc_goal_petrified,

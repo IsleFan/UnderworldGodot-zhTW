@@ -8,7 +8,10 @@ namespace Underworld
         public static void Activate()
         {
             uwObject talkingDoor = talk.SpawnTemporaryTalker(whoami:25);
-            talk.Talk(talkingDoor, true);
+            if (talkingDoor != null)
+            {
+                talk.Talk(talkingDoor, true);
+            }
         }
 
 

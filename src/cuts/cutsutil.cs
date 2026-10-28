@@ -43,10 +43,10 @@ namespace Underworld
                 cmd.offset = addr_ptr;
                 cmd.frame = (int)Loader.getAt(data, addr_ptr, 16);
                 cmd.functionNo = (int)Loader.getAt(data, addr_ptr + 2, 16);
-                //int argCount =  // CutSceneCommand.GetArgumentCount(cmd.functionNo);
                 cmd.functionParams = new List<int>();
                 addr_ptr += 4;
-                for (int i = 0; i < cmd.NoOfParams; i++)
+                var argCount = CutSceneCommand.GetArgumentCount(cmd.functionNo, data, addr_ptr);
+                for (int i = 0; i < argCount; i++)
                 {
                     if(addr_ptr<data.Length)
                     {

@@ -274,7 +274,8 @@ namespace Underworld
         {
             TilesDiscoveredForExpGain = 0;
             GetTilesToRender();
-            if ((playerdat.play_level >= 0) && (playerdat.play_level < 16))
+            //no experience at character level 0, nor in UW1's Ethereal Void
+            if ((playerdat.play_level != 0) && (playerdat.play_level < 16) && ((_RES == GAME_UW2) || (playerdat.dungeon_level != 9)))
             {
                 int finalgain = 0;
 
@@ -432,14 +433,7 @@ namespace Underworld
                 else
                 {
                     //Seg019_DA7
-                    if (_RES == GAME_UW2)
-                    {
-                        var19AutoMapValueToSet = (byte)(RenderingTile_2F7C.tileType | TerrainDatLoader.GetTerrainDataBit67_unshifted(RenderingTile_2F7C));
-                    }
-                    else
-                    {
-                        var19AutoMapValueToSet = (byte)(RenderingTile_2F7C.tileType | (short)TerrainDatLoader.getTerrain(RenderingTile_2F7C.terrain));// GetTerrainDataBit67_unshifted(RenderingTile_2F7C));
-                    }
+                    var19AutoMapValueToSet = automaptileinfo.TileCode(RenderingTile_2F7C);
 
                 }
 
@@ -449,56 +443,59 @@ namespace Underworld
                 {
                     if ((RenderingTile_2F7C.indexObjectList != 0) && (MaybeTileShadeLevel_2F7A < 8))
                     {
-                        var bridge = objectsearch.FindMatchInTile(tileX: RenderingTile_2F7C.tileX, tileY: RenderingTile_2F7C.tileY, majorclass: 5, minorclass: 2, classindex: 4);
-                        if (bridge != null)
+                        //curautocode: each object drawn on the tile sets it, so the one drawn last wins. do_objsort draws a
+                        //tile's objects from the farthest to the nearest (a bridge or a door splitting them into its two
+                        //sides), so that is the marking object nearest the player. Invisible objects are not drawn (do_obj).
+                        var kind = 0;
+                        long nearest = long.MaxValue;
+                        var px = (playerdat.playerObject.tileX << 3) + playerdat.playerObject.xpos;
+                        var py = (playerdat.playerObject.tileY << 3) + playerdat.playerObject.ypos;
+                        var next = RenderingTile_2F7C.indexObjectList;
+                        while (next != 0)
                         {
-                            if (bridge.invis == 0)
+                            var o = UWTileMap.current_tilemap.LevelObjects[next];
+                            next = o.next;
+                            if (o.invis != 0)
                             {
-                                var textureindex = (bridge.enchantment << 3) | (int)bridge.flags;
-                                if (textureindex <= 2)
+                                continue;
+                            }
+                            var thisKind = 0;
+                            if ((o.majorclass == 5) && (o.minorclass == 2) && (o.classindex == 4))
+                            {//a bridge in one of its own textures (do_rect: flags below the model's texture count), not a floor texture
+                                if (((o.enchantment << 3) | (int)o.flags) < 2)
                                 {
-                                    var19AutoMapValueToSet |= (byte)(automaptileinfo.bridgedisplaytype << 4);
+                                    thisKind = automaptileinfo.KindBridge;
                                 }
+                            }
+                            else if ((o.majorclass == 5) && (o.minorclass == 2) && ((o.classindex == 0xE) || (o.classindex == 0xF)))
+                            {//a stairs texture: the level texture's terrain (UW2 its low 3 bits, UW1 the wall terrain word) is 3 or 4
+                                var terrain = TerrainDatLoader.Terrain[UWTileMap.current_tilemap.texture_map[o.owner]];
+                                terrain = _RES == GAME_UW2 ? terrain & 7 : terrain & 0xFF;
+                                if (terrain == 3 || terrain == 4)
+                                {
+                                    thisKind = automaptileinfo.KindStair;
+                                }
+                            }
+                            else if (((o.majorclass == 5) && (o.minorclass == 0)) || ((o.majorclass == 7) && (o.minorclass == 0) && (o.classindex == 0xF)))
+                            {//a door, secret doors included (do_door marks every door), or a moving door
+                                thisKind = automaptileinfo.KindDoor;
+                            }
+                            if (thisKind == 0)
+                            {
+                                continue;
+                            }
+                            long dx = (RenderingTile_2F7C.tileX << 3) + o.xpos - px;
+                            long dy = (RenderingTile_2F7C.tileY << 3) + o.ypos - py;
+                            var dist = dx * dx + dy * dy;
+                            if (dist <= nearest)
+                            {
+                                nearest = dist;
+                                kind = thisKind;
                             }
                         }
-                        else
+                        if (kind != 0)
                         {
-                            //check for tmap
-                            var tmap = objectsearch.FindMatchInTile(tileX: RenderingTile_2F7C.tileX, tileY: RenderingTile_2F7C.tileY, majorclass: 5, minorclass: 2, classindex: 0xE);
-                            if (tmap == null)
-                            {
-                                tmap = objectsearch.FindMatchInTile(tileX: RenderingTile_2F7C.tileX, tileY: RenderingTile_2F7C.tileY, majorclass: 5, minorclass: 2, classindex: 0xF);
-                            }
-                            if (tmap != null)
-                            {
-                                var terrain = TerrainDatLoader.GetTerrainDataBit012(tmap.owner);
-                                if ((terrain == automaptileinfo.stairdisplaytype))
-                                {
-                                    //placeholder I need to match the texture flag value with something that tells me it is a stairs down
-                                    var19AutoMapValueToSet |= (byte)(automaptileinfo.stairdisplaytype << 4);
-                                }
-                            }
-                            else
-                            {
-                                //check for door
-                                var door = objectsearch.FindMatchInTile(tileX: RenderingTile_2F7C.tileX, tileY: RenderingTile_2F7C.tileY, majorclass: 5, minorclass: 0, classindex: -1);
-                                if (door != null)
-                                {
-                                    if (door.classindex != 7) //don't show secret door
-                                    {
-                                        var19AutoMapValueToSet |= (byte)(automaptileinfo.doordisplaytype << 4);
-                                    }
-                                }
-                                else
-                                {
-                                    //check for moving door
-                                    door = objectsearch.FindMatchInTile(tileX: RenderingTile_2F7C.tileX, tileY: RenderingTile_2F7C.tileY, majorclass: 7, minorclass: 0, classindex: 0xF);
-                                    if (door != null)
-                                    {
-                                        var19AutoMapValueToSet |= (byte)(automaptileinfo.doordisplaytype << 4);
-                                    }
-                                }
-                            }
+                            var19AutoMapValueToSet |= automaptileinfo.KindBits(kind);
                         }
                     }
                     //Debug.Print($"Marking tile {RenderingTile_2F7C.tileX} {RenderingTile_2F7C.tileY} as {var19AutoMapValueToSet}");

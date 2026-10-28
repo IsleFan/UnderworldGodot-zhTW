@@ -260,6 +260,44 @@ namespace Underworld
             return LoadImageAt(index, true);
         }
 
+        /// <summary>
+        /// An image's palette indices as they are on disk (no HD art), uncompressed (type 4) or 4-bit run-length (type 8),
+        /// for drawing it the way the original does (pic_to_screen). False for another type or one that cannot be read.
+        /// </summary>
+        public bool RawImage(int index, out byte[] pixels, out int width, out int height)
+        {
+            pixels = null; width = 0; height = 0;
+            if (!ImageFileDataLoaded && !LoadImageFile())
+            {
+                return false;
+            }
+            long imageOffset = getAt(ImageFileData, (index * 4) + 3, 32);
+            if (imageOffset >= ImageFileData.GetUpperBound(0))
+            {
+                return false;
+            }
+            width = (int)getAt(ImageFileData, imageOffset + 1, 8);
+            height = (int)getAt(ImageFileData, imageOffset + 2, 8);
+            switch (getAt(ImageFileData, imageOffset, 8))
+            {
+                case 0x4://8 bit uncompressed
+                    pixels = new byte[width * height];
+                    System.Array.Copy(ImageFileData, imageOffset + 5, pixels, 0, System.Math.Min(pixels.Length, ImageFileData.Length - (imageOffset + 5)));
+                    return true;
+                case 0x8://4 bit run-length through an auxiliary palette
+                    {
+                        var auxPalIndex = (int)getAt(ImageFileData, imageOffset + 3, 8);
+                        var datalen = (int)getAt(ImageFileData, imageOffset + 4, 16);
+                        var nibbles = new byte[Mathf.Max(width * height * 2, (datalen + 5) * 2)];
+                        copyNibbles(ImageFileData, ref nibbles, datalen, imageOffset + 6);
+                        int[] aux = PaletteLoader.LoadAuxilaryPalIndices(Path.Combine(BasePath, "DATA", AuxPalPath), auxPalIndex);
+                        pixels = DecodeRLEBitmap(nibbles, datalen, width, height, 4, aux);
+                        return true;
+                    }
+            }
+            return false;
+        }
+
         public override ImageTexture LoadImageAt(int index, bool UseAlphaChannel)
         {
             if (ImageFileDataLoaded == false)

@@ -30,7 +30,7 @@ namespace Underworld
                     ThrownObject.is_quant = srcObject.is_quant;
                     ThrownObject.link = srcObject.link;
                     ThrownObject.flags_full = srcObject.flags_full;
-                    ThrownObject.quality = srcObject.quality;
+                    ThrownObject.npc_hp = (byte)srcObject.quality;//a mobile keeps a thrown object's quality as its hit points (restored on landing)
                     ThrownObject.owner = srcObject.owner;
                     ThrownObject.doordir = srcObject.doordir;
                     if (ThrownObject.majorclass != 5)
@@ -61,7 +61,7 @@ namespace Underworld
                     X0: ref x_ToSpawnIn,
                     Y0: ref y_toSpawnIn);
 
-                CannotFit = !motion.TestIfObjectFitsInTile(srcObject.item_id, 0, x_ToSpawnIn, y_toSpawnIn, playerdat.playerObject.zpos, 1, distance);
+                CannotFit = !motion.CanPlace(srcObject.item_id, 0, x_ToSpawnIn, y_toSpawnIn, playerdat.playerObject.zpos, true, distance);
                 if (CannotFit == false)
                 {
                     //object cannot fit at first tried position. Try and do it 3 units from player.
@@ -70,7 +70,7 @@ namespace Underworld
                         distance: 3,
                         X0: ref x_ToSpawnIn,
                         Y0: ref y_toSpawnIn);
-                    CannotFit = !motion.TestIfObjectFitsInTile(srcObject.item_id, 0, x_ToSpawnIn, y_toSpawnIn, playerdat.playerObject.zpos, 1, distance);
+                    CannotFit = !motion.CanPlace(srcObject.item_id, 0, x_ToSpawnIn, y_toSpawnIn, playerdat.playerObject.zpos, true, distance);
                 }
 
                 var tileX = x_ToSpawnIn >> 3; var tileY = y_toSpawnIn >> 3;
@@ -79,9 +79,21 @@ namespace Underworld
                 {
                     srcObject.xpos = (short)(x_ToSpawnIn & 7);
                     srcObject.ypos = (short)(y_toSpawnIn & 7);
-                    //add to tile
-                    srcObject.next = tile.indexObjectList;
-                    tile.indexObjectList = srcObject.index;
+                    //add to the end of the tile's list (Obj_AddEnd)
+                    srcObject.next = 0;
+                    if (tile.indexObjectList == 0)
+                    {
+                        tile.indexObjectList = srcObject.index;
+                    }
+                    else
+                    {
+                        var last = UWTileMap.current_tilemap.LevelObjects[tile.indexObjectList];
+                        while (last.next != 0)
+                        {
+                            last = UWTileMap.current_tilemap.LevelObjects[last.next];
+                        }
+                        last.next = srcObject.index;
+                    }
                     srcObject.tileX = tileX; srcObject.tileY = tileY;  
 
                     if (srcObject.OneF0Class == 9)
@@ -128,8 +140,8 @@ namespace Underworld
                         UWsoundeffects.PlaySoundEffectAtAvatar(UWsoundeffects.SoundEffectFail, 0x40, 0);    
                     }
                     else
-                    {
-                        UWsoundeffects.PlaySoundEffectAtAvatar(UWsoundeffects.SoundEffectLanding, 0x40, 0);
+                    {//UW1 put_down: 0xF a little quieter (-10)
+                        UWsoundeffects.PlaySoundEffectAtAvatar(UWsoundeffects.SoundEffectLanding, 0x40, unchecked((byte)-10));
                     }
                     
                 }
@@ -168,43 +180,51 @@ namespace Underworld
                 if (DoSpecialCases)
                 {
                     //Handle some special cases
-                    DropSpecialCases(obj.item_id);
+                    DropSpecialCases(HasOrIsMoonstone(obj));
                 }
                 return true;
             }
         }
 
-        public static void DropSpecialCases(int item_id)
+        /// <summary>
+        /// A dropped object that is or holds a moonstone (HasOrIsObj, tested before it left the cursor) records the level.
+        /// </summary>
+        public static void DropSpecialCases(bool hadMoonstone)
         {
+            if (!hadMoonstone)
+            {
+                return;
+            }
             if (_RES != GAME_UW2)
             {
-                switch (item_id)
-                {
-                    case 294://moonstone
-                        playerdat.SetMoonstone(0, playerdat.dungeon_level);
-                        break;
-                }
+                playerdat.SetMoonstone(0, playerdat.dungeon_level);
             }
             else
             {
-                switch (item_id)
-                {
-                    case 294://moonstone
-                        {
-                            for (int m = 0; m < 2; m++)
-                            {//Store the current level in the first free moonstone variable.
-                                if (playerdat.GetMoonstone(m) == 0)
-                                {
-                                    playerdat.SetMoonstone(m, playerdat.dungeon_level);
-                                    break;
-                                }
-                            }
-                            break;
-                        }
+                for (int m = 0; m < 2; m++)
+                {//Store the current level in the first free moonstone variable.
+                    if (playerdat.GetMoonstone(m) == 0)
+                    {
+                        playerdat.SetMoonstone(m, playerdat.dungeon_level);
+                        break;
+                    }
                 }
             }
         }
 
+
+        /// <summary>
+        /// EncumCheck: too heavy when the carried weight plus this goes past the maximum ("That is too heavy for you to pick up.").
+        /// </summary>
+        static bool TooHeavy(int mass)
+        {
+            if (playerdat.WeightCarried + mass > playerdat.WeightMax)
+            {
+                uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1,GameStrings.str_that_is_too_heavy_for_you_to_pick_up_));
+                return true;
+            }
+            return false;
+        }
 
         public static bool CanBePickedUpOverrides(int item_id)
         {
@@ -221,14 +241,6 @@ namespace Underworld
         public static bool PickUp(int index, uwObject[] objList, bool WorldObject = true)
         {
             var objPicked = objList[index];
-            var ObjectMass = container.GetTotalMass(objectToWeight: objPicked, objList: UWTileMap.current_tilemap.LevelObjects, IgnoreNext: true);
-            if (playerdat.WeightCapacity < ObjectMass)
-            {
-                //Object is too heavy to pick up
-                uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1,GameStrings.str_that_is_too_heavy_for_you_to_pick_up_));
-                return false;
-            }
-            
 
             if (useon.CurrentItemBeingUsed != null)
             {
@@ -236,8 +248,8 @@ namespace Underworld
             }
             else
             {
-                if (!commonObjDat.CanBePickedUp(objPicked.item_id) && !CanBePickedUpOverrides(objPicked.item_id))
-                {//object cannot be picked up
+                if (!CanBePickedUpOverrides(objPicked.item_id) && (!commonObjDat.CanBePickedUp(objPicked.item_id) || !objPicked.IsStatic))
+                {//object cannot be picked up (nor anything in the mobile list, such as a missile in flight)
                     uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, GameStrings.str_you_cannot_pick_that_up_));
                     return false;
                 }
@@ -252,8 +264,11 @@ namespace Underworld
                 }
                 else
                 {
-                    //single instance object
-                    DoPickup(index, objList, objPicked);
+                    //single instance object: EncumCheck on it and all it holds
+                    if (!TooHeavy(container.GetTotalMass(objectToWeight: objPicked, objList: UWTileMap.current_tilemap.LevelObjects, IgnoreNext: true)))
+                    {
+                        DoPickup(index, objList, objPicked);
+                    }
                 }
             }
             return true;
@@ -269,9 +284,10 @@ namespace Underworld
         public static IEnumerator DoPickupQty(int index, uwObject[] objList, uwObject obj)
         {
             MessageDisplay.WaitingForTypedInput = true;
-            uimanager.instance.TypedInput.Text = obj.ObjectQuantity.ToString();
+            MessageDisplay.QuantityPrompt = obj.ObjectQuantity;
+            uimanager.instance.TypedInput.Text = "1";//AskHowMany offers one
+            MessageDisplay.TypedInitialPending = true;
             uimanager.instance.TypedInput.CaretColumn =uimanager.instance.TypedInput.Text.Length;
-            uimanager.instance.scroll.Clear();
             uimanager.AddToMessageScroll(ZhText.Enabled ? ZhText.Compose("要移動多少？{TYPEDINPUT}|") : "Move how many? {TYPEDINPUT}|");
 
             while (MessageDisplay.WaitingForTypedInput)
@@ -284,7 +300,10 @@ namespace Underworld
             {
                 if (result > 0)
                 {
-                    if (obj.ObjectQuantity <= result)
+                    if (TooHeavy(commonObjDat.mass(obj.item_id) * System.Math.Min(result, obj.ObjectQuantity)))
+                    {//EncumCheck on the amount chosen
+                    }
+                    else if (obj.ObjectQuantity <= result)
                     {//at least all of the stack is selected
                         DoPickup(index, objList, obj);
                     }
@@ -292,14 +311,23 @@ namespace Underworld
                     {
                         //if <quantity selected, split objects, pickup object of that quantity.
                         var newObjIndex = ObjectCreator.SpawnObjectInHand(obj.item_id); //spawning in hand is very handy here
+                        if (newObjIndex == 0)
+                        {//no free object on the level
+                            yield break;
+                        }
                         var newObj = UWTileMap.current_tilemap.LevelObjects[newObjIndex];
-                        //copy the bytes
+                        //copy the bytes of the stack (quality, owner, flags...)
                         for (int i =0; i<8; i++)
                         {
-                            newObj.DataBuffer[newObj.PTR+i] = obj.DataBuffer[newObj.PTR+i];
+                            newObj.DataBuffer[newObj.PTR+i] = obj.DataBuffer[obj.PTR+i];
                         }
+                        newObj.next = 0;
                         newObj.link = (short)result;//set the qty of the new object. assumes any isquant flags are set in the copybuffer operations.                  
                         obj.link = (short)(obj.link - result);//reduce the qty of the other object.
+                        if (newObj.owner != 0)
+                        {//the part taken is noticed like any pickup
+                            thief.FlagTheftToObjectOwner(newObj, 0);
+                        }
                     }
                     yield return true;
                 }
@@ -323,6 +351,13 @@ namespace Underworld
             //first handle some special cases
             PickupSpecialCases(obj);
 
+            //owners notice first (player_grabbed), then the pickup traps (release_3d)
+            if (obj.owner != 0)
+            {
+                Debug.Print($"Object Owner is {obj.owner}");
+                thief.FlagTheftToObjectOwner(obj, 0);
+            }
+
             //check for pickup triggers linked to this object
             trigger.TriggerObjectLink(
                     character: 1,
@@ -336,12 +371,6 @@ namespace Underworld
                     triggerY: obj.tileY,
 
                     objList: UWTileMap.current_tilemap.LevelObjects);
-
-            if (obj.owner != 0)
-            {
-                Debug.Print($"Object Owner is {obj.owner}");
-                thief.FlagTheftToObjectOwner(obj, 0);
-            }
 
             //player is trying to pick something up
             playerdat.ObjectInHand = index;
@@ -401,15 +430,52 @@ namespace Underworld
         /// Special events when objects are picked up and data needs to be updated.
         /// </summary>
         /// <param name="obj"></param>
+        public static bool HasOrIsMoonstone(uwObject obj)
+        {
+            if (obj.item_id == 294)
+            {
+                return true;
+            }
+            if ((obj.is_quant == 0) && (obj.link != 0))
+            {
+                var index = (int)obj.link;
+                while (index != 0)
+                {
+                    var content = UWTileMap.current_tilemap.LevelObjects[index];
+                    if (HasOrIsMoonstone(content))
+                    {
+                        return true;
+                    }
+                    index = content.next;
+                }
+            }
+            return false;
+        }
+
         private static void PickupSpecialCases(uwObject obj)
         {
+            if (HasOrIsMoonstone(obj))
+            {//HasOrIsObj: the moonstone itself or anything holding it
+                if (_RES != GAME_UW2)
+                {
+                    playerdat.SetMoonstone(0, 0);
+                }
+                else
+                {
+                    for (int m = 0; m < 2; m++)
+                    {//Clear the moonstone if it matches the current level.
+                        if (playerdat.GetMoonstone(m) == playerdat.dungeon_level)
+                        {
+                            playerdat.SetMoonstone(m, 0);
+                            break;//only do it for the first match.
+                        }
+                    }
+                }
+            }
             if (_RES != GAME_UW2)
             {
                 switch (obj.item_id)
                 {
-                    case 294://Moonstone
-                        playerdat.SetMoonstone(0, 0);
-                        break;
                     case 458://silver tree
                         silvertree.PickupTree(obj);
                         break;
@@ -419,18 +485,6 @@ namespace Underworld
             {
                 switch (obj.item_id)
                 {
-                    case 294://Moonstone
-                        {
-                            for (int m = 0; m < 2; m++)
-                            {//Clear the moonstone if it matches the current level.
-                                if (playerdat.GetMoonstone(m) == playerdat.dungeon_level)
-                                {
-                                    playerdat.SetMoonstone(m, 0);
-                                    break;//only do it for the first match.
-                                }
-                            }
-                            break;
-                        }
                     case 312://mors gotha's spellbook
                         {
                             if (obj.doordir == 1)

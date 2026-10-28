@@ -101,57 +101,60 @@ public class PositionalAudioTests
         Assert.Equal((byte)0, r.Vol);
     }
 
-    // Heading convention in these tests — per UW2 uw2_asm.asm:79427-79441:
-    //   heading8 is 8-bit, 0..255 full circle.
-    //   The pan formula applies 0x4000-(heading<<8) as a 90° rotation
-    //   before the sin/cos lookup (UW1_asm.asm:64777, uw2_asm.asm:79445).
-    //
-    // For facing heading=0 (the +X axis in game coords), a source at
-    // positive dY should pan to one side and negative dY to the other.
-    // The exact polarity is subject to the RE's "sin vs cos table
-    // ambiguity" (spec §Testing → sin/cos operand order). The tests
-    // assert SYMMETRY and THAT PAN MOVES OFF CENTRE, not the sign.
-    // In-game audible test resolves the sign.
+    // Heading convention — UW2 SOUND.C: the angle 0x4000 - (heading8 << 8) goes to
+    // cFstSinCos, which gives the sine a then the cosine b, and the side is
+    // (a * nx - ny * b) >> 8. At heading 0 the sine is 1 and the cosine 0, so the
+    // side is the source's x: the player faces along y, a source at +x is to one
+    // side and one at -x to the other. 0x7F * 0x7F >> 8 is 0x3F, so the full side is
+    // pan 1 (Miles' right), and the other -0x40 clamps to 0x7F.
 
     [Fact]
-    public void Pan_symmetric_about_source_on_axis()
+    public void Pan_is_centred_for_a_source_ahead_or_behind()
     {
-        // Source in front of the player — pan should be near centre.
-        var r = PositionalAudio.Sample(
+        var ahead = PositionalAudio.Sample(
+            srcX: 80, srcY: 80 + 16, playerX: 80, playerY: 80,
+            heading8: 0, baseVelocity: 0x50, volDelta: 0);
+        var behind = PositionalAudio.Sample(
+            srcX: 80, srcY: 80 - 16, playerX: 80, playerY: 80,
+            heading8: 0, baseVelocity: 0x50, volDelta: 0);
+        Assert.InRange(ahead.Pan, (byte)(0x40 - 4), (byte)(0x40 + 4));
+        Assert.InRange(behind.Pan, (byte)(0x40 - 4), (byte)(0x40 + 4));
+    }
+
+    [Fact]
+    public void Pan_goes_fully_to_the_side_of_a_source_beside_the_player()
+    {
+        var plusX = PositionalAudio.Sample(
             srcX: 80 + 16, srcY: 80, playerX: 80, playerY: 80,
             heading8: 0, baseVelocity: 0x50, volDelta: 0);
+        var minusX = PositionalAudio.Sample(
+            srcX: 80 - 16, srcY: 80, playerX: 80, playerY: 80,
+            heading8: 0, baseVelocity: 0x50, volDelta: 0);
+        Assert.Equal((byte)0x01, plusX.Pan);
+        Assert.Equal((byte)0x7F, minusX.Pan);
+    }
+
+    [Fact]
+    public void Turning_a_quarter_brings_the_side_source_ahead()
+    {
+        // heading8 0x40: the angle is 0, the sine 0 and the cosine 1, so the side is -y and a source at +x is centred.
+        var r = PositionalAudio.Sample(
+            srcX: 80 + 16, srcY: 80, playerX: 80, playerY: 80,
+            heading8: 0x40, baseVelocity: 0x50, volDelta: 0);
         Assert.InRange(r.Pan, (byte)(0x40 - 4), (byte)(0x40 + 4));
     }
 
     [Fact]
-    public void Pan_moves_off_centre_for_side_sources()
+    public void Turning_round_swaps_the_sides()
     {
-        // Source to one side: pan shifts distinctly off centre.
-        var left  = PositionalAudio.Sample(
-            srcX: 80, srcY: 80 + 16, playerX: 80, playerY: 80,
-            heading8: 0, baseVelocity: 0x50, volDelta: 0);
-        var right = PositionalAudio.Sample(
-            srcX: 80, srcY: 80 - 16, playerX: 80, playerY: 80,
-            heading8: 0, baseVelocity: 0x50, volDelta: 0);
-        Assert.NotEqual((byte)0x40, left.Pan);
-        Assert.NotEqual((byte)0x40, right.Pan);
-        // Mirror sources produce mirrored pans about 0x40.
-        Assert.Equal(left.Pan, (byte)(0x80 - right.Pan));
-    }
-
-    [Fact]
-    public void Pan_behaviour_under_heading_rotation()
-    {
-        // Rotating the player 180° should flip which side a fixed source pans to.
-        var at0   = PositionalAudio.Sample(
-            srcX: 80, srcY: 80 + 16, playerX: 80, playerY: 80,
+        var at0 = PositionalAudio.Sample(
+            srcX: 80 + 16, srcY: 80, playerX: 80, playerY: 80,
             heading8: 0x00, baseVelocity: 0x50, volDelta: 0);
         var at180 = PositionalAudio.Sample(
-            srcX: 80, srcY: 80 + 16, playerX: 80, playerY: 80,
+            srcX: 80 + 16, srcY: 80, playerX: 80, playerY: 80,
             heading8: 0x80, baseVelocity: 0x50, volDelta: 0);
-        Assert.NotEqual(at0.Pan, at180.Pan);
-        // Values should mirror about 0x40.
-        Assert.Equal(at0.Pan, (byte)(0x80 - at180.Pan));
+        Assert.Equal((byte)0x01, at0.Pan);
+        Assert.Equal((byte)0x7F, at180.Pan);
     }
 
     [Fact]

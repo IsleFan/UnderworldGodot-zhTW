@@ -23,8 +23,14 @@ namespace Underworld
         /// A UI Prompt such as [MORE] is printed
         /// </summary>
         public const int UI_SAY = 3;
+        /// <summary>
+        /// convo_say_flag: the last line was the player's (respond, a chosen answer) rather than the NPC's.
+        /// </summary>
+        public static bool LastLineWasPlayers = false;
+
         public static IEnumerator say_op(int arg1, int PrintType = NPC_SAY)
         {
+            LastLineWasPlayers = PrintType == PC_SAY;
             yield return new WaitForSeconds(0.3f);
             //Debug.Print(getString(arg1));
             //uimanager.instance.ConversationText.Text = getString(arg1,true);   

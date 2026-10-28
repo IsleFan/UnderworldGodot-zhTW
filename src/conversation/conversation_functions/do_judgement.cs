@@ -28,7 +28,7 @@ namespace Underworld
             }
             else
             {
-                evaluation = ((playervalue - npcvalue) * 100) / npcvalue;
+                evaluation = (short)((playervalue - npcvalue) * 100) / npcvalue;//16-bit, as do_offer
             }
 
             switch (playerdat.Appraise)

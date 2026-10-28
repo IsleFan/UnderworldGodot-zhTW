@@ -37,17 +37,16 @@ namespace Underworld
             var monetaryvalue = ((commonObjDat.monetaryvalue(selection_itemid) + 1) >> 1) + 1;
 
             //The plaque reads: A fish is the current selection (3 gp)
-            string objectname = GameStrings.GetObjectNounUW(selection_itemid, 1);
-            var article = look.GetArticle(objectname, true);
+            var sample = GameStrings.GetName(selection_itemid, article: true, plural: false);//get_name(sample, 1, 0), first letter upper case
+            sample = sample.Length > 0 ? char.ToUpper(sample[0]) + sample.Substring(1) : sample;
             var msg = ZhText.Enabled
                 ? ZhText.Compose(ZhText.ObjectName(selection_itemid), GameStrings.GetDisplayString(1, 0x15D), $"（{monetaryvalue} 金幣）")
-                : $"{article}{GameStrings.GetObjectNounUW(selection_itemid)}{GameStrings.GetString(1, 0x15D)}({monetaryvalue} gp)";
+                : $"{sample}{GameStrings.GetString(1, 0x15D)}({monetaryvalue} gp)";
             uimanager.AddToMessageScroll(msg);
         }
 
         static void VendItem(uwObject trapObj)
         {
-            var tile = UWTileMap.current_tilemap.Tiles[trapObj.tileX, trapObj.tileY];
             var selection = playerdat.GetGameVariable(trapObj.owner);
             var selection_itemid = VendingMachineChoices[selection];
             var monetaryvalue = ((commonObjDat.monetaryvalue(selection_itemid) + 1) >> 1) + 1;
@@ -63,12 +62,22 @@ namespace Underworld
                     CountOnly: false,
                     AmountToCollect: monetaryvalue))
                 {
+                    //vend: quality 0x3F, made high up (z 0x76) and settled by obj_deal, so it drops to the floor
                     var newobj = ObjectCreator.spawnObjectInTile(
                         itemid: selection_itemid,
                         tileX: trapObj.tileX, tileY: trapObj.tileY,
                         xpos: 4, ypos: 4,
-                        zpos: (short)(tile.floorHeight << 3),
+                        zpos: 0x76,
                         WhichList: ObjectFreeLists.ObjectListType.StaticList);
+                    if (newobj != null)
+                    {
+                        newobj.quality = 0x3F;
+                        var settled = motion.PlacedObjectCollision_seg030_2BB7_10BC(newobj, trapObj.tileX, trapObj.tileY, 0);
+                        if (settled != null)
+                        {
+                            objectInstance.RedrawFull(settled);
+                        }
+                    }
                 }
             }
         }

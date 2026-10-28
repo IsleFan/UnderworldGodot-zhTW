@@ -35,13 +35,13 @@ namespace Underworld
             int playerdemandscore = GetPlayerDemandScore();
             int npcdemandscore = GetNPCDemandScore(talker, attitude);
 
-            if (playerdemandscore > npcdemandscore)
-            {
+            if ((playerdemandscore > npcdemandscore) || (talker.IsAlly == 1))
+            {//UW1: an ally always gives in
                 //succeed
                 yield return say_op(ifYouInsist);
                 result_register = 1;
-                if (attitude > 1)
-                {
+                if (attitude > 0)
+                {//(UW1 lowers it down to 0)
                     attitude--;
                     Set(attitudeOffset, attitude);
                 }
@@ -120,7 +120,7 @@ namespace Underworld
             var npcdemandscore = 1;
             //get value of items selected on npc area
             var npcvalue = GetNPCTradeValue(
-                ApplyLikeDislike: true,
+                ApplyLikeDislike: false,//valued without likes (do_demand)
                 appraise_accuracy: NPCAppraisalAccuracy,
                 applyAccuracy: true);
             var avghit = critterObjectDat.avghit(talker.item_id);
@@ -131,10 +131,9 @@ namespace Underworld
                     / avghit
                     );
             }
-            var hungerbit = ((talker.npc_hunger) & (0x40)) >> 6;
             var di = 0;
-            if (hungerbit == 1)
-            {
+            if (talker.IsAlly == 1)
+            {//mood: an ally -1, attitude below 2 +1
                 di = -1;
             }
             else

@@ -17,15 +17,11 @@ namespace Underworld
             else
             {
                 if (xnumber==0)
-                {//set gameclock
-                    Debug.Print($"Unimplemented x_clock({xnumber},{xvalue}) Possibly advance time by variable value");
+                {//the time of day: the game clock moves 20 minutes (0x4B000) for each step it changes by
+                    playerdat.ClockValue += (xvalue - playerdat.GetXClock(0)) * 0x4B000;
                 }
-                else
-                {
-                    //set xclock value
-                    Debug.Print($"setting xclock {xnumber} to {xvalue}");
-                    playerdat.SetXClock(xnumber,xvalue);
-                }  
+                Debug.Print($"setting xclock {xnumber} to {xvalue}");
+                playerdat.SetXClock(xnumber,xvalue);
                 result_register = 0;              
             }
         }

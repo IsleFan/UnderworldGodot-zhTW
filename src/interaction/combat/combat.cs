@@ -14,13 +14,13 @@ namespace Underworld
             if (currentweapon != null)
             {
                 switch (attacktype)
-                {
-                    case 0://stab
-                        return weaponObjectDat.stab(currentweapon.item_id);
-                    case 1://slash
+                {//the swing kinds as WeaponSwingTypePlayer numbers them (the input and the weapon animations)
+                    case 0://slash
                         return weaponObjectDat.slash(currentweapon.item_id);
-                    case 2://bash
+                    case 1://bash
                         return weaponObjectDat.bash(currentweapon.item_id);
+                    case 2://stab
+                        return weaponObjectDat.stab(currentweapon.item_id);
                 }
             }
             return 0;//no weapon
@@ -221,8 +221,8 @@ namespace Underworld
                     if (playerdat.play_poison < poisondamage)
                     {
                         Debug.Print("apply poison to player, needs body part hit to apply");
-                        var rng = Rng.r.Next(6 + poisondamage);
-                        if (rng > critterObjectDat.toughness(playerdat.playerObject.item_id, BodyPartHit))
+                        //UW2 first needs rand % (poison + 6) to beat twice the armour where the blow landed; UW1 has no armour roll
+                        if ((_RES != GAME_UW2) || (Rng.r.Next(6 + poisondamage) > critterObjectDat.toughness(playerdat.playerObject.item_id, BodyPartHit % 4) << 1))
                         {
                             var testdam = 1;
                             var test = damage.ScaleDamage(playerdat.playerObject.item_id, ref testdam, 0x10);
@@ -298,6 +298,9 @@ namespace Underworld
                 return false;//swing and a miss
             }
         }
+
+        /// <summary>UW2: the player's blow struck a wall, whose sound stands for the whiff (hit_wall).</summary>
+        static bool HitWall;
 
         static void CombatMissImpactSound(int attackresult)
         {
@@ -389,9 +392,15 @@ namespace Underworld
             }
             else
             {
-                //a miss
-                //TODO check a global variable that is related to missile impacts. if set do not play sound.
-                UWsoundeffects.PlaySoundEffectAtObject(effectNo: 0xA, obj: AttackingCharacter, volDelta: 0);
+                //a miss: the whiff, unless the player's blow just struck a wall (UW2 hit_wall)
+                if (HitWall)
+                {
+                    HitWall = false;
+                }
+                else
+                {
+                    UWsoundeffects.PlaySoundEffectAtObject(effectNo: 0xA, obj: AttackingCharacter, volDelta: 0);
+                }
             }
         }
 
@@ -419,7 +428,7 @@ namespace Underworld
                     {
                         if (critterObjectDat.bleed(DefendingCharacter.item_id) != 0) //this value is 0 for the player.
                         {
-                            AttackDamage += ((playerdat.Casting + 30) / 40); //there is a possible bug in vanilla uw2 where this will apply regardless of who the attacker is
+                            AttackDamage += AttackDamage * (playerdat.Casting + 30) / 40; //there is a possible bug in vanilla uw2 where this will apply regardless of who the attacker is
                         }
                     }
                 }
@@ -427,13 +436,13 @@ namespace Underworld
                 if (result == playerdat.SkillCheckResult.CritSucess)
                 {
                     AttackWasACrit = true;
-                    var critbonus = (48 + Rng.r.Next(30)) >> 5;
+                    var critbonus = (48 + Rng.r.Next(32)) >> 5;//1 or 2 at even odds
                     AttackDamage = AttackDamage * critbonus;
 
                     if (DefendingCharacter.index == 1)
                     {
                         //a critical hit has landed on the player. Damage equipment
-                        uimanager.FlashColour(0x23, uimanager.Cuts3DWin, 0.1f);
+                        uimanager.FlashColour((byte)(_RES == GAME_UW2 ? 0x23 : 0xB8), uimanager.Cuts3DWin, 0.1f);//fill_FB
                         var si_slot = (BodyPartHit + 1) & 0x3;
                         if (si_slot == 3)
                         {
@@ -444,12 +453,12 @@ namespace Underworld
                         }
                         else
                         {
-                            if (si_slot <= 2)
-                            {
+                            if ((si_slot != 0) && (si_slot <= 2))
+                            {//the arms are the off hand; the head (0) stays the helm
                                 si_slot = 7 + playerdat.handednessvalue;
                             }
                         }
-                        Debug.Print($"Equipment damage to slot {si_slot} of {Rng.DiceRoll(2, 4)}");
+                        damage.DamageEquipment(slot: si_slot, damage: Rng.DiceRoll(2, 4), damagetype: 4, arg6: 1, arg8: 1);//the armour worn there
                     }
 
                     return 0;//a hit
@@ -460,11 +469,10 @@ namespace Underworld
                     {
                         if (AttackingCharacter.index == 1)
                         {
-                            if (critterObjectDat.damagesWeaponOnCritMiss(DefendingCharacter.item_id))
-                            {
-                                var weaponselfdamage = Rng.DiceRoll(2, 3);
+                            if (!critterObjectDat.damagesWeaponOnCritMiss(DefendingCharacter.item_id))
+                            {//a bad miss wears the player's weapon, unless the critter is marked passive (this bit is Creature.passive)
                                 var si_slot = 8 - playerdat.handednessvalue;
-                                Debug.Print($"Equipment damage to slot {si_slot} of {Rng.DiceRoll(2, 3)}");
+                                damage.DamageEquipment(slot: si_slot, damage: Rng.DiceRoll(2, 3), damagetype: 4, arg6: 0, arg8: 1);
                             }
                         }
 
@@ -482,10 +490,10 @@ namespace Underworld
                     if (DefendingCharacter.OneF0Class == 0x14)
                     {
                         //doors       
-                        if (Rng.r.Next(0, 0xC) < (DefendingCharacter.item_id & 0x7) << 1)
+                        if (Rng.r.NextScaled(0xC) < (DefendingCharacter.item_id & 0x7) << 1)//rand() * 12 / 0x8000
                         {
                             var si_slot = 8 - playerdat.handednessvalue;
-                            Debug.Print($"Equipment damage to slot {si_slot} of {Rng.DiceRoll(2, 4)}");
+                            damage.DamageEquipment(slot: si_slot, damage: Rng.DiceRoll(2, 4), damagetype: 4, arg6: 0, arg8: 1);//hitting a door wears the weapon
                         }
 
                     }
@@ -536,7 +544,7 @@ namespace Underworld
             if (DefendingCharacter.index == 1)
             {
                 //seg024_24E9_A25:
-                UWsoundeffects.PlaySoundEffectAtAvatar(UWsoundeffects.SoundEffectHit1, 0x40, (byte)(AttackDamage << 2));
+                UWsoundeffects.PlaySoundEffectAtAvatar(UWsoundeffects.SoundEffectHit1, 0x40, (byte)(finaldamage << 2));//ddone, the charged damage with the flanking bonus
             }
             else
             {
@@ -557,7 +565,9 @@ namespace Underworld
                         }
                     }
 
-                    UWsoundeffects.PlaySoundEffectAtCoordinate((byte)SoundEffectVarC, CombatHitTileX, CombatHitTileY, finaldamage << 2);
+                    //at the defender: (targx << 3) + its fine x, (targy << 3) + its fine y
+                    UWsoundeffects.PlaySoundEffectAtCoordinate((byte)SoundEffectVarC,
+                        (CombatHitTileX << 3) + (DefendingCharacter.xpos & 7), (CombatHitTileY << 3) + (DefendingCharacter.ypos & 7), finaldamage << 2);
                 }
             }
 
@@ -801,16 +811,12 @@ namespace Underworld
                     // plays 7 when the player's weapon sound class is 1 or 2 and 8
                     // otherwise, at seg024_24E9_3BF.
                     //
-                    // PlayerWeaponSound is still a placeholder pinned to 1 in
-                    // combat_input.cs, so the UW2 arm always yields 7 today. It is written
-                    // out anyway so it comes right on its own when that is derived from the
-                    // weapon.
+                    // PlayerWeaponSound is derived from the weapon in combat_input.cs (0 fist,
+                    // 1 blunt, 2 edged). UW2 also sets hit_wall (HitWall here), which
+                    // suppresses the whiff CombatMissImpactSound would play straight after.
                     //
                     // Not done here. The sound plays at the start of the walk rather than
-                    // at the step that stops it, under a tile short of DOS. UW2 also sets
-                    // ImpactSkipSound at seg024_24E9_3BA, which suppresses the whiff that
-                    // CombatMissImpactSound would otherwise play straight after this; that
-                    // belongs with the change to that routine. And DOS plays nothing at all
+                    // at the step that stops it, under a tile short of DOS. And DOS plays nothing at all
                     // when the impact object cannot be allocated, because the sound sits
                     // after PrepareNewObjectProps in the routine. The walk, the animation
                     // and the skip flag are left for their own change. See #111.
@@ -820,6 +826,7 @@ namespace Underworld
                         if (_RES == GAME_UW2)
                         {
                             impactEffect = (PlayerWeaponSound == 1 || PlayerWeaponSound == 2) ? 7 : 8;
+                            HitWall = true;//do_miss then stays silent
                         }
                         UWsoundeffects.PlaySoundEffectAtCoordinate(
                             effectNo: (byte)impactEffect,
@@ -944,52 +951,37 @@ namespace Underworld
         /// <param name="attackerTop"></param>
         /// <returns></returns>
         public static int PickBodyHitPoint(int defenderZ, int defenderTop, int attackerZ, int attackerTop)
-        {
+        {//pickloc: by the middle of the blow against the defender's bottom, top and middle
             var di_defendermid = (defenderZ + defenderTop) >> 1;
             var si_attackermid = (attackerZ + attackerTop) >> 1;
 
-            if (defenderZ + 1 <= si_attackermid)
+            if (defenderZ + 1 > si_attackermid)
             {
-                //seg024_24E9_29:
-                if (defenderTop - 1 >= attackerZ)
+                return 2;//below the defender
+            }
+            if (defenderTop - 1 < si_attackermid)
+            {
+                return 3;//above the defender
+            }
+            if (si_attackermid < di_defendermid)
+            {
+                if (Rng.r.Next(2) != 0)
                 {
-                    //seg024_24E9_36
-                    if (si_attackermid >= di_defendermid)
-                    {
-                        //seg024_24E9_4E:
-                        if (Rng.r.Next(3) == 0)
-                        {
-                            return 3;
-                        }
-                    }
-                    else
-                    {
-                        //seg024_24E9_3A
-                        if (Rng.r.Next(2) != 0)
-                        {
-                            return 2;
-                        }
-                    }
-                    //seg024_24E9_62:
-                    if (Rng.r.Next(3) == 0)
-                    {
-                        return 1;
-                    }
-                    else
-                    {
-                        return 0;
-                    }
-
-                }
-                else
-                {
-                    return 3;
+                    return 2;
                 }
             }
             else
             {
-                return 2;
+                if (Rng.r.Next(3) == 0)
+                {
+                    return 3;
+                }
             }
+            if (Rng.r.Next(3) != 0)
+            {
+                return 0;
+            }
+            return 1;
         }
 
 
@@ -1003,26 +995,26 @@ namespace Underworld
             {
                 return false;
             }
-            if (Weapon.majorclass == 0)
+            return IsSharp(Weapon.item_id);
+        }
+
+        /// <summary>
+        /// Whether a weapon is edged or pointed: a weapon or missile (major 0, minor 0 or 1) other than items
+        /// 7 to 9 and the sling (is_sharp).
+        /// </summary>
+        public static bool IsSharp(int item_id)
+        {
+            var major = item_id >> 6;
+            var minor = (item_id >> 4) & 3;
+            if (major != 0 || (minor != 0 && minor != 1))
             {
-                if ((Weapon.minorclass != 0) && (Weapon.minorclass !=1))
-                {
-                    return false;
-                }
-                if ((Weapon.item_id >= 0x7) && (Weapon.item_id < 0xA))
-                {
-                    return false;
-                }
-                if ((Weapon.item_id >= 0x18) && (Weapon.item_id == 0x19))
-                {
-                    return false;
-                }
-                else
-                {
-                    return true;
-                }
+                return false;
             }
-            return false;
+            if ((item_id >= 0x7) && (item_id < 0xA))
+            {
+                return false;
+            }
+            return item_id != 0x18;//the sling
         }
 
         /// <summary>

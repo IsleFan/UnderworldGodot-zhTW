@@ -250,7 +250,7 @@ namespace Underworld
             {
                 var offset = unk2_0_6_PathingIndex / 8;
                 var ax = (int)getAt(pathfind57data, PTR + 0x14 + offset, 8);
-                var cl = (unk2_0_6_PathingIndex % 8) << 1;
+                var cl = unk2_0_6_PathingIndex % 8;//slopes[c / 8] >> (c % 8)
                 ax = ax >> cl;
                 return ax;
             }

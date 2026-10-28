@@ -35,8 +35,8 @@ namespace Underworld
                         {
                             if (d.classindex >= 8)
                             {   //door is open
-                                if (Rng.r.Next(2) == 0)
-                                {//50:50 chance
+                                if (Rng.r.NextScaled(10) < 3)
+                                {//DoClosingDoors: 3 in 10
                                     if (TileInfo.CheckIfOutsideRange(foundX, foundY, arg0_isPlayer, 8))
                                     {
                                         Debug.Print($"SCD Closing Door at {foundX} {foundY}");

@@ -224,6 +224,71 @@ namespace Underworld
         /// <param name="classindex"></param>
         /// <param name="objList"></param>
         /// <returns></returns>
+        /// <summary>
+        /// FindObj: the first carried object of major, minor and class index (-1 for any) in the original's order: the
+        /// paperdoll and hands (slots 0..10), then the backpack (to 18), then depth first inside the containers in those
+        /// slots, slot by slot. how 1 stops after the paperdoll, 2 and 3 after the backpack.
+        /// </summary>
+        public static uwObject FindObj(int major, int minor, int cls, int how = 0)
+        {
+            bool Matches(uwObject o) => (o != null) && ((major < 0) || (o.majorclass == major)) && ((minor < 0) || (o.minorclass == minor)) && ((cls < 0) || (o.classindex == cls));
+            uwObject[] slots = new uwObject[19];
+            for (int i = 0; i <= 18; i++)
+            {
+                if ((i == 11) && (how == 1))
+                {
+                    return null;
+                }
+                var head = playerdat.GetInventorySlotListHead(i);
+                slots[i] = head != 0 ? playerdat.InventoryObjects[head] : null;
+                if (Matches(slots[i]))
+                {
+                    return slots[i];
+                }
+            }
+            if ((how == 2) || (how == 3))
+            {
+                return null;
+            }
+            uwObject DepthFirst(int index)
+            {//find_obj
+                while (index != 0)
+                {
+                    var o = playerdat.InventoryObjects[index];
+                    if (o == null)
+                    {
+                        return null;
+                    }
+                    if (Matches(o))
+                    {
+                        return o;
+                    }
+                    if ((o.is_quant == 0) && (o.link != 0))
+                    {
+                        var inside = DepthFirst(o.link);
+                        if (inside != null)
+                        {
+                            return inside;
+                        }
+                    }
+                    index = o.next;
+                }
+                return null;
+            }
+            for (int i = 0; i <= 18; i++)
+            {
+                if ((slots[i] != null) && (slots[i].is_quant == 0) && (slots[i].link != 0))
+                {
+                    var found = DepthFirst(slots[i].link);
+                    if (found != null)
+                    {
+                        return found;
+                    }
+                }
+            }
+            return null;
+        }
+
         public static uwObject FindMatchInFullObjectList(int majorclass, int minorclass, int classindex, uwObject[] objList)
         {
             for (int i = 1; i <= objList.GetUpperBound(0); i++)

@@ -5,18 +5,17 @@ namespace Underworld
     /// </summary>
     public class automaptileinfo : UWClass
     {
-        public const int DisplayTypeClear = 0;  //uw1 + 2
-        public const int DisplayTypeWaterUW1 = 1;
-        public const int DisplayTypeWaterUW2 = 4;
-        public const int DisplayTypeLava = 2;
-        public const int DisplayTypeDoorUW1 = 4;
-        public const int DisplayTypeDoorUW2 = 1;
-        public const int DisplayTypeBridge1UW1 = 9;
-        public const int DisplayTypeBridge2UW1 = 10;
-        public const int DisplayTypeBridgeUW2 = 6;
-        public const int DisplayTypeStairUW1 = 12;
-        public const int DisplayTypeStairUW2 = 3;
-        public const int DisplayTypeIce = 12;
+        public const int DisplayTypeClear = 0;
+
+        //The high nibble holds two fields: the kind (GRIDDB's curautocode, from the objects drawn on the tile)
+        //and the floor's terrain class. UW2 keeps the kind in bits 4-5 and the terrain in bits 6-7 (DoTile);
+        //UW1 the other way round, terrain in bits 4-5 and kind in bits 6-7.
+        public const int KindDoor = 1;
+        public const int KindBridge = 2;
+        public const int KindStair = 3;//a stairs texture map, drawn dark
+        public const int TerrainWater = 1;
+        public const int TerrainLava = 2;
+        public const int TerrainIce = 3;//UW2 only
 
         public const int TILE_SOLID = 0;
         public const int TILE_OPEN = 1;
@@ -92,31 +91,54 @@ namespace Underworld
             }
         }
 
+        /// <summary>
+        /// The kind of thing on the tile: 1 a door, 2 a bridge, 3 a stairs texture.
+        /// </summary>
+        public int Kind
+        {
+            get
+            {
+                return _RES == GAME_UW2 ? DisplayType & 3 : DisplayType >> 2;
+            }
+        }
+
+        /// <summary>
+        /// The floor's terrain class: 1 water, 2 lava, 3 ice.
+        /// </summary>
+        public int Terrain
+        {
+            get
+            {
+                return _RES == GAME_UW2 ? DisplayType >> 2 : DisplayType & 3;
+            }
+        }
+
+        /// <summary>
+        /// The bits a kind takes in the automap byte (curautocode shifted into place).
+        /// </summary>
+        public static byte KindBits(int kind)
+        {
+            return (byte)(kind << (_RES == GAME_UW2 ? 4 : 6));
+        }
+
+        /// <summary>
+        /// The automap byte of a tile seen close up: its type and its floor's terrain bits (grdb_elem).
+        /// UW2 takes the terrain class, bits 6-7 of the floor's terrain; UW1 the floor's terrain as it is.
+        /// </summary>
+        public static byte TileCode(TileInfo t)
+        {
+            if (_RES == GAME_UW2)
+            {
+                return (byte)(t.tileType | TerrainDatLoader.GetTerrainDataBit67_unshifted(t));
+            }
+            return (byte)(t.tileType | (short)TerrainDatLoader.getTerrain(t.terrain));
+        }
+
         public bool IsBridge
         {
             get
             {
-                switch (_RES)
-                {
-                    case GAME_UW2:
-                        return DisplayType == DisplayTypeBridgeUW2;
-                    default:
-                        return DisplayType == DisplayTypeBridge1UW1 || DisplayType == DisplayTypeBridge2UW1;
-                }
-            }
-        }
-
-        public static byte bridgedisplaytype
-        {
-            get
-            {
-                switch (_RES)
-                {
-                    case GAME_UW2:
-                        return DisplayTypeBridgeUW2;
-                    default:
-                        return DisplayTypeBridge1UW1;
-                }
+                return Kind == KindBridge;
             }
         }
 
@@ -124,13 +146,7 @@ namespace Underworld
         {
             get
             {
-                switch (_RES)
-                {
-                    case GAME_UW2:
-                        return DisplayType == DisplayTypeWaterUW2;
-                    default:
-                        return DisplayType == DisplayTypeWaterUW1;
-                }
+                return Terrain == TerrainWater;
             }
         }
 
@@ -138,7 +154,7 @@ namespace Underworld
         {
             get
             {
-                return DisplayType == DisplayTypeLava;
+                return Terrain == TerrainLava;
             }
         }
 
@@ -146,27 +162,7 @@ namespace Underworld
         {
             get
             {
-                switch (_RES)
-                {
-                    case GAME_UW2:
-                        return DisplayType == DisplayTypeStairUW2;
-                    default:
-                        return DisplayType == DisplayTypeStairUW1;
-                }
-            }
-        }
-
-        public static byte stairdisplaytype
-        {
-            get
-            {
-                switch (_RES)
-                {
-                    case GAME_UW2:
-                        return DisplayTypeStairUW2;
-                    default:
-                        return DisplayTypeStairUW1;
-                }
+                return Kind == KindStair;
             }
         }
 
@@ -174,7 +170,7 @@ namespace Underworld
         {
             get
             {
-                return DisplayType == DisplayTypeIce;
+                return _RES == GAME_UW2 && Terrain == TerrainIce;
             }
         }
 
@@ -204,114 +200,10 @@ namespace Underworld
         {
             get
             {
-                switch (_RES)
-                {
-                    case GAME_UW2:
-                        return DisplayType == DisplayTypeDoorUW2;
-                    default:
-                        return DisplayType == DisplayTypeDoorUW1;
-                }
+                return Kind == KindDoor;
             }
         }
 
-        public static byte doordisplaytype
-        {
-            get
-            {
-                switch (_RES)
-                {
-                    case GAME_UW2:
-                        return DisplayTypeDoorUW2;
-                    default:
-                        return DisplayTypeDoorUW1;
-                }
-            }
-        }
-
-        public bool IsSolidWall
-        {
-            get
-            {
-                switch (tileType)
-                {
-                    case TILE_SOLID:
-                    case 10:
-                    case 12:
-                    case 13:
-                    case 14:
-                    case 15:
-                        return true;
-                    case 11://11 appears to indicate unexplored open tiles
-                    default:
-                        return false;
-                }
-            }
-        }
-
-
-        /// <summary>
-        /// Gets how the tile should be displayed in the automap based on various properties.
-        /// </summary>
-        /// <param name="t"></param>
-        /// <returns></returns>
-        public static int GetDisplayType(TileInfo t)
-        {
-            if (t.hasBridge)
-            {
-                switch (_RES)
-                {
-                    case GAME_UW2:
-                        return DisplayTypeBridgeUW2;
-                    default:
-                        return DisplayTypeBridge1UW1;
-                }
-
-            }
-            else if (t.isWater)
-            {
-                switch (_RES)
-                {
-                    case GAME_UW2:
-                        return DisplayTypeWaterUW2;
-                    default:
-                        return DisplayTypeWaterUW1;
-                }
-
-            }
-            else if (t.isLava)
-            {
-                return DisplayTypeLava;
-            }
-            else if (t.isIce)
-            {
-                return DisplayTypeIce;
-            }
-            else if (t.HasDoor)
-            {
-                switch (_RES)
-                {
-
-                    case GAME_UW2:
-                        return DisplayTypeDoorUW2;
-                    default:
-                        return DisplayTypeDoorUW1;
-                }
-            }
-            else if (t.isStair)
-            {
-                switch (_RES)
-                {
-                    case GAME_UW2:
-                        return DisplayTypeStairUW2;
-                    default:
-                        return DisplayTypeStairUW1;
-                }
-            }
-            else
-            {
-                return DisplayTypeClear;
-            }
-        }
 
     }//end class
 }//end namespace

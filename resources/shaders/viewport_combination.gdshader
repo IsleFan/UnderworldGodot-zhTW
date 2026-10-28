@@ -5,6 +5,7 @@ uniform sampler2D viewport_2: source_color,filter_nearest; //: filter_linear_mip
 global uniform sampler2D xfer: source_color,filter_nearest; //xfer.dat transparency
 global uniform sampler2D smoothpalette: source_color,filter_nearest; // pals.dat mapped into shades
 uniform int uwgame;
+uniform float brightness = 1.0; //the view fading out or in around a teleport (fadeout3d, fadein3d)
 
 void fragment() {
     // Sample the color from both input viewports
@@ -106,5 +107,5 @@ void fragment() {
     vec4 outputcolor = texture(smoothpalette, vec2(finalcolor.r, maptouse));
 
     // Combine the views: this simply averages the two textures
-    COLOR.rgba = outputcolor.rgba; 
+    COLOR.rgba = vec4(outputcolor.rgb * brightness, outputcolor.a); 
 }

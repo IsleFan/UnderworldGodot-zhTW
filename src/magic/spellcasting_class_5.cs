@@ -31,7 +31,7 @@ namespace Underworld
                     uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, GameStrings.str_there_is_not_enough_room_to_release_that_spell_));
                 }
                 currentSpell = null;
-                uimanager.instance.mousecursor.SetCursorToCursor(0);
+                uimanager.instance.mousecursor.SetCursorToCursor();
             }
         }
 
@@ -67,7 +67,17 @@ namespace Underworld
             if (projectile != null)
             {
                 objectInstance.RedrawFull(projectile);
-                //Todo. Some sound effect logic
+                if (_RES == GAME_UW2)
+                {//spell_missile: acid (6) and the snowball (12) sound like a launch, the others 0x28
+                    if ((spellProjectileID == 6) || (spellProjectileID == 12))
+                    {
+                        UWsoundeffects.PlaySoundEffectAtObject(0xA, projectile, 0);
+                    }
+                    else
+                    {
+                        UWsoundeffects.PlaySoundEffectAtObject(0x28, projectile, 0x14);
+                    }
+                }
                 return true;
             }
             else

@@ -6,6 +6,9 @@ namespace Underworld.Sfx;
 /// </summary>
 public interface ISfxBackend
 {
-    void Play(SoundEntry entry, byte pan, byte velocityOffset);
+    void Play(SoundEntry entry, byte pan, byte velocityOffset, int slot = -1);
+
+    /// <summary>Releases the voices of effect slot <paramref name="slot"/>, or all of them for -1.</summary>
+    void NoteOff(int slot);
     void Dispose();
 }

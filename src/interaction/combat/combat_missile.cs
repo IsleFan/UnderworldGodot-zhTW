@@ -49,8 +49,8 @@ namespace Underworld
             int var4_x;
             int var6_y;
 
-            if (UWMotionParamArray.dseg_67d6_25BC==0)
-            {
+            if (UWMotionParamArray.dseg_67d6_25BC != 0)
+            {//missile_newhit: the struck object's square when it was used (objhit_used), else the missile's own
                 var4_x = UWMotionParamArray.UnknownX_dseg_67d6_25BD;
                 var6_y = UWMotionParamArray.UnknownY_dseg_67d6_25BE;
             }
@@ -68,8 +68,8 @@ namespace Underworld
                 damage: MissileDamage, 
                 damageType: (byte)-rangedObjectDat.RangedWeaponType(projectile.item_id));
 
-            if (objectHit.majorclass == 1)
-            {
+            if ((_RES == GAME_UW2) && (objectHit.majorclass == 1))
+            {//UW2 marks a missile that has hit a creature (UW1 does not)
                 projectile.UnkBit_0XA_Bit7 = 1;
             }
 
@@ -97,7 +97,7 @@ namespace Underworld
                 defenderZ: objectHit.zpos, 
                 defenderTop: commonObjDat.height(objectHit.item_id) + objectHit.zpos, 
                 attackerZ: Projectile.zpos, 
-                attackerTop: commonObjDat.height(Projectile.item_id));
+                attackerTop: Projectile.zpos + commonObjDat.height(Projectile.item_id)) + 4;//4 marks a missile (missile_thwack)
 
             AttackDamage = damage;
             if (projectileSource == 1)
@@ -113,7 +113,7 @@ namespace Underworld
             if (objectHit == playerdat.playerObject)
             {
                 //sound effect at player position
-                UWsoundeffects.PlaySoundEffectAtAvatar(UWsoundeffects.SoundEffectHit1, pan: 0x40, velocityOffset: 0);
+                UWsoundeffects.PlaySoundEffectAtAvatar(UWsoundeffects.SoundEffectHit1, pan: 0, velocityOffset: 0);//play_effect_here(3, 0, 0)
             }
             else if (!objectHit.IsStatic)
             {

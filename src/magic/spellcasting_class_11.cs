@@ -28,8 +28,8 @@ namespace Underworld
                         }
                         else
                         {
-                            //DETECT MONSTERS
-                            tracking.DetectMonsters(8, 0x2D);
+                            //DETECT MONSTERS: 10 squares for the spell (xt_spells), 8 is the Track skill's
+                            tracking.DetectMonsters(10, 0x2D);
                         }
                         break;
                     }
@@ -159,6 +159,10 @@ namespace Underworld
                 ypos: 3,
                 zpos: 0x6e,
                 WhichList: ObjectFreeLists.ObjectListType.MobileList);
+            if (newobj == null)
+            {//no free object on the level
+                return false;
+            }
             Debug.Print($"Spawning tremor object {newobj.a_name} ({newobj.index}) at {x},{y}");
             //These are here to stop physics breaking due to usage of spawnobjectintile instead of unimplemented moveobjecttocoordinate
             newobj.npc_xhome = (short)(tile.tileX);
@@ -167,7 +171,7 @@ namespace Underworld
             newobj.CoordinateY = (newobj.npc_yhome << 8) + (newobj.ypos << 5) + 0xF;
             newobj.CoordinateZ = newobj.zpos << 3;
 
-            newobj.UnkBit_0X13_Bit0to6 = (short)(Rng.r.Next(3) + 2);
+            newobj.UnkBit_0X13_Bit0to6 = (short)((Rng.r.Next(0x8000) & 3) + 2);//tremor_area: speed 2 to 5
             newobj.ProjectileHeading = (ushort)(Rng.r.Next(0x7FFF) & 0xFF);
             newobj.NextFrame_0XA_Bit0123 = (short)((Rng.r.Next(0x7FFF) & 0x3) + main.ThisFrameDelta);
             newobj.Projectile_Speed = (short)((1 + Rng.r.Next(3)) & 0x7);
@@ -322,7 +326,7 @@ namespace Underworld
             }
             else
             {
-                Teleportation.CodeToRunOnTeleport = Teleportation.JumpToMoonStoneOnLevel;
+                Teleportation.CodeToRunBeforeLanding = Teleportation.MoveToMoonstone;
                 Teleportation.Teleport(
                     character: 0,
                     tileX: 32, tileY: 32,

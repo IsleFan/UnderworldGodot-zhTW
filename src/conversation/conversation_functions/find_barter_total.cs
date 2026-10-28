@@ -26,7 +26,7 @@ namespace Underworld
                 {
                     if (itemIds[si] == item_id)
                     {
-                        MatchingIndices[NoOfMatches] = itemIds[si];
+                        MatchingIndices[NoOfMatches] = itemIndices[si];//the object, for give_to_npc
                         //match found.
                         var obj = UWTileMap.current_tilemap.LevelObjects[itemIndices[si]];
                         if (obj != null)

@@ -32,9 +32,12 @@ public static class TestData
     }
 
     /// <summary>
-    /// GOG game data root: resolved as RepoRoot/../UW2GOG.
+    /// GOG game data root, holding UW1 and UW2: the UW_GOG_ROOT environment variable when set, else RepoRoot/../UW2GOG.
     /// </summary>
-    public static string UW2GogRoot => Path.GetFullPath(Path.Combine(RepoRoot, "..", "UW2GOG"));
+    public static string UW2GogRoot =>
+        Environment.GetEnvironmentVariable("UW_GOG_ROOT") is { Length: > 0 } root
+            ? Path.GetFullPath(root)
+            : Path.GetFullPath(Path.Combine(RepoRoot, "..", "UW2GOG"));
 
     /// <summary>
     /// Returns the path to a file in UW2/SAVE0 (the first save slot).

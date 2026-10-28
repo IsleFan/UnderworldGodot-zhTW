@@ -10,10 +10,11 @@ namespace Underworld
             Debug.Print($"take_from_npc({arg1})");
 
 
-            // if (playerdat.ObjectInHand!=-1)
-            // {
-            //     result_register = 0; return;
-            // }
+            result_register = 0;//none of that type, or the hand is full (npc_barter_give)
+            if (playerdat.ObjectInHand != -1)
+            {
+                return;
+            }
 
             if (talker.LootSpawnedFlag==0)
             {
@@ -41,6 +42,10 @@ namespace Underworld
                     }
                 }
                 
+                if (match && IsInNPCTradeSlot(obj.index))
+                {//the original takes the slots' items out of the inventory, so they are not found here
+                    match = false;
+                }
                 if(match)
                 {   
                     //Unlink from npc
@@ -55,34 +60,54 @@ namespace Underworld
                         obj.next = 0;
                     }
 
-                    //Do a weight check. if passed it goes to hand, if not add to trade slots
-                    if (playerdat.CanCarryWeight(obj))
-                    {
-                        playerdat.ObjectInHand = obj.index;
-                        uimanager.instance.mousecursor.SetCursorToObject(obj.item_id);
-                        result_register = 1;
-                        return;
-                    }
-                    else
-                    {
-                        //add to a free slot
-                        for (int i =0; i<uimanager.NoOfTradeSlots;i++)
-                        {
-                            if (uimanager.GetPlayerTradeSlot(i,false) ==-1)
-                            {
-                                //add to that slot
-                                uimanager.SetPlayerTradeSlot(slotno: i, item_index: obj.index, selected: false);
-                                result_register = 1;
-                                return;
-                            }
-                        }
-                    }
+                    result_register = HandOverFromNPC(talker, obj);
+                    return;
                 }
                 previous = obj;
                 nextItem = obj.next;
             }
+        }
 
+        static bool IsInNPCTradeSlot(int index)
+        {
+            for (int i = 0; i < uimanager.NoOfTradeSlots; i++)
+            {
+                if (uimanager.GetNPCTradeSlot(i, false) == index)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
 
+        /// <summary>
+        /// An object the NPC has let go of goes to the player's hand if it can be carried, else into a
+        /// free player trade slot, else at the NPC's feet (npc_barter_give). Returns 1, or 2 when dropped.
+        /// </summary>
+        static int HandOverFromNPC(uwObject talker, uwObject obj)
+        {
+            if (playerdat.CanCarryWeight(obj))
+            {
+                playerdat.ObjectInHand = obj.index;
+                uimanager.instance.mousecursor.SetCursorToObject(obj.item_id);
+                return 1;
+            }
+            for (int i = 0; i < uimanager.NoOfTradeSlots; i++)
+            {
+                if (uimanager.GetPlayerTradeSlot(i, false) == -1)
+                {
+                    uimanager.SetPlayerTradeSlot(slotno: i, item_index: obj.index, selected: false);
+                    return 1;
+                }
+            }
+            //no free trade slot: near_mob_put_at(the talker, it, 5), 2 when it was put down, else 3
+            var placed = motion.PutAt(obj, (talker.tileX << 3) + talker.xpos, (talker.tileY << 3) + talker.ypos, talker.zpos, 5, false);
+            if (placed != null)
+            {
+                objectInstance.RedrawFull(placed);
+                return 2;
+            }
+            return 3;
         }
     }   //end class
 }//end namespace

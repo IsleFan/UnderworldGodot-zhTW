@@ -196,8 +196,20 @@ namespace Underworld
 			hotspot = Texture.GetSize() / 2;
 		}
 
-		public void SetCursorToCursor(int index = 0)
+		/// <summary>
+		/// Shows cursor index of cursors.gr; without one, the pointer of the selected icon: use, look and get show
+		/// cursor 11, anything else the usual pointer (deal_with_icons' force_mouse_cursor).
+		/// </summary>
+		public void SetCursorToCursor(int index = -1)
 		{
+			if (index < 0)
+			{
+				index = uimanager.InteractionMode switch
+				{
+					uimanager.InteractionModes.ModeUse or uimanager.InteractionModes.ModeLook or uimanager.InteractionModes.ModePickup => 11,
+					_ => 0,
+				};
+			}
 			if (((index == 14) || (index == 12) || (index==13)) && (UWClass._RES == UWClass.GAME_UW2))
 			{
 				//Special case for the quill and other map cursors

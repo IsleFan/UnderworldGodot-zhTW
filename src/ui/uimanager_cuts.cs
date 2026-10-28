@@ -84,6 +84,10 @@ namespace Underworld
         /// <param name="targetControl"></param>
         public static void DisplayCutsImage(string cutsfile, int imageNo, TextureRect targetControl, bool DisableCamera = true, bool useSingleRedChannel = true)
         {
+            if (targetControl == CutsSmall)
+            {//a shaft or a gravestone shows in the small cutscenes' window
+                cutsplayer.PlaceSmallWindow(targetControl, 0x100);
+            }
             var cuts = new CutsLoader(cutsfile);
             if (!csCuts.ContainsKey(cutsfile))
             {

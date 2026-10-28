@@ -51,6 +51,10 @@ namespace Underworld
                 ypos: (short)Rng.r.Next(1,8), 
                 zpos: (short)(tile.floorHeight<<3), 
                 WhichList: ObjectFreeLists.ObjectListType.MobileList);
+            if (obj == null)
+            {//no free object on the level
+                return null;
+            }
 
             obj.npc_whoami = 0x66;
             if (isPowerfull)
@@ -143,6 +147,7 @@ namespace Underworld
         public static void DefeatLivingPitFighter(int character)
         {
             Debug.Print("Untested removal of defeated living cowardly pit fighter");
+            playerdat.SetQuest(129, playerdat.GetQuest(129) + 1);//it counts as a win (arena_opponent_runs)
             if (playerdat.GetQuest(129) > playerdat.GetXClock(14))
             {
                 playerdat.SetXClock(14, playerdat.GetQuest(129));

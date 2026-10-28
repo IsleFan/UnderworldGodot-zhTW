@@ -153,8 +153,106 @@ namespace Underworld
 		private void ToggleMainMenuButtons(bool show)
 		{
 			for (int i = 0; i < 4; i++)
+			{//real_start: journey onward only when there is a saved game (get_save_descs)
+				EnableDisable(MainMenuButtons[i], show && ((i != 3) || AnySavedGame()));
+			}
+		}
+
+		/// <summary>parse_start_input's selection: -1 until a key is used.</summary>
+		static int MenuSelection = -1;
+
+		/// <summary>
+		/// The main menu's keys (parse_start_input): right, down (keypad) and Ctrl+F/N on, up, left and Ctrl+B/P back, Home
+		/// and PgUp the first, End and PgDn the last, Enter presses. It starts on create character with no saved game, else
+		/// on journey onward. Returns whether the menu took the key.
+		/// </summary>
+		public bool MainMenuKey(InputEventKey key)
+		{
+			if (CurrentGameMode != GameModes.MAIN || !key.Pressed || !MainMenuButtons[0].Visible)
 			{
-				EnableDisable(MainMenuButtons[i], show);
+				return false;
+			}
+			var n = AnySavedGame() ? 4 : 3;
+			if (MenuSelection < 0 || MenuSelection >= n)
+			{
+				MenuSelection = n == 4 ? 3 : 1;
+			}
+			switch (key.Keycode)
+			{
+				case Key.Right: case Key.Down: case Key.Kp6: case Key.Kp2:
+					MenuSelection = System.Math.Min(n - 1, MenuSelection + 1); break;
+				case Key.F: case Key.N:
+					if (!key.CtrlPressed) { return false; }
+					MenuSelection = System.Math.Min(n - 1, MenuSelection + 1); break;
+				case Key.Up: case Key.Left: case Key.Kp8: case Key.Kp4:
+					MenuSelection = System.Math.Max(0, MenuSelection - 1); break;
+				case Key.B: case Key.P:
+					if (!key.CtrlPressed) { return false; }
+					MenuSelection = System.Math.Max(0, MenuSelection - 1); break;
+				case Key.Home: case Key.Pageup: case Key.Kp7: case Key.Kp9:
+					MenuSelection = 0; break;
+				case Key.End: case Key.Pagedown: case Key.Kp1: case Key.Kp3:
+					MenuSelection = n - 1; break;
+				case Key.Enter: case Key.KpEnter:
+					{
+						var click = new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true };
+						switch (MenuSelection)
+						{
+							case 0: _on_introduction_gui_input(click); break;
+							case 1: _on_create_character_gui_input(click); break;
+							case 2: _on_acknowledgements_gui_input(click); break;
+							case 3: _on_journey_onwards_gui_input(click); break;
+						}
+						return true;
+					}
+				default:
+					return false;
+			}
+			TurnButtonsOff();
+			MainMenuButtons[MenuSelection].Texture = grOptbtn.LoadImageAt(MenuSelection * 2 + 1);//the lit button
+			return true;
+		}
+
+		/// <summary>Whether any of the four save slots has a description (get_save_descs found one).</summary>
+		static bool AnySavedGame()
+		{
+			for (int i = 1; i <= 4; i++)
+			{
+				if (SaveDescription.TryReadSlot(System.IO.Path.Combine(SlotTransaction.SlotDirectory(UWClass.BasePath, i), "DESC"), out _))
+				{
+					return true;
+				}
+			}
+			return false;
+		}
+
+		/// <summary>
+		/// After the opening screens (real_start, do_intro_scene): with no saved game the introduction plays before the menu.
+		/// </summary>
+		public static void ReturnToMainMenuOrIntroduction()
+		{
+			if (AnySavedGame())
+			{
+				ReturnToMainMenu();
+			}
+			else
+			{
+				PlayIntroduction();
+			}
+		}
+
+		/// <summary>The introduction: UW1 cutscene 0, UW2 cutscenes 0 and 1; then the menu.</summary>
+		static void PlayIntroduction()
+		{
+			CurrentGameMode = GameModes.CUTSCENE;
+			if (UWClass._RES == UWClass.GAME_UW2)
+			{
+				cutsplayer.PlayCutscene(0, () =>
+					cutsplayer.PlayCutscene(1, ReturnToMainMenu));
+			}
+			else
+			{
+				cutsplayer.PlayCutscene(0, ReturnToMainMenu);
 			}
 		}
 
@@ -345,6 +443,7 @@ namespace Underworld
 			{
 				playerdat.PlacePlayerInTile(playerdat.playerObject.tileX, playerdat.playerObject.tileY);
 			}
+			Teleportation.LevelEventsOnGameStart(newGame: folder.ToUpper() == "DATA");
 
 			//Update weight display
 			uimanager.RefreshWeightDisplay();
@@ -380,23 +479,12 @@ namespace Underworld
 				XMIMusic.PickLevelThemeMusic(0);
 			}
 
-			//Set up the weapon animations.
-			ToggleWeaponAnimationState(drawWeapon: playerdat.play_drawn == 1, updateThemes: false);
-			if (playerdat.play_drawn == 1)
-			{
-				InteractionMode = InteractionModes.ModeAttack;
-				PreviousInteractionMode = InteractionModes.ModeAttack;
-			}
-			else if (Controls.Modern)
-			{//modern controls start with no icon selected, so clicks follow what they are on
-				EnterInteractionModeNone();
-				PreviousInteractionMode = InteractionModes.ModeNone;
-			}
-			else
-			{
-				InteractionMode = InteractionModes.ModeUse;
-				PreviousInteractionMode = InteractionModes.ModeUse;
-			}
+			//Set up the weapon animations: restoring always puts the weapon away (punt_fightmode)
+			playerdat.play_drawn = 0;
+			ToggleWeaponAnimationState(drawWeapon: false, updateThemes: false);
+			//no icon selected (RightButtonThing 0): the original's default mode, or modern controls' context clicks
+			EnterInteractionModeNone();
+			PreviousInteractionMode = InteractionModes.ModeNone;
 			uimanager.UpdateCompass();
 			//set camera to player
 			playerdat.CameraReference = playerdat.playerObject;
@@ -405,8 +493,13 @@ namespace Underworld
 			//turn off moongate sucking effect (uw1 endgame)
 			playerdat.MoongateSucking = false;
 
-			//if a screenshake has been stored. Apply a brief shake on game load
-			if ((playerdat.TileState & 0x20) != 0)
+			//if a screenshake has been stored. Apply a brief shake on game load (UW1). UW2's reset_game ends the shakes
+			//and parse_effect then clears their bits (0x20, 0x40, 0x80)
+			if (UWClass._RES == UWClass.GAME_UW2)
+			{
+				playerdat.TileState &= 0x1F;
+			}
+			else if ((playerdat.TileState & 0x20) != 0)
 			{
 				playerdat.Shake20_Duration_73F = 5;
 			}
@@ -520,18 +613,7 @@ namespace Underworld
 		{
 			if (@event is InputEventMouseButton eventMouseButton && eventMouseButton.Pressed && eventMouseButton.ButtonIndex == MouseButton.Left)
 			{
-				CurrentGameMode = GameModes.CUTSCENE;
-				if (UWClass._RES == UWClass.GAME_UW2)
-				{
-					// Introduction button plays CS000 → CS001 only.
-					cutsplayer.PlayCutscene(0, () =>
-						cutsplayer.PlayCutscene(1, ReturnToMainMenu));
-				}
-				else
-				{
-					// Introduction button plays CS000 only.
-					cutsplayer.PlayCutscene(0, ReturnToMainMenu);
-				}
+				PlayIntroduction();
 			}
 		}
 
@@ -593,10 +675,23 @@ namespace Underworld
 				}
 			}
 
+			// Any other key or a mouse button ends a cutscene's pause or starts a skip.
+			if (cutsplayer.IsPlaying
+				&& @event is InputEventMouseButton cutsClick
+				&& cutsClick.Pressed
+				&& (cutsClick.ButtonIndex == MouseButton.Left || cutsClick.ButtonIndex == MouseButton.Right))
+			{
+				cutsplayer.InputReceived(isKey: false);
+			}
+
 			if (@event is InputEventKey keyinput)
 			{
 				if (keyinput.Pressed)
 				{
+					if (cutsplayer.IsPlaying && !keyinput.Echo && keyinput.Keycode != Key.Escape)
+					{
+						cutsplayer.InputReceived(isKey: true);
+					}
 
 					if (keyinput.Keycode == Key.Escape)
 					{

@@ -17,6 +17,8 @@ namespace Underworld
             // }
             // PlayerInDeathMode = true;
             playerdat.play_drawn = 0;
+            UWsoundeffects.KillAllEffects();//player_is_dead silences the effects first
+            PuntMouseObject();
 
             if (_RES == GAME_UW2)
             {
@@ -31,12 +33,32 @@ namespace Underworld
 
 
         /// <summary>
+        /// punt_mouse_obj: what is on the cursor is put down near the player (near_mob_put_at, range 6).
+        /// </summary>
+        public static void PuntMouseObject()
+        {
+            if (ObjectInHand == -1)
+            {
+                return;
+            }
+            var held = UWTileMap.current_tilemap.LevelObjects[ObjectInHand];
+            ObjectInHand = -1;
+            uimanager.instance.mousecursor.SetCursorToCursor();
+            var placed = motion.PutAt(held, (playerObject.tileX << 3) + playerObject.xpos, (playerObject.tileY << 3) + playerObject.ypos, playerObject.zpos, 6, false);
+            if (placed != null)
+            {
+                ObjectCreator.RenderObject(placed, UWTileMap.current_tilemap);
+            }
+        }
+
+        /// <summary>
         /// if silver tree planted. do the tree animation. 
         /// respawn at tree level via a delegate function.        
         /// otherwise return to main menu and Start death animation.
         /// </summary>
         private static void PlayerDeathUW1()
         {
+            LeaveBones();
             if (SilverTreeDungeon != 0)
             {
                 //resurrect at silver tree
@@ -51,17 +73,56 @@ namespace Underworld
             }
         }
 
+        /// <summary>
+        /// player_is_dead (UW1): a skull or bones (0xC2 to 0xC6) are left where the player fell, at the player's height
+        /// and fine position, owned by 0x3F ("an adventurer"), and settled by obj_deal.
+        /// </summary>
+        static void LeaveBones()
+        {
+            var index = ObjectCreator.PrepareNewObject(Rng.r.Next(5) + 0xC2);
+            if (index == 0)
+            {
+                return;
+            }
+            var bones = UWTileMap.current_tilemap.LevelObjects[index];
+            var placed = motion.PutAt(bones, (playerObject.tileX << 3) + playerObject.xpos, (playerObject.tileY << 3) + playerObject.ypos, playerObject.zpos, 0, nocull: true);
+            if (placed == null)
+            {
+                return;
+            }
+            placed.zpos = playerObject.zpos;
+            placed.owner = 0x3F;
+            placed.xpos = playerObject.xpos;
+            placed.ypos = playerObject.ypos;
+            var settled = motion.PlacedObjectCollision_seg030_2BB7_10BC(placed, playerObject.tileX, playerObject.tileY, 1);
+            if (settled != null)
+            {
+                ObjectCreator.RenderObject(settled, UWTileMap.current_tilemap);
+            }
+        }
+
         public static void ResurrectAtSilverTree()
         {
             uimanager.EnableDisable(uimanager.instance.uwviewport,true); 
             ChangeExperience(-Exp >> 3);
-            ResurrectionEffects();
-            Teleportation.CodeToRunOnTeleport = TeleportToSilverTree;
+            //player_is_dead: no fade (NewPlyFade 0), and do_resurrect runs once the tree's level is loaded
+            Teleportation.NewPlyFade = 0;
+            Teleportation.CodeToRunBeforeLanding = DoResurrect;
+            Teleportation.CodeToRunOnTeleport = () => XMIMusic.ChangeThemeMusic(4);
             Teleportation.Teleport(
                 character: 0,
                 tileX: 32, tileY: 32,
                 newLevel: SilverTreeDungeon,
                 HeadingHeightFlag: 0);
+        }
+
+        /// <summary>
+        /// do_resurrect (UW1): the player arrives at the silver tree, with the hit points and mana of a resurrection.
+        /// </summary>
+        static void DoResurrect()
+        {
+            Teleportation.MoveTo(7, 0, 0xA);
+            ResurrectionEffects();
         }
 
         private static bool PlayerDeathUW2()
@@ -91,8 +152,7 @@ namespace Underworld
                         {
                             if (killer.UnkBit_0XA_Bit7 == 0)
                             {
-                                ResurrectionEffects();
-                                //send to jail
+                                //send to jail (put_player_in_jail: no resurrection's healing, see GoToJail)
                                 Teleportation.CodeToRunOnTeleport = GoToJail;
                                 Teleportation.Teleport(
                                     character: 0,
@@ -128,11 +188,13 @@ namespace Underworld
                     }
                     IsFightingInPit = false;
                 }
-                ResurrectionEffects();
+                //player_is_dead: no fade (NewPlyFade 0), and do_gem runs once level 5 is loaded
+                Teleportation.NewPlyFade = 0;
+                Teleportation.CodeToRunBeforeLanding = DoGem;
                 Teleportation.CodeToRunOnTeleport = ResurrectAtBlackrockGem;
                 Teleportation.Teleport(
                     character: 0,
-                    tileX: 28, tileY: 37,
+                    tileX: 0x1C, tileY: 0x28,
                     newLevel: 5,
                     HeadingHeightFlag: 0);
             }
@@ -150,37 +212,56 @@ namespace Underworld
 
 
         /// <summary>
-        /// In UW1 finds the silver tree on a level and jumps to it's location, heals the player. Runs as a teleport callback
-        /// </summary>
-        static void TeleportToSilverTree()
-        {
-            Teleportation.CodeToRunOnTeleport = null;
-            play_hp = max_hp;
-            //PlayerInDeathMode = false;
-            var tree = objectsearch.FindMatchInFullObjectList(7, 0, 0xA, UWTileMap.current_tilemap.LevelObjects);
-            if (tree != null)
-            {
-                if (UWTileMap.ValidTile(tree.tileX, tree.tileY))
-                {
-                    Teleportation.Teleport(
-                        character: 0,
-                        tileX: tree.tileX, tileY: tree.tileY,
-                        newLevel: 0, HeadingHeightFlag: 0);
-                }
-            }
-        }
-
-
-        /// <summary>
         /// Avatar will respawn at the black rock if they die in another world
         /// </summary>
         static void ResurrectAtBlackrockGem()
-        {
+        {//the hit points do_gem gave (2 to 4 short of the maximum) stay
             ChangeExperience(-Exp / 9);
             Teleportation.CodeToRunOnTeleport = null;
-            play_hp = max_hp;
+            XMIMusic.ChangeThemeMusic(0xA);
             //PlayerInDeathMode = false;
             uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, 0x169));
+        }
+
+        /// <summary>
+        /// do_gem (UW2): the player arrives near (0x1C, 0x28) of level 5, moved 8 squares a random way from it, with the
+        /// hit points and mana of a resurrection, and a blood stain on the floor there when it is an open square.
+        /// </summary>
+        static void DoGem()
+        {
+            int x = 0x1C, y = 0x28;
+            var xoff = Rng.r.Next(5) + 1;
+            var yoff = Rng.r.Next(5) + 1;
+            Teleportation.MoveAlong(Rng.r.Next(0x8000), 8, ref x, ref y);
+            Teleportation.TargetX = x;
+            Teleportation.TargetY = y;
+            ResurrectionEffects();
+            if (!UWTileMap.ValidTile(x, y))
+            {
+                return;
+            }
+            var tile = UWTileMap.current_tilemap.Tiles[x, y];
+            if (tile.tileType == 1)
+            {//put there exactly (put_at range 0); the original then sets its fine x from the y offset and its fine y from the x offset
+                var bloodstainIndex = ObjectCreator.PrepareNewObject(0xDF);
+                if (bloodstainIndex != 0)
+                {
+                    var bloodstain = UWTileMap.current_tilemap.LevelObjects[bloodstainIndex];
+                    var z = tile.floorHeight << 3;
+                    var placed = motion.PutAt(bloodstain, (x << 3) + xoff, (y << 3) + yoff, z, 0, false);
+                    if (placed != null)
+                    {
+                        placed.zpos = (short)z;
+                        placed.xpos = (short)yoff;
+                        placed.ypos = (short)xoff;
+                        var settled = motion.PlacedObjectCollision_seg030_2BB7_10BC(placed, x, y, 1);
+                        if (settled != null)
+                        {
+                            ObjectCreator.RenderObject(settled, UWTileMap.current_tilemap);
+                        }
+                    }
+                }
+            }
         }
 
         /// <summary>
@@ -191,7 +272,7 @@ namespace Underworld
         static void GoToJail()
         {
             Teleportation.CodeToRunOnTeleport = null;
-            play_hp = max_hp;
+            play_hp = STR;//put_player_in_jail: the hit points become the strength
             ChangeExperience(-Exp / 9);//loss of exp
             //PlayerInDeathMode = false;
             playerdat.playerObject.npc_animation = 1;
@@ -226,9 +307,9 @@ namespace Underworld
             }
             if (LBritish != null)
             {
-                npc.moveNPCToTile(critter: LBritish, destTileX: 40, destTileY: 35); //vanilla is 42,34
-                LBritish.quality = 40; //0x28;
-                LBritish.owner = 38; //0x27;
+                npc.moveNPCToTile(critter: LBritish, destTileX: 0x2A, destTileY: 0x22); //teleport_critter(lb, 0x2A, 0x22)
+                LBritish.quality = 0x28;
+                LBritish.owner = 0x27;
                 LBritish.npc_goal = 1;
             }
 
@@ -237,16 +318,8 @@ namespace Underworld
             //put weapons away.
             playerdat.PutWeaponAway();
 
-            //Close doors in tile 0x2A, 0x26
-            var tile = UWTileMap.current_tilemap.Tiles[0x2A, 0x26];
-            var doorObj = objectsearch.FindMatchInTile(tileX: 0x2A, tileY: 0x26, majorclass: 5, minorclass: 0, classindex: -1);
-            if (doorObj != null)
-            {
-                if (doorObj.classindex > 0x8)
-                {
-                    door.CloseDoor(doorObj);    
-                }                
-            }
+            //gruesome_door_hack(0x2A, 0x26): the cell's door is unlocked and opened
+            Teleportation.GruesomeDoorHack(0x2A, 0x26);
         }
 
 
@@ -261,17 +334,6 @@ namespace Underworld
             play_poison = 0;
             ActiveSpellEffectCount = 0;
 
-            //IN UW2 a blood stain should be spawned at where the player has died.
-            if (_RES == GAME_UW2)
-            {
-                var bloodstain = UWTileMap.current_tilemap.LevelObjects[ObjectCreator.PrepareNewObject(0xDF)];
-                bloodstain.tileX = playerObject.tileX; bloodstain.tileY= playerObject.tileY;
-                bloodstain.xpos = playerObject.xpos; 
-                bloodstain.ypos= playerObject.ypos;
-                var tile = UWTileMap.current_tilemap.Tiles[playerObject.tileX, playerObject.tileY];
-                bloodstain.zpos = (short)(tile.floorHeight<<3);
-                ObjectCreator.RenderObject(bloodstain, UWTileMap.current_tilemap);                
-            }
             AutomapEnabled = true;
         }
 

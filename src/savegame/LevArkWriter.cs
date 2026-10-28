@@ -59,14 +59,155 @@ namespace Underworld
             }
             if (UWClass._RES == UWClass.GAME_UW2)
             {
-                CompactUW2Overlays(result);
+                CompactOverlays(result, UW2OverlayOffset);
+                ClearUW2TimersPastCount(result);
+                CrunchObjects(result);
             }
             return result;
         }
 
+        private const int ObjectsOffset = 0x4000;
+        private const int MobileSize = 0x1B;
+        private const int MobileFreeListOffset = 0x7300;
+        private const int StaticFreeListOffset = 0x74FC;
+
+        static int Word(byte[] block, int offset) => block[offset] | (block[offset + 1] << 8);
+
+        static int ObjectOffset(int index) => index < 256
+            ? ObjectsOffset + index * MobileSize
+            : ObjectsOffset + 256 * MobileSize + (index - 256) * 8;
+
+        /// <summary>
+        /// Obj_ListOkay for every level loaded this session (UW2): whether ObjCrunch would find their lists consistent.
+        /// </summary>
+        public static bool UW2ObjectListsOkay()
+        {
+            if ((UWClass._RES != UWClass.GAME_UW2) || (UWTileMap.dungeons == null))
+            {
+                return true;
+            }
+            foreach (var map in UWTileMap.dungeons)
+            {
+                var data = map?.lev_ark_block?.Data;
+                if (data == null)
+                {
+                    continue;
+                }
+                var copy = new byte[UW2BlockSize];
+                Buffer.BlockCopy(data, 0, copy, 0, Math.Min(data.Length, copy.Length));
+                if (!CrunchObjects(copy))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// ObjCrunch (UW2 MAP.C Map_Save): when the object lists are consistent (Obj_ListOkay), every free record is
+        /// zeroed, so the saved block is clean: the whole of a mobile one, the first 8 bytes of a static one. When they
+        /// are not, the block is saved as it is, since a free record that is also in use must not be wiped; the player
+        /// has been asked first (string 0x96, see UW2ObjectListsOkay). (A save is refused while an object is held, so the
+        /// cursor's object, which the original also counts, is never there.)
+        /// </summary>
+        public static bool CrunchObjects(byte[] block)
+        {
+            var mobileFree = (short)Word(block, 0x7C02);
+            var staticFree = (short)Word(block, 0x7C04);
+            var counts = new int[1024];
+            bool bad = false;
+            int nmobile = 0, nstatic = 0;
+            for (int i = 0; i <= mobileFree; i++)
+            {
+                var index = Word(block, MobileFreeListOffset + i * 2) & 0x3FF;
+                bad |= counts[index]++ > 0;
+                nmobile++;
+            }
+            for (int i = 0; i <= staticFree; i++)
+            {
+                var index = Word(block, StaticFreeListOffset + i * 2) & 0x3FF;
+                bad |= counts[index]++ > 0;
+                nstatic++;
+            }
+            int mobcount = 0, objcount = 0;
+            //flog_list: each tile's list, and what each object holds; a list met more than 10 times is a loop
+            bool CountList(int index)
+            {
+                while (index != 0)
+                {
+                    if (++counts[index] > 1)
+                    {
+                        bad = true;
+                        if (counts[index] > 10)
+                        {
+                            return false;
+                        }
+                    }
+                    var o = ObjectOffset(index);
+                    if (((block[o + 1] & 0x80) == 0) && ((Word(block, o + 6) >> 6) != 0) && !CountList(Word(block, o + 6) >> 6))
+                    {
+                        return false;
+                    }
+                    if (index < 256)
+                    {
+                        mobcount++;
+                    }
+                    else
+                    {
+                        objcount++;
+                    }
+                    index = Word(block, o + 4) >> 6;
+                }
+                return true;
+            }
+            for (int tile = 0; tile < 64 * 64; tile++)
+            {
+                if (!CountList(Word(block, tile * 4 + 2) >> 6))
+                {
+                    bad = true;
+                    break;
+                }
+            }
+            if (counts[1] == 0)
+            {//the player off the map (GrSq < 0): count_list counts it by itself, as on another level's block
+                counts[1]++;
+                mobcount++;
+            }
+            if (bad || (nmobile + mobcount != 0xFF) || (nstatic + objcount != 0x300))
+            {
+                return false;
+            }
+            for (int i = 0; i <= mobileFree; i++)
+            {
+                Array.Clear(block, ObjectOffset(Word(block, MobileFreeListOffset + i * 2) & 0x3FF), MobileSize);
+            }
+            for (int i = 0; i <= staticFree; i++)
+            {
+                Array.Clear(block, ObjectOffset(Word(block, StaticFreeListOffset + i * 2) & 0x3FF), 8);
+            }
+            return true;
+        }
+
         // UW2 animation list in the level block: 64 entries of 6 bytes (link word, frames
-        // left, tile x, tile y) at 0x7C08.
+        // left, tile x, tile y) at 0x7C08; UW1 keeps the same list as a block of its own.
         private const int UW2OverlayOffset = 0x7C08;
+        // UW2 timer list: 64 words at 0x7D88, counted up to the first zero.
+        private const int UW2TimerOffset = 0x7D88;
+
+        /// <summary>
+        /// Anim_Save (UW2 MAP.C) zeroes the timer list past timercount, the entries it has: everything after the
+        /// first zero word, so a stale value cannot be counted by DOS.
+        /// </summary>
+        private static void ClearUW2TimersPastCount(byte[] block)
+        {
+            var end = UW2TimerOffset + 64 * 2;
+            var i = UW2TimerOffset;
+            while ((i < end) && ((block[i] | block[i + 1]) != 0))
+            {
+                i += 2;
+            }
+            Array.Clear(block, i, end - i);
+        }
         private const int UW2OverlayCount = 64;
 
         /// <summary>
@@ -77,13 +218,13 @@ namespace Underworld
         /// removes the object from the map (animation class flag 0x20): a door that had finished
         /// opening vanished, leaving the doorway as a passage.
         /// </summary>
-        private static void CompactUW2Overlays(byte[] block)
+        private static void CompactOverlays(byte[] block, int listOffset)
         {
             var live = new byte[UW2OverlayCount * 6];
             int count = 0;
             for (int i = 0; i < UW2OverlayCount; i++)
             {
-                int ptr = UW2OverlayOffset + i * 6;
+                int ptr = listOffset + i * 6;
                 int link = (block[ptr] | (block[ptr + 1] << 8)) >> 6;
                 int frames = block[ptr + 2] | (block[ptr + 3] << 8);
                 if (link != 0 && frames != 0)
@@ -91,7 +232,7 @@ namespace Underworld
                     Buffer.BlockCopy(block, ptr, live, count++ * 6, 6);
                 }
             }
-            Buffer.BlockCopy(live, 0, block, UW2OverlayOffset, live.Length);
+            Buffer.BlockCopy(live, 0, block, listOffset, live.Length);
         }
 
         /// <summary>
@@ -122,6 +263,8 @@ namespace Underworld
                 }
                 int copyLen = Math.Min(block.Data.Length, UW1OverlayBlockSize);
                 Buffer.BlockCopy(block.Data, 0, result, 0, copyLen);
+                //Anim_Save: DOS counts the entries up to the first zero object index, so the running ones go first
+                CompactOverlays(result, 0);
             }
             return result;
         }
@@ -176,6 +319,21 @@ namespace Underworld
                 }
             }
 
+            // Replace automap blocks (160..239) with the in-memory automap of every level loaded this
+            // session, as SaveAutoMapLevel writes PlayersMap to block 0x9F + level (1-based) on each
+            // save and level change. Without this the UW2 exploration since the game was loaded is lost.
+            if (automap.automaps != null)
+            {
+                for (int lvl = 0; lvl < Math.Min(80, automap.automaps.Length); lvl++)
+                {
+                    if (automap.automaps[lvl]?.buffer != null &&
+                        automap.automaps[lvl].buffer.Length == 64 * 64)
+                    {
+                        blockData[160 + lvl] = automap.automaps[lvl].buffer;
+                    }
+                }
+            }
+
             // Replace automap-note blocks (240..319) with the in-memory notes.
             // A level whose notes were all deleted serialises to an empty array, which the
             // layout step below turns into an absent block. Skipping the replacement instead
@@ -201,23 +359,15 @@ namespace Underworld
             int[] lengths = new int[noOfBlocks];
             int[] reserved = new int[noOfBlocks];
 
-            // The source ARK's reservedSpace values — preserve them.
-            // (They are read from source block metadata at load time.)
             byte[] source = LevArkLoader.lev_ark_file_data;
-            for (int i = 0; i < noOfBlocks; i++)
+            //the source's block flags (put_arc keeps bits 0 and 2): DATA has 7 or 5 for the maps, automaps and notes, 3 or 1 for the textures
+            int SourceFlags(int i)
             {
-                // Read reservedSpace from source header if available.
-                int srcReserved = 0;
-                if (source != null && source.Length >= 6 + noOfBlocks * 16)
+                if (source != null && source.Length >= 6 + noOfBlocks * 16 && (int)Loader.getAt(source, 0, 32) == noOfBlocks)
                 {
-                    int srcNoOfBlocks = (int)Loader.getAt(source, 0, 32);
-                    if (srcNoOfBlocks == noOfBlocks)
-                    {
-                        srcReserved = (int)Loader.getAt(source,
-                            6 + (i * 4) + (noOfBlocks * 12), 32);
-                    }
+                    return (int)Loader.getAt(source, 6 + (i * 4) + (noOfBlocks * 4), 32);
                 }
-                reserved[i] = srcReserved;
+                return (i >= 80 && i < 160) ? 1 : 5;
             }
 
             // Assign offsets: layout all present blocks sequentially after header.
@@ -227,8 +377,9 @@ namespace Underworld
                 if (blockData[i] != null && blockData[i].Length > 0)
                 {
                     offsets[i] = cursor;
-                    flags[i] = DataLoader.UW2_NOCOMPRESSION; // 0 — uncompressed
+                    flags[i] = SourceFlags(i) & 5; // written uncompressed (bit 1 clear), bits 0 and 2 kept as put_arc keeps them
                     lengths[i] = blockData[i].Length;
+                    reserved[i] = blockData[i].Length;//packed one after another: its allocation is its length, so DOS rewrites it in place
                     cursor += blockData[i].Length;
                 }
                 else
@@ -236,7 +387,7 @@ namespace Underworld
                     // An absent block carries no allocation. Every absent block in the
                     // shipped UW2 archive has offset, length and reserved all zero.
                     offsets[i] = 0;
-                    flags[i] = 0;
+                    flags[i] = SourceFlags(i) & 5;
                     lengths[i] = 0;
                     reserved[i] = 0;
                 }
@@ -330,6 +481,23 @@ namespace Underworld
                         {
                             blockData[lvl] = SerializeLevelBlock(live);
                         }
+                    }
+                }
+            }
+
+            // Replace the texture map blocks (18..26) of the levels loaded: Tybal's maze swaps a floor texture in the
+            // level's own texture map (swap_tmap), which SaveLevel writes back.
+            if (UWClass._RES == UWClass.GAME_UW1 && UWTileMap.dungeons != null)
+            {
+                int texLevels = Math.Min(9, UWTileMap.dungeons.Length);
+                for (int lvl = 0; lvl < texLevels; lvl++)
+                {
+                    var liveTex = UWTileMap.dungeons[lvl]?.tex_ark_block?.Data;
+                    if (liveTex != null && blockData[18 + lvl] != null && liveTex.Length >= blockData[18 + lvl].Length)
+                    {
+                        var copy = new byte[blockData[18 + lvl].Length];
+                        Buffer.BlockCopy(liveTex, 0, copy, 0, copy.Length);
+                        blockData[18 + lvl] = copy;
                     }
                 }
             }

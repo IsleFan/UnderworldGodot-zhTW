@@ -12,39 +12,27 @@ namespace Underworld
 
 
         public static void ApplyDamageTrap(uwObject triggeringCharacter, bool Poison, int basedamage)
-        {
-            if (triggeringCharacter == playerdat.playerObject)
+        {//whack_thing: physical damage (type 4, through the resistances) to whoever set it off. A poison trap
+         //poisons the player at that strength unless he resists poison; for anyone else it is plain damage.
+            if (triggeringCharacter == null)
             {
-                if (Poison)
+                return;
+            }
+            if (Poison && (triggeringCharacter == playerdat.playerObject))
+            {
+                if (basedamage > playerdat.play_poison)
                 {
-                    //apply poisoning
-                    //int test = basedamage;
-                    //var scale = damage.ScaleDamage(127, ref test, 0x10); //player;
-                    if (basedamage > playerdat.play_poison)
+                    var test = 1;
+                    if (damage.ScaleDamage(127, ref test, 0x10) != 0)
                     {
-                        playerdat.play_poison = (byte)Math.Min(basedamage, 0xF);
+                        playerdat.play_poison = (byte)basedamage;//a four-bit field, as the original's
                     }
                 }
-                else
-                {
-                    //appy damage
-                    if (basedamage>0)
-                    {
-                        playerdat.play_hp = Math.Max(0, playerdat.play_hp - basedamage);
-                    }                    
-                }
+                return;
             }
-            else
+            if (basedamage > 0)
             {
-                //npc
-                if (Poison)
-                {
-                    basedamage = -basedamage;
-                }
-                if (basedamage>0)
-                {
-                    damage.DamageObject(objToDamage: triggeringCharacter, basedamage: basedamage, damagetype: 4, objList: UWTileMap.current_tilemap.LevelObjects, WorldObject: true, damagesource: 0);
-                }                
+                damage.DamageObject(objToDamage: triggeringCharacter, basedamage: basedamage, damagetype: 4, objList: UWTileMap.current_tilemap.LevelObjects, WorldObject: true, damagesource: 0);
             }
         }
     }

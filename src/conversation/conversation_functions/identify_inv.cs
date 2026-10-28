@@ -16,11 +16,12 @@ namespace Underworld
                     applyAccuracy: true, 
                     obj: obj);
             
-            var idString = look.GetDescriptionString(
-                obj: obj, 
-                objList: UWTileMap.current_tilemap.LevelObjects, 
-                lorecheckresult: lorecheck, 
-                IncludeYouSee: false);
+            var describe = at(at(stack + stackptr-3));
+            var idString = look.ConversationItemName(
+                obj: obj,
+                objList: UWTileMap.current_tilemap.LevelObjects,
+                describe: describe != 0,
+                ident: lorecheck);
             var stringIDNo = GameStrings.AddString(currentConversation.StringBlock, idString);
 
             Set(at(stack + stackptr-2), stringIDNo );

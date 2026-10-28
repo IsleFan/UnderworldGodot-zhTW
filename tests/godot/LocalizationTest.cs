@@ -133,8 +133,8 @@ public partial class LocalizationTest : Node
             "受詛咒的手斧，有毒");
         Expect(ZhText.LookObject(true, 1, -1, false, false, 0, new MagicEnchantment.Description(false, false, 0xC00 | 1, 0), -1),
             "你看到手斧，附有「火柴微光」，已經沒有充能。");
-        Expect(ZhText.LookCreature(1, 64, 0, "", false), "你看到不悅的腐蟲。");
-        Expect(ZhText.LookCreature(1, 71, 8, GameStrings.GetString(7, 24), false), "你看到不悅的惡鬼，名叫瑞緹查爾。");
+        Expect(ZhText.LookCreature(0x61, ZhText.ObjectName(64), null, false), "你看到不悅的腐蟲。");
+        Expect(ZhText.LookCreature(0x61, ZhText.ObjectName(71), Localization.Lookup(7, 24, GameStrings.GetString(7, 24)), true), "你看到不悅的惡鬼，名叫瑞緹查爾。");
         Expect(ZhText.YouRead(0), "你讀了手斧……");
         Expect(ZhText.PhraseAndName(GameStrings.str_you_destroyed_the_, 0), "你摧毀了手斧。");
         Expect(ZhText.OutOf(GameStrings.GetDisplayString(1, GameStrings.str_your_current_vitality_is_), 25, 30), "你目前的生命力是 25／30。");
@@ -150,7 +150,7 @@ public partial class LocalizationTest : Node
         Expect(GameStrings.GetDisplayString(7, 3) + GameStrings.GetDisplayString(7, 2) + GameStrings.GetDisplayString(7, 12),
             "……我猜我這是一筆公平的交易……");
         //a name whose English no longer matches its row keeps the English, without the article
-        Expect(ZhText.LookCreature(1, 71, 8, "Somebody", false), "你看到不悅的惡鬼，名叫Somebody。");
+        Expect(ZhText.LookCreature(0x61, ZhText.ObjectName(71), Localization.Lookup(7, 24, "Somebody"), true), "你看到不悅的惡鬼，名叫Somebody。");
 
         uwsettings.instance.language = Localization.English;
         if (ZhText.Enabled) { Fail("ZhText is on in English"); }

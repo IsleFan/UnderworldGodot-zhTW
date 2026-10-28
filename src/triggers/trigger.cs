@@ -79,10 +79,18 @@ namespace Underworld
                                 return 2;
                             }
                         }
-                        //Ovr166_173
+                        //Ovr166_173: other objects (a thrown item) by the trigger's own flags (UseTrigger): UW2 needs its
+                        //flag 9, UW1 refuses only an enchanted trigger without flag 11
                         if (CharacterObj.majorclass != 1)
                         {
-                            if (CharacterObj.flags0 == 0)
+                            if (_RES == GAME_UW2)
+                            {
+                                if (TriggerObject.flags0 == 0)
+                                {
+                                    return 2;
+                                }
+                            }
+                            else if ((TriggerObject.enchantment != 0) && (TriggerObject.flags2 == 0))
                             {
                                 return 2;
                             }
@@ -159,7 +167,7 @@ namespace Underworld
         /// <param name="triggerY"></param>
         public static void TriggerObjectLink(int character, uwObject ObjectUsed, int triggerType, int triggerX, int triggerY, uwObject[] objList)
         {
-            bool RunNext = true;
+            bool RunNext = _RES == GAME_UW2;//UW1's checkTrap sets off only the first trap or trigger an object holds
             if (ObjectUsed.is_quant == 0 && ObjectUsed.link > 0)
             {
                 var ObjectToTrigger = objectsearch.FindMatchInObjectListChainNextObjectsOnly(
@@ -169,15 +177,15 @@ namespace Underworld
                     classindex: -1,
                     objList: objList);
 
-                if (ObjectUsed.OneF0Class == 0x17)
-                {//a button/switch
+                if ((_RES == GAME_UW2) && (ObjectUsed.OneF0Class == 0x17))
+                {//a button/switch (UW2 only; UW1 always takes the first and runs no more anyway)
                     RunNext = false; //flag so that no next triggers are ran
                     if (ObjectUsed.classindex > 7)
                     {//button is in on postion
                         if (ObjectToTrigger != null)
-                        {
+                        {//the second trap in the list, after the first (checkTrap)
                             var buttonTriggerNext = objectsearch.FindMatchInObjectListChainNextObjectsOnly(
-                                ListHeadIndex: ObjectUsed.link,
+                                ListHeadIndex: ObjectToTrigger.next,
                                 majorclass: 6,
                                 minorclass: -1,
                                 classindex: -1,
@@ -225,7 +233,7 @@ namespace Underworld
                             &&
                             (triggerType == 4)
                             &&
-                            ((ObjectToTrigger.item_id & 0x3F) != 8)
+                            (((ObjectToTrigger.item_id & 0x3F) != 8) || (_RES != GAME_UW2))//only UW2 leaves door traps alone here
                             )
                         {
 
@@ -237,7 +245,19 @@ namespace Underworld
                                 triggerY: triggerY,
                                 objList: objList);
 
-                            Debug.Print("TODO RemoveThisTriggerChain");
+                            //the trap goes off once: delete it and its chain from the object's contents
+                            //(checkTrap, delete_trap), and nothing more runs.
+                            if ((objList == UWTileMap.current_tilemap.LevelObjects) && (ObjectUsed.DataBuffer == UWTileMap.current_tilemap.lev_ark_block.Data))
+                            {
+                                ObjectRemover_OLD.RemoveTrapChain(
+                                    trapObj: ObjectToTrigger,
+                                    ptrListHead: ObjectUsed.PTR + 6);
+                            }
+                            else if (objList == playerdat.InventoryObjects)
+                            {//a carried object: unlink the trap from its contents and drop it (and what it holds) from the inventory
+                                RemoveCarriedTrap(ObjectUsed, ObjectToTrigger);
+                            }
+                            ObjectToTrigger = null;//end process
                         }
                         else
                         {
@@ -246,6 +266,47 @@ namespace Underworld
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// delete_trap for an object in the inventory, whose contents are in the inventory's own list.
+        /// </summary>
+        static void RemoveCarriedTrap(uwObject carried, uwObject trapObj)
+        {
+            if (carried.link == trapObj.index)
+            {
+                carried.link = trapObj.next;
+            }
+            else
+            {
+                var index = (int)carried.link;
+                while (index != 0)
+                {
+                    var obj = playerdat.InventoryObjects[index];
+                    if (obj.next == trapObj.index)
+                    {
+                        obj.next = trapObj.next;
+                        break;
+                    }
+                    index = obj.next;
+                }
+            }
+            void Remove(int index)
+            {
+                var obj = playerdat.InventoryObjects[index];
+                if ((obj.is_quant == 0) && (obj.link != 0))
+                {
+                    var content = (int)obj.link;
+                    while (content != 0)
+                    {
+                        var next = playerdat.InventoryObjects[content].next;
+                        Remove(content);
+                        content = next;
+                    }
+                }
+                playerdat.RemoveFromInventory(index: index, updateUI: false, ClearLink: false);
+            }
+            Remove(trapObj.index);
         }
 
         /// <summary>

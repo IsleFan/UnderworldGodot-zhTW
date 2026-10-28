@@ -36,7 +36,7 @@ namespace Underworld
                     if (
                         (playerdat.play_hp > 0x14)
                         &&
-                        (Rng.r.Next(3) < 1)
+                        ((Rng.r.Next(0x8000) & 3) < 1)//one in four
                         )
                     {
                         playerdat.play_hp -= (byte)Rng.r.Next(3);
@@ -45,7 +45,7 @@ namespace Underworld
                     {
                         if (playerdat.play_hp > 1)
                         {
-                            if ((Rng.r.Next(0x7FFF) & 7) == 0)
+                            if ((Rng.r.Next(0x8000) & 7) == 0)
                             {
                                 playerdat.play_hp -= 1;
                             }
@@ -54,11 +54,14 @@ namespace Underworld
                 }
             }
 
-            //shake screen
-            motion.SetScreenShake(TypeOfShake: 0x40, duration: (byte)(0xF + Rng.r.Next(0x1E)));
+            //shake screen, eleven times in twelve
+            if (Rng.r.Next(12) != 0)
+            {
+                motion.SetScreenShake(TypeOfShake: 0x40, duration: (byte)(0xF + Rng.r.Next(0x1E)));
+            }
 
             //randomise compass
-            uimanager.PointCompassInDirection(Rng.r.Next(0x7FFF) & 0xF);
+            uimanager.PointCompassInDirection(Rng.r.Next(0x8000) & 0xF);
         }
 
         /// <summary>
@@ -70,6 +73,10 @@ namespace Underworld
 
             //Spawn moongate
             var newmoongate = ObjectCreator.PrepareNewObject(0x15A, ObjectFreeLists.ObjectListType.StaticList);
+            if (newmoongate == 0)
+            {//no free object on the level
+                return;
+            }
             var obj = UWTileMap.current_tilemap.LevelObjects[newmoongate];
             obj.is_quant = 1;
             var moontile = UWTileMap.current_tilemap.Tiles[0x20, 0x20];

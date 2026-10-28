@@ -43,10 +43,9 @@ namespace Underworld
                 uimanager.NextOutputPrependedString = GameStrings.GetDisplayString(0x1170 + obj.flags);//The TYPE of SIGN reads: message
             }
             
-            if (obj.is_quant == 1)
-            {
-                uimanager.AddToMessageScroll(GameStrings.GetDisplayString(8, obj.link - 0x200));
-            }
+            //RectLook: the text is the link (a quantity) or else the owner, with its article kept
+            var text = obj.is_quant == 1 ? obj.link & 0x1FF : obj.owner;
+            uimanager.AddToMessageScroll(GameStrings.FixNameString(GameStrings.GetDisplayString(8, text), article: true, plural: false));
             return true;
         }
 

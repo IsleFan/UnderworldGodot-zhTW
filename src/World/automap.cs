@@ -112,6 +112,64 @@ namespace Underworld
         /// <param name="cY"></param>
         /// <param name="range"></param>
         /// <returns></returns>
+        /// <summary>
+        /// Records every square within range of cX, cY, by distance and not by sight, inside the map's border
+        /// squares (automap_area with clip_circle, the Map Area spell).
+        /// </summary>
+        public static void MarkCircleOfTilesVisited(int cX, int cY, int range, int dungeon_level)
+        {
+            var buffer = automaps[dungeon_level - 1].buffer;
+            for (var y = cY - range; y <= cY + range; y++)
+            {
+                for (var x = cX - range; x <= cX + range; x++)
+                {
+                    var dx = x - cX; var dy = y - cY;
+                    if (dx * dx + dy * dy > range * range)
+                    {
+                        continue;
+                    }
+                    //automap_area clips as it goes: a square left of the border is moved onto column 1, and the rest
+                    //of a row past the right border, above the top or below the bottom is given up
+                    if (x < 1)
+                    {
+                        x = 1;
+                    }
+                    if ((x >= 0x3F) || (y < 1) || (y >= 0x3F))
+                    {
+                        break;
+                    }
+                    //only the tile type and the floor's terrain class: the doors, bridges and stairs on it are not recorded
+                    buffer[y * 64 + x] = automaptileinfo.TileCode(UWTileMap.current_tilemap.Tiles[x, y]);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Marks the squares x..x+w, y..y+h of the current level's map as known but not seen: types 0-5
+        /// become 0xA-0xF and slopes stay as they are (make_terrain_unseen, hack trap 45).
+        /// </summary>
+        public static void MakeTerrainUnseen(int x, int y, int w, int h)
+        {
+            var buffer = automaps[playerdat.dungeon_level - 1].buffer;
+            for (int i = x; i <= x + w; i++)
+            {
+                for (int j = y; j <= y + h; j++)
+                {
+                    var index = j * 64 + i;//a column past the edge runs on into the next row, as in DOS
+                    if (index < 0 || index >= buffer.Length)
+                    {
+                        continue;
+                    }
+                    var t = buffer[index] & 0xF;
+                    if (t <= 5)
+                    {
+                        t += 0xA;
+                    }
+                    buffer[index] = (byte)((buffer[index] & 0xF0) | t);
+                }
+            }
+        }
+
         public static int MarkRangeOfTilesVisited(int cX, int cY, int range, int dungeon_level)
         {
 
@@ -134,7 +192,7 @@ namespace Underworld
                             level: dungeon_level - 1,
                             tileX: x, tileY: y,
                             tiletype: UWTileMap.current_tilemap.Tiles[x, y].tileType,
-                            displaytype: automaptileinfo.GetDisplayType(UWTileMap.current_tilemap.Tiles[x, y]));
+                            displaytype: automaptileinfo.TileCode(UWTileMap.current_tilemap.Tiles[x, y]) >> 4);
                     }
                     else
                     {
@@ -145,7 +203,7 @@ namespace Underworld
                             {
                                 if (UWTileMap.IsOpen(UWTileMap.current_tilemap.Tiles[x, y].tileType))
                                 {
-                                    var displaytype = automaptileinfo.GetDisplayType(tile);
+                                    var displaytype = automaptileinfo.TileCode(tile) >> 4;
                                     //automap.automaps[dungeon_level - 1].tiles[northaxis, aY].DisplayType;
                                     //mark as undiscovered, open tile. 
                                     MarkTileVisited(

@@ -129,21 +129,54 @@ namespace Underworld
             }
         }
 
-        public static bool moveNPCToTile(uwObject critter, int destTileX, int destTileY)
+        /// <summary>
+        /// Moves a critter to tile (x, y) (teleport_critter): already there it stays as it is; otherwise it goes to the
+        /// spot set by the tile type (the middle, or the open corner of a diagonal), on the floor or, for a flier,
+        /// half way up to height 0x80. Fails on a solid tile or when there is no room there (can_place). Clears its
+        /// transient b19 bits. onFloor puts a flier on the floor too (wander_that_monster).
+        /// </summary>
+        public static bool moveNPCToTile(uwObject critter, int destTileX, int destTileY, bool onFloor = false)
         {
             Debug.Print($"Moving {critter.a_name} to {destTileX},{destTileY} from {critter.tileX}, {critter.tileY}");
             if (UWTileMap.ValidTile(destTileX, destTileY) && UWTileMap.ValidTile(critter.tileX, critter.tileY))
             {
+                if (critter.tileX == destTileX && critter.tileY == destTileY)
+                {
+                    return true;
+                }
                 var sourceTile = UWTileMap.current_tilemap.Tiles[critter.tileX, critter.tileY];
                 var destTile = UWTileMap.current_tilemap.Tiles[destTileX, destTileY];
                 if (destTile.tileType != UWTileMap.TILE_SOLID)
                 {
+                    //set_gridx_and_y_based_on_tile_type: the original gives TILE_DIAG_NW the same corner as TILE_DIAG_SE
+                    int fx = 4, fy = 4;
+                    switch (destTile.tileType)
+                    {
+                        case UWTileMap.TILE_DIAG_SE:
+                        case UWTileMap.TILE_DIAG_NW:
+                            fx = 6; fy = 1; break;
+                        case UWTileMap.TILE_DIAG_SW:
+                            fx = 1; fy = 1; break;
+                        case UWTileMap.TILE_DIAG_NE:
+                            fx = 6; fy = 6; break;
+                    }
+                    var z = destTile.floorHeight << 3;
+                    var flier = critterObjectDat.isFlier(critter.item_id);
+                    if (flier && !onFloor)
+                    {
+                        z = (byte)((z + 0x80) >> 1);
+                    }
+                    if (!motion.CanPlace(critter.item_id, critter.index, (destTileX << 3) + fx, (destTileY << 3) + fy, z, flier, 8))
+                    {
+                        Debug.Print($"No room for {critter.a_name} at {destTileX},{destTileY}");
+                        return false;
+                    }
                     ObjectRemover_OLD.RemoveObjectFromLinkedList(sourceTile.indexObjectList, critter.index, UWTileMap.current_tilemap.LevelObjects, sourceTile.Ptr + 2);
                     critter.next = destTile.indexObjectList;
                     destTile.indexObjectList = critter.index;
                     critter.tileX = destTileX; critter.tileY = destTileY;
-                    critter.zpos = (short)(destTile.floorHeight << 3);
-                    critter.xpos = 3; critter.ypos = 3;
+                    critter.zpos = (short)z;
+                    critter.xpos = (short)fx; critter.ypos = (short)fy;
                     critter.npc_xhome = (short)destTileX;
                     critter.npc_yhome = (short)destTileY;
 

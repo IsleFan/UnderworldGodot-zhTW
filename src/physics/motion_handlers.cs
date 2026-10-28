@@ -56,6 +56,7 @@ namespace Underworld
                 if ((arg0 & 0x100)!=0)
                 {
                     npc.dseg_2636 = 0x80;
+                    npc.dseg_67d6_225E = true;//hitwall, for adjust_height
                 }
                 if ((arg0 & 0x400) != 0)
                 {
@@ -136,8 +137,8 @@ namespace Underworld
             {
                 return false;
             }
-            if ((motion.PreviousTileState_dseg_67d6_22B4 & 0xA) !=0)
-            {
+            if ((UWClass._RES == UWClass.GAME_UW2) && ((motion.PreviousTileState_dseg_67d6_22B4 & 0xA) != 0))
+            {//UW2 does not stop a swimmer or a player on ice at the edge (UW1 does)
                 return false;
             }
             motion.playerMotionParams.unk_8_y = 0;
@@ -194,7 +195,7 @@ namespace Underworld
                         animo.SpawnAnimoInTile(subclassindex: 6, xpos: 3, ypos: 3, zpos: (short)(tile.floorHeight << 3), tileX: tile.tileX, tileY: tile.tileY);
                         obj.npc_animation = npc.ANIMATION_DEATH;
                         npc.GetCritterAnimationGlobalsForCurrObj(obj);
-                        obj.AnimationFrame = (byte)npc.MaxAnimFrame;
+                        obj.AnimationFrame = (byte)(UWClass._RES == UWClass.GAME_UW2 ? npc.MaxAnimFrame : 3);//UW1 holds frame 3
                         obj.Projectile_Speed = 1;
                         return true;
                     }

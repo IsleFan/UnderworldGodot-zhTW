@@ -15,6 +15,15 @@ public sealed class TvfxVoice
     public TvfxPhase Phase { get; private set; } = TvfxPhase.Idle;
     public TvfxPatch? Patch { get; private set; }
 
+    /// <summary>The game's effect slot this voice plays for (EffectChannels), -1 for none.</summary>
+    public int Slot { get; set; } = -1;
+
+    /// <summary>The effect is killed (kill_effect's note off): a sounding voice goes into its release.</summary>
+    public void NoteOff()
+    {
+        if (Phase == TvfxPhase.Keyon && Patch is not null) EnterRelease();
+    }
+
     private readonly ushort[] _acc       = new ushort[8];
     private readonly ushort[] _counter   = new ushort[8];
     private readonly short[]  _increment = new short[8];

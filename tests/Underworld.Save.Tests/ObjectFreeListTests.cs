@@ -230,10 +230,28 @@ public class ObjectFreeListTests : IDisposable
         Assert.Equal(Slot, got);
     }
 
-    [Fact]
-    public void Allocate_WhenListIsEmpty_ReturnsZero()
+    private static UWTileMap LoadBuiltLevel()
     {
         var tm = LoadLevel(UWClass.GAME_UW1, "DATA", "UW1", 0);
+        tm.BuildTileMapUW(levelNo: 0, tex_ark: tm.tex_ark_block, ovl_ark: tm.ovl_ark_block);
+        return tm;
+    }
+
+    /// <summary>
+    /// Obj_Alloc garbage collects once when a list is empty; with nothing on the map to
+    /// collect it still has no object to give, so the caller gets 0 and must not use slot 0.
+    /// </summary>
+    [Fact]
+    public void Allocate_WhenListIsEmptyAndNothingCanBeCollected_ReturnsZero()
+    {
+        var tm = LoadBuiltLevel();
+        for (int x = 0; x < 64; x++)
+        {
+            for (int y = 0; y < 64; y++)
+            {
+                tm.Tiles[x, y].indexObjectList = 0;
+            }
+        }
         tm.StaticFreeListPtr = -1;
         tm.MobileFreeListPtr = -1;
 
@@ -241,6 +259,49 @@ public class ObjectFreeListTests : IDisposable
         Assert.Equal(0, ObjectFreeLists.GetAvailableObjectSlot(ObjectFreeLists.ObjectListType.MobileList));
         Assert.Equal(-1, tm.StaticFreeListPtr);
         Assert.Equal(-1, tm.MobileFreeListPtr);
+    }
+
+    /// <summary>
+    /// A full static list no longer fails outright: the garbage collect (range 3) deletes
+    /// objects lying more than 7 tiles from the player, and the allocation takes one of them.
+    /// </summary>
+    [Fact]
+    public void Allocate_WhenStaticListIsEmpty_TakesAnObjectCollectedFarFromThePlayer()
+    {
+        var origSeed = Rng.Seed;
+        try
+        {
+            Rng.Seed = 0x1234;
+            var tm = LoadBuiltLevel();
+            var px = playerdat.playerObject.tileX;
+            var py = playerdat.playerObject.tileY;
+            var before = Allocated(tm.lev_ark_block.Data);
+            tm.StaticFreeListPtr = -1;
+
+            int got = ObjectFreeLists.GetAvailableObjectSlot(ObjectFreeLists.ObjectListType.StaticList);
+
+            Assert.True(got >= 256, $"expected a static object, got {got}");
+            Assert.Contains(got, before);
+            Assert.DoesNotContain(got, Allocated(tm.lev_ark_block.Data));
+            var gone = before;
+            gone.ExceptWith(Allocated(tm.lev_ark_block.Data));
+            Assert.InRange(gone.Count, 1, 10 + 64);   // up to 10 collected, each with its contents
+            for (int x = 0; x < 64; x++)
+            {
+                for (int y = 0; y < 64; y++)
+                {
+                    if (Math.Abs(px - x) + Math.Abs(py - y) <= 7)
+                    {
+                        int i = tm.Tiles[x, y].indexObjectList;
+                        Assert.True(i == 0 || !gone.Contains(i), $"object {i} near the player was collected");
+                    }
+                }
+            }
+        }
+        finally
+        {
+            Rng.Seed = origSeed;
+        }
     }
 
     [Fact]

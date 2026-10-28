@@ -15,84 +15,41 @@ namespace Underworld
             return true;
         }
 
-        public static bool UseOn(uwObject LockpickObject, uwObject targetObject)
-        {//assumes lockpick is in inventory. door is in world
-            var isDoor = ((targetObject.majorclass == 5) && (targetObject.minorclass == 0));
-            //door doorInstance = null;
-            if (isDoor)
+        /// <summary>
+        /// Picking a lock (UseLockpickOn): checkLock with minus the Picklock skill (UW2 plus one). In UW2 a fumble breaks
+        /// the pick unless a dexterity check against 20 succeeds, and with no Picklock skill an unlocked lock reports a
+        /// failed attempt. UW1 picks never break. Picking only unlocks; it does not open the door.
+        /// </summary>
+        public static bool UseOn(uwObject LockpickObject, uwObject targetObject, bool WorldObject = true)
+        {
+            var skill = (_RES == GAME_UW2) ? -(playerdat.PickLock + 1) : -playerdat.PickLock;
+            var result = a_lock.CheckLock(playerdat.playerObject, targetObject, skill, WorldObject);
+            if (_RES == GAME_UW2)
             {
-                //doorInstance = (door)targetObject.instance;
-                if (door.isOpen(targetObject))
+                if (((result == 5) && (playerdat.SkillCheck(playerdat.DEX, 20) > 0)) || ((result == 4) && (skill == -1)))
                 {
-                    //6	That is already open.
-                    uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, 6));
-                    return true;
+                    result = 0;
                 }
             }
-            var lockobj = a_lock.LockObject(targetObject);
-            if (a_lock.LockObject != null)
+            switch (result)
             {
-                if (a_lock.GetIsLocked(targetObject))
-                {
-                    //locked. try and picklock using skill check
-                    //The skill check is ``lockpick`` + 1 vs 3 times the ``zpos`` value of any ``a_lock`` object linked to the locked door or chest.
-                    // Possible results are
-                    // * Critical Success and Success- Door is unlocked
-                    // * Failure - Door remains locked
-                    // * Critical Failure - Door remains locked. Another skill check of ``Dexterity`` vs 20d takes place. If this fails the lockpick is broken.
-
-                    var result = playerdat.SkillCheck(playerdat.PickLock + 1, lockobj.zpos * 3);
-                    switch (result)
-                    {
-                        case playerdat.SkillCheckResult.CritSucess:
-                        case playerdat.SkillCheckResult.Success:
-                            {
-                                //open the lock
-                                a_lock.SetIsLocked(targetObject, false, 0);
-                                if (isDoor)
-                                {
-                                    door.ToggleDoor(targetObject);
-                                }
-                                UWsoundeffects.PlaySoundEffectAtAvatar(UWsoundeffects.SoundEffectLockPick, 0x40, 0);
-                                uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, GameStrings.str_you_succeed_in_picking_the_lock_));
-                                break;
-                            }
-                        case playerdat.SkillCheckResult.Fail:
-                            {
-                                uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, GameStrings.str_your_lockpicking_attempt_failed_));
-                                break;
-                            }
-                        case playerdat.SkillCheckResult.CritFail:
-                            {
-                                //do a skill check dex vs 20d to see if the pick breaks;
-                                switch (playerdat.SkillCheck(playerdat.DEX, 20))
-                                {
-                                    case playerdat.SkillCheckResult.Fail:
-                                    case playerdat.SkillCheckResult.CritFail:
-                                        uimanager.AddToMessageScroll(ZhText.Enabled
-                                            ? ZhText.Compose("你弄斷了", ZhText.ObjectName(LockpickObject.item_id), "。\n")
-                                            : "You broke your pick. \n");
-                                        playerdat.RemoveFromInventory(LockpickObject.index, true);
-                                        break;
-                                    default:
-                                        uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, GameStrings.str_your_lockpicking_attempt_failed_));
-                                        break;
-                                }
-                                break;
-                            }
-                    }
-                }
-                else
-                {
-                    //122 That is not locked.
-                    uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, GameStrings.str_that_is_not_locked_));
-                    //
-                }
-            }
-            else
-            {
-                //else return no lock on that  message
-                uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, 3));
+                case 1:
+                    uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, 3));//There is no lock on that.
+                    break;
+                case 5:
+                    uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, 0x86));//You broke your pick.
+                    ObjectCreator.Consume(LockpickObject, true);
+                    break;
+                case 0:
+                    uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, _RES == GAME_UW2 ? 0x85 : 0x78));//Your lockpicking attempt failed.
+                    break;
+                case 4:
+                    uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, _RES == GAME_UW2 ? 0x88 : 0x7A));//That is not locked.
+                    break;
+                default:
+                    UWsoundeffects.PlaySoundEffectAtAvatar(UWsoundeffects.SoundEffectLockPick, 0x40, 0);
+                    uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, _RES == GAME_UW2 ? 0x87 : 0x79));//You succeed in picking the lock.
+                    break;
             }
             return true;
         }

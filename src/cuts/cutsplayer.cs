@@ -30,7 +30,12 @@ namespace Underworld
         // Viewport/panorama state
         static int vpCanvasWidth, vpCanvasHeight;
         static int vpStartX, vpStartY;
-        static int vpOffsetY;
+        /// <summary>
+        /// splity: the row, counted up from the bottom, where the picture stops and the subtitle bar begins, or -1 for
+        /// none. Set by splity (24) and by vscreen's third argument (20), kept from one cutscene to the next as in the
+        /// original.
+        /// </summary>
+        static int splitY = -1;
         static int vpScrollDX, vpScrollDY;
         static bool vpScrollActive;
         static int vpFrameOffset;
@@ -121,22 +126,64 @@ namespace Underworld
             (vpCanvasWidth != 320 || vpCanvasHeight != 200);
 
         /// <summary>
-        /// Height of the scene area on the 320x200 display.
-        /// When a panorama viewport is active and vpOffsetY is set, the scene
-        /// occupies 200 - vpOffsetY pixels, with the remainder reserved for
-        /// subtitles. Otherwise the full 200 pixels are used.
-        /// Derived from viewport-setup (func 20) bytecode parameters.
+        /// Height of the scene area on the 320x200 display: show_anm draws 200 - (splity + 1) rows of the frame, the
+        /// rest is the subtitle bar.
         /// </summary>
         static int SceneDisplayH =>
-            PanoramaActive && vpOffsetY > 0 ? 200 - vpOffsetY : 200;
+            splitY >= 0 ? 200 - (splitY + 1) : 200;
+
+        /// <summary>
+        /// splity (24), and vscreen's split: sets the bar; the subtitles are bottom-aligned whether or not there is one.
+        /// </summary>
+        static void SetSplit(int arg, TextureRect cutscontrol)
+        {
+            splitY = arg == 999 ? -1 : arg - 1;
+            if (!FullScreen)
+            {
+                return;
+            }
+            PlaceSubtitle(cutscontrol.Size.Y / 200f);
+        }
+
+        /// <summary>
+        /// cuts_draw_text: the subtitle lines are drawn bottom up from fh * lines + 1, so the last line's bottom row is 2
+        /// rows above the bottom of the screen, bar or no bar. The label is bottom-aligned there (a SYS font glyph ends at
+        /// the line's descent, the bottom of its line box).
+        /// </summary>
+        static void PlaceSubtitle(float scale)
+        {
+            var subtitle = uimanager.instance.CutsSubtitle;
+            subtitleBottom = (200 - 2) * scale;
+            if (!subtitleHooked)
+            {//each new text is laid out, then the label is moved so its lines end at the bottom
+                subtitleHooked = true;
+                subtitle.Finished += AlignSubtitle;
+            }
+            AlignSubtitle();
+        }
+
+        static float subtitleBottom = 792;
+        static bool subtitleHooked;
+
+        static void AlignSubtitle()
+        {
+            if (!FullScreen)
+            {//a windowed cutscene keeps its own place
+                return;
+            }
+            var subtitle = uimanager.instance.CutsSubtitle;
+            var height = subtitle.GetContentHeight();
+            subtitle.Size = new Vector2(subtitle.Size.X, height);
+            subtitle.Position = new Vector2(subtitle.Position.X, subtitleBottom - height);
+        }
 
         // Palette interpolation state (func 19).
         // Linear interpolation matching InterpolatePaletteRange_ovr108_32CC (line 446461):
         //   result = source + (step * (target - source)) / total
         static bool palInterpActive;
-        static int palInterpSpeed;     // interpolate every N frames
-        static int palInterpStep;      // current step counter
-        static int palInterpTotal;     // total frames from bytecode param[2]
+        static int palInterpSpeed;     // a step every this many 8-tick units (the task's period)
+        static ulong palInterpStartMsec;  // when func 19 fired: the steps follow the clock (run_timebased_tasks)
+        static int palInterpTotal;     // the number of steps (the task's total)
         static int palInterpTargetIndex;
         static Palette palInterpSource;  // snapshot of palette when func 19 fires
         static Palette palInterpTarget;  // target from PALS.DAT
@@ -150,6 +197,17 @@ namespace Underworld
 
         static int StringBlock;
         static bool cancelRequested;
+
+        // Input and frame control, after the original's CutsState (CUTS.C).
+        static bool inputPending;       // a key or button arrived and no pause, wait or skip has used it yet
+        static ulong lastInputMsec;     // UW1 takes a button only 0x40 ticks after the last input or file start
+        static bool puntAllowed;        // punt (12): whether Escape may end the cutscene
+        static bool fadedIn;            // UW1: input skips only between a fade-in and a fade-out (fade47 != -2)
+        static bool fadedOut;           // a fade-out was done and no fade-in since (fade49 == -2)
+        static int skipToFrame;         // skip (4) or jump (11): the frame skipping runs up to, 0 none
+        static bool skipping;           // frames are played without being drawn until skipToFrame
+        static int loopFrame;           // loop (7): the frame the file is replayed up to
+        static int loopRepeats;         // and how many more times
 
         public static bool IsPlaying { get; private set; }
 
@@ -228,11 +286,194 @@ namespace Underworld
             }
         }
 
+        /// <summary>
+        /// Escape: ends the cutscene unless its script has said not to (punt), and in UW2 never the ending
+        /// (cutscene 2, gobble_input_events).
+        /// </summary>
         public static void StopCutscene()
         {
+            if (!puntAllowed || (_RES == GAME_UW2 && currentCutsceneNo == 2))
+            {
+                return;
+            }
             cancelRequested = true;
             //MusicStreamPlayer.Instance?.Stop();
             //XMIMusic.CurrentlyPlayingThemeNo = 0;
+        }
+
+        /// <summary>
+        /// Any other key or a mouse button during a cutscene: ends a pause, or starts skipping inside a skip.
+        /// UW1 takes a button only 0x40 ticks (a quarter second) after the last input it took (show_anm).
+        /// </summary>
+        public static void InputReceived(bool isKey)
+        {
+            if (!IsPlaying)
+            {
+                return;
+            }
+            var now = Time.GetTicksMsec();
+            if (_RES != GAME_UW2 && !isKey && now - lastInputMsec <= 250)
+            {
+                return;
+            }
+            lastInputMsec = now;
+            inputPending = true;
+        }
+
+        /// <summary>
+        /// fadein / fadeout: count * 8 even steps of 8 ticks (1/32 s) each from black to the picture or back, so count / 4
+        /// seconds in all; 0 changes at once, as does a fade while frames are being skipped. What arrives meanwhile is
+        /// swallowed (gobble_input_events).
+        /// </summary>
+        static IEnumerator Fade(TextureRect cutscontrol, bool fadeIn, int count)
+        {
+            var steps = skipping ? 0 : count << 3;
+            for (int step = 1; step <= steps; step++)
+            {
+                if (cancelRequested)
+                {
+                    yield break;
+                }
+                var t = (float)step / steps;
+                var level = fadeIn ? t : 1f - t;
+                cutscontrol.Modulate = new Color(level, level, level, 1f);
+                yield return new WaitForSeconds(8f / 256f);
+            }
+            var end = fadeIn ? 1f : 0f;
+            cutscontrol.Modulate = new Color(end, end, end, 1f);
+            inputPending = false;
+        }
+
+        /// <summary>
+        /// install_timebased_task(task_palfade, period, total): a step every period units of 8 ticks of the clock, total
+        /// steps in all, the last one the target itself (palette_fade: start + step * (end - start) / total).
+        /// </summary>
+        static Palette InterpolatedPalette()
+        {
+            var units = (long)(Time.GetTicksMsec() - palInterpStartMsec) * 256 / 1000 / 8;
+            int totalSteps = System.Math.Max(1, palInterpTotal);
+            int actualStep = (int)System.Math.Min(units / System.Math.Max(1, palInterpSpeed), totalSteps);
+            var interpPal = new Palette();
+            for (int i = 0; i < 256; i++)
+            {
+                int sr = palInterpSource.red[i], sg = palInterpSource.green[i], sb = palInterpSource.blue[i];
+                int tr = palInterpTarget.red[i], tg = palInterpTarget.green[i], tb = palInterpTarget.blue[i];
+                interpPal.red[i] = (byte)System.Math.Clamp(sr + (actualStep * (tr - sr)) / totalSteps, 0, 255);
+                interpPal.green[i] = (byte)System.Math.Clamp(sg + (actualStep * (tg - sg)) / totalSteps, 0, 255);
+                interpPal.blue[i] = (byte)System.Math.Clamp(sb + (actualStep * (tb - sb)) / totalSteps, 0, 255);
+            }
+            return interpPal;
+        }
+
+        /// <summary>The control the cutscene plays in, for a palette fade to redraw while a frame is held.</summary>
+        static TextureRect activeControl;
+
+        /// <summary>
+        /// The palette tasks run on the clock (run_time_critical_things), so a fade goes on while a pause or a wait
+        /// holds the frame: the frame on show is drawn again with the palette of the moment.
+        /// </summary>
+        static void RefreshPaletteFade()
+        {
+            if (!palInterpActive || palInterpSource == null || palInterpTarget == null || activeControl == null
+                || cuts?.RawPixelData == null || vpScrollActive)
+            {
+                return;
+            }
+            var shown = FrameNo - 1;
+            if (shown < 0 || shown >= cuts.RawPixelData.Length || cuts.RawPixelData[shown] == null)
+            {
+                return;
+            }
+            activeControl.Texture = ArtLoader.Image(
+                databuffer: cuts.RawPixelData[shown],
+                dataOffSet: 0,
+                width: 320, height: 200,
+                palette: InterpolatedPalette(),
+                useAlphaChannel: false,
+                useSingleRedChannel: false,
+                crop: false);
+        }
+
+        /// <summary>The palette the frame shows now: a fade's or palrange's when one is running, else the file's.</summary>
+        static Palette CurrentScriptPalette()
+        {
+            var from = palInterpActive && palInterpTarget != null ? palInterpTarget : cuts.EmbeddedPalette;
+            var pal = new Palette();
+            System.Array.Copy(from.red, pal.red, 256);
+            System.Array.Copy(from.green, pal.green, 256);
+            System.Array.Copy(from.blue, pal.blue, 256);
+            return pal;
+        }
+
+        /// <summary>
+        /// Writes the script's colours (three 6-bit VGA words each) into pal: the first entry and the count are the
+        /// words at at, the colours follow from colours on.
+        /// </summary>
+        static void SetScriptColours(Palette pal, List<int> args, int at, int colours)
+        {
+            var first = args[at];
+            var count = args[at + 1];
+            for (int i = 0; i < count && first + i < 256 && colours + i * 3 + 2 < args.Count; i++)
+            {
+                pal.red[first + i] = (byte)((args[colours + i * 3] & 0x3F) << 2);
+                pal.green[first + i] = (byte)((args[colours + i * 3 + 1] & 0x3F) << 2);
+                pal.blue[first + i] = (byte)((args[colours + i * 3 + 2] & 0x3F) << 2);
+            }
+        }
+
+        static bool SpeechPlaying => main.instance?.DigitalAudioPlayer?.Playing == true;
+
+        /// <summary>
+        /// Starts playing an animation file: input, skips and loops belong to the file they were set in.
+        /// </summary>
+        static void ResetFileState()
+        {
+            inputPending = false;
+            lastInputMsec = Time.GetTicksMsec();
+            skipping = false;
+            skipToFrame = 0;
+            loopRepeats = 0;
+        }
+
+        /// <summary>
+        /// Holds the current frame (the pause loop of show_anm, cuts_run_pause) for seconds, 999 until input.
+        /// Input ends the hold unless ignoreInput; UW1 also ignores input while speech plays. With
+        /// untilSpeechEnds the hold first lasts until the speech is over, ignoring input, and the seconds count
+        /// from then (UW1's wait with speech).
+        /// </summary>
+        static IEnumerator HoldFrame(int seconds, bool untilSpeechEnds = false, bool ignoreInput = false)
+        {
+            inputPending = false;
+            var start = Time.GetTicksMsec();
+            while (!cancelRequested)
+            {
+                if (untilSpeechEnds)
+                {
+                    if (SpeechPlaying)
+                    {
+                        inputPending = false;
+                        RefreshPaletteFade();
+                        yield return new WaitForSeconds(0.05f);
+                        continue;
+                    }
+                    untilSpeechEnds = false;
+                    start = Time.GetTicksMsec();
+                }
+                if (seconds != 999 && Time.GetTicksMsec() - start >= (ulong)seconds * 1000)
+                {
+                    break;
+                }
+                if (inputPending)
+                {
+                    inputPending = false;
+                    if (!ignoreInput && !(_RES != GAME_UW2 && SpeechPlaying))
+                    {
+                        break;
+                    }
+                }
+                RefreshPaletteFade();
+                yield return new WaitForSeconds(0.05f);
+            }
         }
 
         /// <summary>
@@ -255,8 +496,27 @@ namespace Underworld
                 FullScreen = true;
             }
 
+            if (_RES == GAME_UW2)
+            {//show_cutscene stops the digital sound effects first (punt_all_digi_fx; UW1's runcutscene does not)
+                main.instance?.DigitalAudioPlayer?.Stop();
+            }
             StringBlock = 0xC00 + CutsceneNo;
             currentCutsceneNo = CutsceneNo;
+            puntAllowed = true;
+            fadedIn = false;
+            fadedOut = false;
+            ResetFileState();
+
+            // runcutscene / show_cutscene start a music theme for some cutscenes: UW1 theme 4 for 1 to 3,
+            // UW2 theme 1 for the ending (2).
+            if (_RES != GAME_UW2 && CutsceneNo >= 1 && CutsceneNo <= 3)
+            {
+                XMIMusic.LoadXMI(4);
+            }
+            else if (_RES == GAME_UW2 && CutsceneNo == 2)
+            {
+                XMIMusic.LoadXMI(1);
+            }
 
             // Read the .N00 control file
             if (Loader.ReadStreamFile(
@@ -375,16 +635,11 @@ namespace Underworld
             }
             else
             {
-                // Vertical scroll: convert VGA wrapping start position to composite Y.
-                // initial_y = (vp_start_y + 1) % canvas_h maps VGA start to composite.
-                // DY direction is inverted for composite: DY=-1 → pos increases,
-                // DY=+1 → pos decreases. This inversion occurs because VGA CRT start
-                // address increase pans content upward on screen.
-                // Examples from bytecode:
-                //   CS000: set-start [0,359], scroll Up (DY=-1): initial=0, increases 0→200
-                //   CS002: set-start [0,199], scroll Down (DY=+1): initial=200, decreases 200→0
-                int initialY = (vpStartY + 1) % vpComposite.GetHeight();
-                int scrollPos = initialY + (-vpScrollDY) * totalFrame;
+                // Vertical scroll (vscreen_focus, do_pan): the view's top row is h - (focus_y + 1) of the virtual
+                // screen, the first LBACK's top row being row 0, and do_pan moves focus_y by (frame + 1) * step * dy,
+                // so the view moves the other way. CS000: focus 359, up: 0 to the bottom. CS002: focus 199, down: 160 to 0.
+                int initialY = vpComposite.GetHeight() - (vpStartY + 1);
+                int scrollPos = initialY - vpScrollDY * frameAdj;
                 int maxScroll = vpComposite.GetHeight() - displayH;
                 scrollPos = System.Math.Clamp(scrollPos, 0, maxScroll);
                 region = Godot.Image.Create(320, displayH, false, vpComposite.GetFormat());
@@ -572,11 +827,37 @@ namespace Underworld
 
             switch (cmd.functionNo)
             {
-                case 0: // show-text with colour (palette index)
-                    uimanager.instance.CutsSubtitle.Text = $"[center]{GameStrings.GetDisplayString(StringBlock, cmd.functionParams[1])}[/center]";
+                case 0: // txt: nothing while skipping; UW2 string FFFFh clears the subtitle
+                    if (skipping)
+                    {
+                        break;
+                    }
+                    if (_RES == GAME_UW2 && cmd.functionParams[1] == 0xFFFF)
+                    {
+                        uimanager.instance.CutsSubtitle.Text = "";
+                    }
+                    else
+                    {
+                        uimanager.instance.CutsSubtitle.Text = $"[center]{GameStrings.GetDisplayString(StringBlock, cmd.functionParams[1])}[/center]";
+                    }
                     break;
 
-                case 1: // set-flag — clears internal animation flag
+                case 1: // erase: clears the subtitle
+                    uimanager.instance.CutsSubtitle.Text = "";
+                    break;
+
+                case 4: // skip: input from here skips to the frame. Speech is always available here, so the pause
+                        // the original adds without speech never applies.
+                    if (!skipping)
+                    {
+                        inputPending = false;
+                        skipToFrame = cmd.functionParams[0];
+                    }
+                    break;
+
+                case 7: // loop: replay the file up to this frame arg[0] more times
+                    loopRepeats = cmd.functionParams[0];
+                    loopFrame = cmd.frame;
                     break;
 
                 case 6: // end-cutsc
@@ -614,45 +895,40 @@ namespace Underworld
                             InitCrngCycling(cuts);
                             currentFileExt = extNo;
                             FrameNo = 0;
+                            ResetFileState();
                         }
                         break;
                     }
 
-                case 9: // fade-out
+                case 9: // fadeout: full screen only, once until the next fade-in
+                    if (FullScreen && !fadedOut)
                     {
-                        var rate = cmd.functionParams[0];
-                        if (rate > 0)
-                        {
-                            float duration = 2.0f / rate;
-                            // Modulate to black
-                            cutscontrol.Modulate = new Color(0f, 0f, 0f, 1f);
-                        }
-                        else
-                        {
-                            cutscontrol.Modulate = new Color(0f, 0f, 0f, 1f);
-                        }
-                        break;
+                        yield return Fade(cutscontrol, fadeIn: false, cmd.functionParams[0]);
+                        fadedIn = false;
+                        fadedOut = true;
                     }
+                    break;
 
-                case 10: // fade-in
+                case 10: // fadein: full screen only, once until the next fade-out
+                    if (FullScreen && !fadedIn)
                     {
-                        var rate = cmd.functionParams[0];
-                        cutscontrol.Modulate = new Color(1f, 1f, 1f, 1f);
-                        break;
+                        yield return Fade(cutscontrol, fadeIn: true, cmd.functionParams[0]);
+                        fadedIn = true;
+                        fadedOut = false;
                     }
+                    break;
 
-                case 11: // frame-trigger — conditional frame advance
+                case 11: // jump: skip ahead to the frame without drawing, unless it is the next one
+                    if (cmd.frame != cmd.functionParams[0] - 1)
                     {
-                        var target = cmd.functionParams[0] - 1;
-                        Debug.Print($"  Frame-trigger: target={target}");
-                        break;
+                        skipToFrame = cmd.functionParams[0] - 1;
+                        skipping = true;
                     }
+                    break;
 
-                case 12: // bit-control — sets flag bit 4
-                    {
-                        Debug.Print($"  Bit-control: bit4 = {cmd.functionParams[0] & 1}");
-                        break;
-                    }
+                case 12: // punt: whether Escape may end the cutscene
+                    puntAllowed = cmd.functionParams[0] != 0;
+                    break;
 
                 case 13: // text-play with audio
                     {
@@ -663,14 +939,24 @@ namespace Underworld
                         //   bottom margin = 2px (inc dx; inc dx at ovr108_15CE, lines 441401-441403)
                         //   word wrap at 320px, no inter-character spacing
                         // NOTE: game uses underscore-as-dot convention: "_." should render as " ."
+                        // 999 is text only and UW2's 998 no speech: their subtitles go up at their frame, like
+                        // txt (the text the original shows without speech). A say with its own speech waits
+                        // for the speech before it to end: the original would not start it while another plays.
+                        var speechFile = cmd.functionParams[2];
+                        var hasSpeech = speechFile != 999 && !(_RES == GAME_UW2 && speechFile == 998);
+                        if (!hasSpeech && skipping)
+                        {
+                            break;
+                        }
                         var audioPlayer = main.instance?.DigitalAudioPlayer;
-                        while (audioPlayer != null && audioPlayer.Playing)
+                        while (hasSpeech && audioPlayer != null && audioPlayer.Playing)
                         {
                             if (cancelRequested)
                             {
                                 yield break;
                             }
 
+                            RefreshPaletteFade();
                             yield return new WaitForSeconds(0.05f);
                         }
 
@@ -682,7 +968,7 @@ namespace Underworld
                         {
                             uimanager.instance.CutsSubtitle.Text = ""; // clear subtitle (0xFFFF = -1)
                         }
-                        if (cmd.functionParams[2] != 999)
+                        if (hasSpeech)
                         {
                             string vocfile;
                             if (_RES == GAME_UW2)
@@ -708,17 +994,54 @@ namespace Underworld
                         break;
                     }
 
-                case 15: // klang — play klang sound (UW1 only)
-                    Debug.Print("  Klang sound");
-                    UWsoundeffects.PlaySoundEffectAtAvatar(UWsoundeffects.SoundEffectKlang, 0x40, 0);
+                case 14: // wait: with speech (always available here) UW1 holds until the speech ends and then
+                         // arg[1] seconds; UW2 holds arg[1] seconds ignoring input
+                    if (!skipping)
+                    {
+                        if (_RES == GAME_UW2)
+                        {
+                            yield return HoldFrame(cmd.functionParams[1], ignoreInput: true);
+                        }
+                        else
+                        {
+                            yield return HoldFrame(cmd.functionParams[1], untilSpeechEnds: true);
+                        }
+                    }
                     break;
 
-                case 16: // pal-copy — palette data copy
-                    Debug.Print($"  Palette copy (not implemented)");
+                case 15: // clang: UW1 plays sound effect 11h, UW2 nothing
+                    if (_RES != GAME_UW2)
+                    {
+                        UWsoundeffects.PlaySoundEffectAtAvatar(UWsoundeffects.SoundEffectKlang, 0x40, 0);
+                    }
                     break;
 
-                case 17: // timer-cb — register timer callback
-                    Debug.Print($"  Timer callback (not implemented)");
+                // 16 palrange and 17 palfade are not used by any script of either game; they are kept as the original has them.
+                case 16: // palrange(first, count, colours): set palette entries from the script
+                    if (cuts?.EmbeddedPalette != null)
+                    {
+                        var pal = CurrentScriptPalette();
+                        SetScriptColours(pal, cmd.functionParams, 0, 2);
+                        palInterpSource = pal;
+                        palInterpTarget = pal;
+                        palInterpTotal = 1;
+                        palInterpSpeed = 1;
+                        palInterpStartMsec = Time.GetTicksMsec();
+                        palInterpActive = true;
+                    }
+                    break;
+
+                case 17: // palfade(period, total, first, count, colours): fade those entries to the script's colours
+                    if (cuts?.EmbeddedPalette != null)
+                    {
+                        palInterpSource = CurrentScriptPalette();
+                        palInterpTarget = CurrentScriptPalette();
+                        SetScriptColours(palInterpTarget, cmd.functionParams, 2, 4);
+                        palInterpSpeed = cmd.functionParams[0];
+                        palInterpTotal = cmd.functionParams[1];
+                        palInterpStartMsec = Time.GetTicksMsec();
+                        palInterpActive = true;
+                    }
                     break;
 
                 case 19: // pal-interp — interpolate palette toward PALS.DAT target
@@ -731,7 +1054,7 @@ namespace Underworld
                         palInterpTargetIndex = cmd.functionParams[0];
                         palInterpSpeed = cmd.functionParams[1];
                         palInterpTotal = cmd.NoOfParams > 2 ? cmd.functionParams[2] : 80;
-                        palInterpStep = 0;
+                        palInterpStartMsec = Time.GetTicksMsec();
                         // Snapshot current palette as source
                         if (cuts != null && cuts.EmbeddedPalette != null)
                         {
@@ -764,8 +1087,6 @@ namespace Underworld
                             }
                         }
                         Debug.Print($"  Palette interp: target PALS.DAT[{palInterpTargetIndex}], speed={palInterpSpeed}, total={palInterpTotal}");
-                        // TODO: implement actual palette interpolation using PaletteLoader
-                        // and the LPF's color cycling ranges
                         break;
                     }
 
@@ -776,23 +1097,7 @@ namespace Underworld
                         // (ovr108_12D3, line 440713).
                         vpCanvasWidth = cmd.functionParams[0];
                         vpCanvasHeight = cmd.functionParams[1];
-                        vpOffsetY = cmd.NoOfParams > 2 ? cmd.functionParams[2] : 0;
-
-                        // Position subtitle label in the black bar area.
-                        // From RenderCutsceneText_ovr108_157B (line 441321):
-                        //   text is bottom-aligned with 2px margin (ovr108_15CE lines 441401-441403)
-                        //   scene height = 200 - vpOffsetY
-                        // The fullscreen cutscene renders at 4x scale (1280x800 for 320x200).
-                        if (PanoramaActive && vpOffsetY > 0)
-                        {
-                            float scale = cutscontrol.Size.Y / 200f;
-                            float subtitleTop = (200 - vpOffsetY) * scale;
-                            float subtitleBottom = cutscontrol.Size.Y;
-                            uimanager.instance.CutsSubtitle.Position = new Vector2(
-                                uimanager.instance.CutsSubtitle.Position.X, subtitleTop);
-                            uimanager.instance.CutsSubtitle.Size = new Vector2(
-                                uimanager.instance.CutsSubtitle.Size.X, subtitleBottom - subtitleTop);
-                        }
+                        SetSplit(cmd.NoOfParams > 2 ? cmd.functionParams[2] : 999, cutscontrol);
                         vpScrollActive = false;
                         vpFrameOffset = 0;
                         vpFileMappings.Clear();
@@ -800,7 +1105,7 @@ namespace Underworld
                         vpCompositeClean = null;
                         vpSpriteLoader = null;
                         vpSpriteFrame = 0;
-                        Debug.Print($"  Viewport: {vpCanvasWidth}x{vpCanvasHeight} offsetY={vpOffsetY}");
+                        Debug.Print($"  Viewport: {vpCanvasWidth}x{vpCanvasHeight} split={splitY}");
                         break;
                     }
 
@@ -880,30 +1185,33 @@ namespace Underworld
                         break;
                     }
 
-                case 24: // audio-setup
-                    {
-                        var fileNo = cmd.functionParams[0];
-                        Debug.Print($"  Audio setup: {(fileNo == 999 ? "none" : $"file {fileNo - 1}")}");
-                        break;
-                    }
+                case 24: // splity: where the picture stops and the subtitle bar begins
+                    SetSplit(cmd.functionParams[0], cutscontrol);
+                    break;
 
                 case 25: // music
                     Debug.Print($"  Music: theme {cmd.functionParams[0]}");
                     XMIMusic.LoadXMI((byte)cmd.functionParams[0]);
                     break;
 
-                case 27: // audio-wait — wait for audio playback completion or timeout
+                case 27: // wait_for_sound: wait up to arg[0] seconds for the speech, then cut it off
                     {
                         var audioPlayer = main.instance?.DigitalAudioPlayer;
-                        var timeoutSec = cmd.functionParams[0] > 0 ? cmd.functionParams[0] / 2.0f : 60f;
+                        var timeoutSec = (float)cmd.functionParams[0];
                         var elapsed = 0f;
-                        while (audioPlayer != null && audioPlayer.Playing && elapsed < timeoutSec)
+                        while (audioPlayer != null && audioPlayer.Playing)
                         {
                             if (cancelRequested)
                             {
                                 break;
                             }
+                            if (elapsed >= timeoutSec)
+                            {
+                                audioPlayer.Stop();
+                                break;
+                            }
 
+                            RefreshPaletteFade();
                             yield return new WaitForSeconds(0.05f);
                             elapsed += 0.05f;
                         }
@@ -911,37 +1219,11 @@ namespace Underworld
                         break;
                     }
 
-                case 3: // pause — wait arg[0] / 2 seconds (from disassembly)
-                    if (cmd.functionParams[0] > 0)
+                case 3: // pause: hold this frame for arg[0] seconds (256 ticks of the 1/256 s clock) or until input;
+                        // 999 until input. Nothing while skipping.
+                    if (!skipping)
                     {
-                        if (cmd.functionParams[0] >= 999)
-                        {
-                            //pause indefinately.
-                            Debug.Print($"  Pause: {cmd.functionParams[0]}");
-                            while (true)
-                            {
-                                yield return new WaitForSeconds(0.25f);
-                                if (cancelRequested)
-                                {
-                                    break;
-                                }
-                            }
-                        }
-                        else
-                        {
-                            //pause for  
-                            Debug.Print($"  Pause: {cmd.functionParams[0] / 2.0f}s");
-                            var pausecounter = (cmd.functionParams[0] / 2) * 4;//increase by 4 to give more responsive cancelling.
-                            while (pausecounter > 0)
-                            {
-                                if (cancelRequested)
-                                {
-                                    break;
-                                }
-                                pausecounter--;
-                                yield return new WaitForSeconds(0.25f);
-                            }
-                        }
+                        yield return HoldFrame(cmd.functionParams[0]);
                     }
                     break;
 
@@ -960,6 +1242,48 @@ namespace Underworld
         /// Red-channel cutscenes are drawn through their own palette material, which is left alone,
         /// and so is any other material already on the control.
         /// </summary>
+        /// <summary>
+        /// show_cutscene's window for a cutscene of 100h or more, in the original's 320x200 with y the top row counted up
+        /// from the bottom: UW1 (0x34, 0xB4, 0xAC by 0x70), UW2 (0x10, 0xB6, 0xD0 by 0x7F); 103h, the death, is 9 rows higher
+        /// and 0xB taller in UW1, 4 and 5 in UW2. show_anm draws the frame's last w columns and h rows there (it skips 320 - w and 200 - h), so the
+        /// whole 320x200 frame sits that far up and to the left of the window.
+        /// </summary>
+        public static void PlaceSmallWindow(TextureRect control, int cutsceneNo)
+        {
+            int x, y, w, h;
+            if (_RES == GAME_UW2)
+            {
+                x = 0x10; y = 0xB6; w = 0xD0; h = 0x7F;
+                if (cutsceneNo == 0x103)
+                {
+                    y += 4;
+                    h += 5;
+                }
+            }
+            else
+            {
+                x = 0x34; y = 0xB4; w = 0xAC; h = 0x70;
+                if (cutsceneNo == 0x103)
+                {
+                    y += 9;
+                    h += 0xB;
+                }
+            }
+            //only the window shows: the control sits in a clipping parent of the window's size
+            var clip = control.GetParent() as Control;
+            if ((clip == null) || (clip.Name != "CutsSmallClip"))
+            {
+                var layer = control.GetParent();
+                clip = new Control { Name = "CutsSmallClip", ClipContents = true, MouseFilter = Control.MouseFilterEnum.Ignore };
+                layer.AddChild(clip);
+                layer.MoveChild(clip, control.GetIndex());
+                control.Reparent(clip, false);
+            }
+            clip.Position = new Vector2(x * 4, (199 - y) * 4);
+            clip.Size = new Vector2(w * 4, h * 4);
+            control.Position = new Vector2(-(320 - w) * 4, -(200 - h) * 4);
+        }
+
         static void ApplyHdUpscale(TextureRect control, bool useSingleRedChannel)
         {
             bool wanted = !useSingleRedChannel && !string.IsNullOrWhiteSpace(uwsettings.instance?.hdartpath);
@@ -995,8 +1319,16 @@ namespace Underworld
             if (FullScreen)
                 cutscontrol = uimanager.CutsFullscreen;
             else
+            {
                 cutscontrol = uimanager.CutsSmall;
+                PlaceSmallWindow(cutscontrol, CutsceneNo);
+            }
 
+            activeControl = cutscontrol;
+            if (FullScreen)
+            {
+                PlaceSubtitle(cutscontrol.Size.Y / 200f);
+            }
             ApplyHdUpscale(cutscontrol, useSingleRedChannel);
             uimanager.EnableDisable(cutscontrol, true);
             uimanager.EnableDisable(uimanager.instance.CutsSubtitle, true);
@@ -1087,8 +1419,9 @@ namespace Underworld
             }
             InitCrngCycling(cuts);
 
-            // Set initial frame to black
-            cutscontrol.Modulate = new Color(0f, 0f, 0f, 1f);
+            // Set initial frame to black. A cutscene in the 3D view's window never fades (cutsop_fadein and
+            // cutsop_fadeout act on the full screen only).
+            cutscontrol.Modulate = FullScreen ? new Color(0f, 0f, 0f, 1f) : new Color(1f, 1f, 1f, 1f);
             uimanager.FlashColour(
                 colour: 0, targetControl: cutscontrol, duration: 1, IgnoreDelay: true);
 
@@ -1118,6 +1451,7 @@ namespace Underworld
                     }
                     currentFileExt = nextExt;
                     FrameNo = 0;
+                    ResetFileState();
                 }
                 firstSegment = false;
                 fileChanged = false;
@@ -1146,14 +1480,8 @@ namespace Underworld
                         break;
                     }
                     if (cmd.functionNo == 6) // end-cutsc
-                    {
-                        // If no frame-set was found in this segment AND no frame-set
-                        // has been seen in any prior segment, use end-cutsc frame as
-                        // the segment length. CS011 (title screen) uses this: fade-in
-                        // at frame 1, end at frame 37, with CRNG cycling across 37 frames.
-                        // Multi-segment cutscenes (e.g. CS000) have frame-sets in earlier
-                        // segments, so their trailing end-cutsc won't trigger this.
-                        if (!hasFrameSet && cmd.frame > 0)
+                    {//cutsop_end stops the file at its frame, as next does, and ends the cutscene after it
+                        if (cmd.frame > 0)
                         {
                             segmentFrameCount = cmd.frame;
                             hasFrameSet = true;
@@ -1184,17 +1512,25 @@ namespace Underworld
                 if (!hasScrollCmd)
                     vpScrollActive = false;
 
+                // show_anm plays the file's records one by one and stops early at next or end: a file runs out at its
+                // last record (the closing loop-back delta not counted), and commands past it are never reached.
+                if (hasFrameSet && cuts != null && !vpScrollActive && segmentFrameCount > cuts.ImageCache.Length)
+                {
+                    segmentFrameCount = cuts.ImageCache.Length;
+                }
+
                 // Execute the segment
                 if (hasFrameSet && segmentFrameCount > 0)
                 {
-                    // Frame timing from LPF file header fps field (offset 0x44).
-                    // Each LPF specifies its own playback rate (e.g. N03: 14fps, N06: 40fps).
+                    // Frame timing from the LPF header's rate (offset 0x44): show_anm waits until 0x100 / rate whole
+                    // ticks of the 1/256 s clock have passed since the last frame.
                     float frameTime = 0.1f; // default 10fps fallback
                     if (cuts != null && cuts.FramesPerSecond > 0)
                     {
-                        frameTime = 1.0f / cuts.FramesPerSecond;
+                        frameTime = (0x100 / cuts.FramesPerSecond) / 256f;
                     }
 
+                    int consumedUpTo = -1;//a loop replays the frames without their commands, which have run
                     for (int frame = 0; frame < segmentFrameCount; frame++)
                     {
                         if (cancelRequested)
@@ -1202,10 +1538,28 @@ namespace Underworld
                             goto cleanup;
                         }
 
+                        // Input after the frame inside a skip starts skipping and ends any loop; UW1 takes it
+                        // only after a fade-in and not while speech plays. Skipping stops at its frame.
+                        if (inputPending && _RES != GAME_UW2 && (SpeechPlaying || !fadedIn))
+                        {
+                            inputPending = false;
+                        }
+                        if (!skipping && inputPending && skipToFrame > frame)
+                        {
+                            inputPending = false;
+                            skipping = true;
+                            loopRepeats = 0;
+                        }
+                        if (skipToFrame != 0 && frame >= skipToFrame)
+                        {
+                            skipping = false;
+                            skipToFrame = 0;
+                        }
+
                         // Fire commands scheduled for this frame
                         foreach (var cmd in scheduledCmds)
                         {
-                            if (cmd.frame == frame && cmd.functionNo != 5)
+                            if (cmd.frame == frame && cmd.functionNo != 5 && cmd.frame > consumedUpTo)
                             {
                                 if (cancelRequested)
                                 {
@@ -1215,6 +1569,22 @@ namespace Underworld
                                 if (cmd.functionNo == 8) // open-file
                                     fileChanged = true;
                             }
+                        }
+
+                        // loop: back to the first frame once this frame's commands have run
+                        if (loopRepeats > 0 && frame == loopFrame)
+                        {
+                            loopRepeats--;
+                            consumedUpTo = System.Math.Max(consumedUpTo, loopFrame);
+                            FrameNo = 0;
+                            frame = -1;
+                            continue;
+                        }
+
+                        if (skipping)
+                        {
+                            FrameNo++;//played without being drawn
+                            continue;
                         }
 
                         // Display animation frame.
@@ -1273,22 +1643,7 @@ namespace Underworld
                                 && cuts.RawPixelData != null && FrameNo < cuts.RawPixelData.Length
                                 && cuts.RawPixelData[FrameNo] != null)
                             {
-                                palInterpStep++;
-                                // Update interpolated palette on speed-divisible frames
-                                int actualStep = System.Math.Max(1, palInterpStep / System.Math.Max(1, palInterpSpeed));
-                                int totalSteps = System.Math.Max(1, palInterpTotal / System.Math.Max(1, palInterpSpeed));
-                                actualStep = System.Math.Min(actualStep, totalSteps);
-
-                                // Build interpolated palette
-                                var interpPal = new Palette();
-                                for (int i = 0; i < 256; i++)
-                                {
-                                    int sr = palInterpSource.red[i], sg = palInterpSource.green[i], sb = palInterpSource.blue[i];
-                                    int tr = palInterpTarget.red[i], tg = palInterpTarget.green[i], tb = palInterpTarget.blue[i];
-                                    interpPal.red[i] = (byte)System.Math.Clamp(sr + (actualStep * (tr - sr)) / totalSteps, 0, 255);
-                                    interpPal.green[i] = (byte)System.Math.Clamp(sg + (actualStep * (tg - sg)) / totalSteps, 0, 255);
-                                    interpPal.blue[i] = (byte)System.Math.Clamp(sb + (actualStep * (tb - sb)) / totalSteps, 0, 255);
-                                }
+                                var interpPal = InterpolatedPalette();
 
                                 // Re-render frame with interpolated palette
                                 var rerendered = ArtLoader.Image(
@@ -1383,10 +1738,10 @@ namespace Underworld
 
                     if (maxFrame > 0)
                     {
-                        // Frame timing from LPF fps
+                        // Frame timing from the LPF rate (0x100 / rate ticks)
                         float frameTime = 0.1f;
                         if (cuts != null && cuts.FramesPerSecond > 0)
-                            frameTime = 1.0f / cuts.FramesPerSecond;
+                            frameTime = (0x100 / cuts.FramesPerSecond) / 256f;
 
                         for (int frame = 0; frame <= maxFrame; frame++)
                         {
@@ -1429,72 +1784,7 @@ namespace Underworld
                             {
                                 goto cleanup;
                             }
-                            // Blocking waits
-                            if (cmd.functionNo == 3) // pause
-                            {
-                                if (cancelRequested)
-                                {
-                                    goto cleanup;
-                                }
-                                yield return new WaitForSeconds(cmd.functionParams[0] / 2f);
-                                if (cancelRequested)
-                                {
-                                    goto cleanup;
-                                }
-                            }
-                            else if (cmd.functionNo == 14) // wait-secs
-                            {
-                                if (cancelRequested)
-                                {
-                                    goto cleanup;
-                                }
-                                yield return new WaitForSeconds(cmd.functionParams[0]);
-                                if (cancelRequested)
-                                {
-                                    goto cleanup;
-                                }
-                            }
-                            else if (cmd.functionNo == 9 && cmd.functionParams[0] > 0) // blocking fade-out
-                            {
-                                float duration = 2.0f / cmd.functionParams[0];
-                                int steps = 10;
-                                float stepTime = duration / steps;
-                                for (int i = 1; i <= steps; i++)
-                                {
-                                    float t = (float)i / steps;
-                                    cutscontrol.Modulate = new Color(1f - t, 1f - t, 1f - t, 1f);
-                                    if (cancelRequested)
-                                    {
-                                        goto cleanup;
-                                    }
-                                    yield return new WaitForSeconds(stepTime);
-                                    if (cancelRequested)
-                                    {
-                                        goto cleanup;
-                                    }
-                                }
-                            }
-                            else if (cmd.functionNo == 10 && cmd.functionParams[0] > 0) // blocking fade-in
-                            {
-                                float duration = 2.0f / cmd.functionParams[0];
-                                int steps = 10;
-                                float stepTime = duration / steps;
-                                for (int i = 1; i <= steps; i++)
-                                {
-                                    float t = (float)i / steps;
-                                    cutscontrol.Modulate = new Color(t, t, t, 1f);
-                                    if (cancelRequested)
-                                    {
-                                        goto cleanup;
-                                    }
-                                    yield return new WaitForSeconds(stepTime);
-                                    if (cancelRequested)
-                                    {
-                                        goto cleanup;
-                                    }
-                                }
-                            }
-                            else if (cmd.functionNo == 4) // to-frame (inline)
+                            if (cmd.functionNo == 4) // to-frame (inline)
                             {
                                 for (int i = 0; i < cmd.functionParams[0]; i++)
                                 {
@@ -1539,50 +1829,6 @@ namespace Underworld
                     {
                         goto cleanup;
                     }
-                    if (cmd.functionNo == 9 && cmd.functionParams[0] > 0) // fade-out
-                    {
-                        float duration = 2.0f / cmd.functionParams[0];
-                        int steps = 10;
-                        float stepTime = duration / steps;
-                        for (int i = 1; i <= steps; i++)
-                        {
-                            float t = (float)i / steps;
-                            cutscontrol.Modulate = new Color(1f - t, 1f - t, 1f - t, 1f);
-                            if (cancelRequested)
-                            {
-                                goto cleanup;
-                            }
-                            yield return new WaitForSeconds(stepTime);
-                            if (cancelRequested)
-                            {
-                                goto cleanup;
-                            }
-                        }
-                    }
-                    else if (cmd.functionNo == 10 && cmd.functionParams[0] > 0) // fade-in
-                    {
-                        if (cancelRequested)
-                        {
-                            goto cleanup;
-                        }
-                        float duration = 2.0f / cmd.functionParams[0];
-                        int steps = 10;
-                        float stepTime = duration / steps;
-                        for (int i = 1; i <= steps; i++)
-                        {
-                            float t = (float)i / steps;
-                            cutscontrol.Modulate = new Color(t, t, t, 1f);
-                            if (cancelRequested)
-                            {
-                                goto cleanup;
-                            }
-                            yield return new WaitForSeconds(stepTime);
-                            if (cancelRequested)
-                            {
-                                goto cleanup;
-                            }
-                        }
-                    }
                 }
 
                 if (isEndCutscene)
@@ -1594,6 +1840,7 @@ namespace Underworld
             }
 
         cleanup:
+            main.instance?.DigitalAudioPlayer?.Stop();//the speech ends with the cutscene (show_anm)
             IsPlaying = false;
             uimanager.CurrentGameMode = OrigGameMode;//restore gamemode before any new cutscenes start.
             uimanager.EnableDisable(cutscontrol, false);

@@ -8,13 +8,14 @@ namespace Underworld
     public class a_jump_trap : trap
     {
         public static void Activate(uwObject trapObj)
-        {
-            if (Math.Abs(UWMotionParamArray.instance.unk_6_x) + Math.Abs(UWMotionParamArray.instance.unk_8_y) >= trapObj.heading * 0x2F)
+        {//set_jmp: nothing happens unless the mover's horizontal speed is at least heading * 0x2F
+            if (Math.Abs(UWMotionParamArray.instance.unk_6_x) + Math.Abs(UWMotionParamArray.instance.unk_8_y) < trapObj.heading * 0x2F)
             {
-                if (UWMotionParamArray.instance.gravity_10_Z != -4)
-                {
-                    UWMotionParamArray.instance.gravity_10_Z = -2;
-                }
+                return;
+            }
+            if (UWMotionParamArray.instance.gravity_10_Z != -4)
+            {
+                UWMotionParamArray.instance.gravity_10_Z = -2;
             }
 
             if (UWMotionParamArray.instance.index_20 == 1)

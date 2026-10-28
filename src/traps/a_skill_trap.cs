@@ -26,7 +26,7 @@ namespace Underworld
             if (trapObj.heading == 1)
             {
                 //ovr166_9DF
-                var skillCheck = playerdat.SkillCheck(skillValue: rngFactor, targetValue: trapObj.owner, debug: true);
+                var skillCheck = playerdat.SkillCheck(skillValue: rngFactor, targetValue: Target_var34, debug: true);//the difficulty is owner * 3 here too
                 if (skillCheck > 0)
                 {
                     //pass

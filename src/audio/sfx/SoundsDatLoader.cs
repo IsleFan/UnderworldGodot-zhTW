@@ -46,7 +46,9 @@ public static class SoundsDatLoader
                 PatchNum:     data[o + 0],
                 Note:         data[o + 1],
                 Velocity:     data[o + 2],
-                DurationWord: dur);
+                DurationWord: dur,
+                Digi:         UWClass._RES != UWClass.GAME_UW2 || data[o + 5] != 0,
+                Priority:     UWClass._RES == UWClass.GAME_UW2 ? data[o + 6] + data[o + 7] * 200 : 0);
         }
         return entries;
     }

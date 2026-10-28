@@ -6,6 +6,10 @@ namespace Underworld
     /// </summary>
     public class look : UWClass
     {
+        /// <summary>
+        /// inv_look's identification: the first look rolls skill_check(Lore, UW1 10 / UW2 8) + 1 (at least 1), keeps the
+        /// best result in the heading (bit 2 marks the attempt) and is not rerolled until a better Lore clears the mark.
+        /// </summary>
         public static int LoreCheck(uwObject obj)
         {
             if (
@@ -14,7 +18,7 @@ namespace Underworld
             {//can be identified
                 if ((obj.heading & 0x4) == 0)
                 {//no attempt has been made yet. try and id now
-                    var result = (int)playerdat.SkillCheck(playerdat.Lore, 8);
+                    var result = (int)playerdat.SkillCheck(playerdat.Lore, _RES == GAME_UW2 ? 8 : 0xA);
                     result++;
                     if (result == 0)
                     {
@@ -44,442 +48,485 @@ namespace Underworld
                     (commonObjDat.rendertype(obj.item_id) != 2);
         }
 
-
-        public static bool LookAt(int index, uwObject[] objList, bool WorldObject)
+        /// <summary>
+        /// player_3dlook: looks with lore 1 at an object in close reach that cannot be picked up, else lore 0. With the look
+        /// icon selected a found trap may then be disarmed (the question fires the look triggers after it); otherwise the
+        /// object's look triggers fire.
+        /// </summary>
+        /// <param name="lookMode">The look icon is selected (RightButtonThing 3), or modern controls, which always search.</param>
+        public static void LookAtWorld(int index, int lore, bool lookMode)
         {
-
-            bool result = false;
+            var objList = UWTileMap.current_tilemap.LevelObjects;
+            if (index > objList.GetUpperBound(0))
+            {
+                return;
+            }
+            var obj = objList[index];
             trap.ObjectThatStartedChain = index;
-            if (index <= objList.GetUpperBound(0))
-            {
-                var obj = objList[index];
-                switch (obj.majorclass)
-                {
-                    case 1:
-                        {
-                            result = npc.LookAt(obj);
-                            break;
-                        }
-                    case 2:
-                        {
-                            result = LookMajorClass2(obj, objList, WorldObject);
-                            break;
-                        }
-                    case 4:
-                        {
-                            result = LookMajorClass4(obj, objList, WorldObject);
-                            break;
-                        }
-                    case 5:
-                        {
-                            result = LookMajorClass5(obj, objList);
-                            break;
-                        }
-                }
-
-                //Checking for traps here and prompting for disarming.
-                if (trapdisarming.DetectTrapTrigger(index, objList, playerdat.Search)> 0)
-                {
-                    //you've found a trap.                    
-                    _ = Coroutine.Run(
-                        trapdisarming.DisarmAttemptQuestion(index, objList),
-                        main.instance
-                        );
-                    uimanager.NextOutputPrependedString = "";
-                    return false;
-                }
-                else
-                {
-                    trigger.TriggerObjectLink(
-                        character: 1,
-                        ObjectUsed: obj,
-                        triggerType: (int)triggerObjectDat.triggertypes.LOOK,
-                        triggerX: obj.tileX,
-                        triggerY: obj.tileY,
-                        objList: UWTileMap.current_tilemap.LevelObjects);
-                }
-                uimanager.NextOutputPrependedString = "";//turn off any "writing reads" messages
-
-                // if ((obj.is_quant == 0) && (obj.link != 0))
-                // {
-                //     var linkedObj = objList[obj.link];
-                //     if (linkedObj.item_id == 419)
-                //     {
-                //         trigger.LookTrigger(
-                //             srcObject: obj,
-                //             triggerIndex: obj.link,
-                //             objList: objList);
-                //         return true;
-                //     }
-                // }
-                if (!result)
-                {
-
-                    //default string  when no overriding action has occured           
-                    //uimanager.AddToMessageScroll(GameStrings.GetObjectNounUW(obj.item_id));
-                    PrintLookDescription(
-                        obj: obj,
-                        objList: objList,
-                        lorecheckresult: LoreCheck(obj));
-                }
+            LookAt(obj, objList, lore);
+            uimanager.NextOutputPrependedString = "";//turn off any "writing reads" messages
+            if (lookMode && trapdisarming.DetectTrapTrigger(index, objList, playerdat.Search) > 0)
+            {//you've found a trap.
+                _ = Coroutine.Run(
+                    trapdisarming.DisarmAttemptQuestion(index, objList),
+                    main.instance
+                    );
+                return;
             }
-
-            return false;
-        }
-
-        public static bool LookMajorClass2(uwObject obj, uwObject[] objList, bool WorldObject)
-        {
-            return false;
-        }
-
-        public static bool LookMajorClass4(uwObject obj, uwObject[] objList, bool WorldObject)
-        {
-            switch (obj.minorclass)
-            {
-                case 0: 
-                    {
-                        //keys 2 up to 0xE, and also 0 in UW1
-                        if (
-                        ((_RES != GAME_UW2) && (obj.classindex == 0))
-                        ||
-                        ((obj.classindex >= 2) && (obj.classindex <= 0xE))
-                        )
-                        {
-                            return doorkey.LookAt(obj, WorldObject);
-                        }
-                        break;
-                    }
-                case 1:
-                    {
-                        if (_RES == GAME_UW2)
-                        {
-                            switch (obj.classindex)
-                            {
-                                case >= 8 and <= 0xF:
-                                    return smallblackrockgem.LookAt(obj, objList);
-                            }
-                        }
-                        break;
-                    }
-                case 3: //readables (up to index 8)
-                    {
-                        if (_RES != GAME_UW2)
-                        {
-                            switch (obj.classindex)
-                            {
-                                case 0xB:
-                                    return false;
-                                default:
-                                    return Readable.LookAt(obj, WorldObject);
-                            }
-                        }
-                        else
-                        {//uw2
-                            switch (obj.classindex)
-                            {
-                                case 0x9://a_bit of a map                                   
-                                case 0xA://a_map                   
-                                case 0xB://a_dead plant 
-                                case 0xC://a_dead plant  
-                                case 0xD://a_bottle 
-                                case 0xE://a_stick 
-                                case 0xF://a_resilient sphere 
-                                    return false;
-                                default:
-                                    return Readable.LookAt(obj, WorldObject);
-                            }
-                        }
-                    }
-            }
-            return false;
-        }
-
-        public static bool LookMajorClass5(uwObject obj, uwObject[] objList)
-        {
-            switch (obj.minorclass)
-            {
-                case 0://doors
-                    {
-                        return door.LookAt(obj);
-                    }
-                case 2: //misc objects including readables
-                    {
-                        switch (obj.classindex)
-                        {
-                            case 4:
-                                return bridge.LookAt(obj);
-                            case 5:
-                                return gravestone.Use(obj);
-                            case 6: // a readable sign.
-                                return writing.LookAt(obj);
-                            case 0xE:
-                            case 0xF:
-                                return tmap.LookAt(obj);
-                            default:
-                                return false;
-                        }
-                    }
-
-            }
-
-            return false;
+            trigger.TriggerObjectLink(
+                character: 1,
+                ObjectUsed: obj,
+                triggerType: (int)triggerObjectDat.triggertypes.LOOK,
+                triggerX: obj.tileX,
+                triggerY: obj.tileY,
+                objList: objList);
         }
 
         /// <summary>
-        /// A look description based on the item id
+        /// inv_look: the object's look triggers first, then a look with the identification of LoreCheck. No trap search.
         /// </summary>
-        /// <param name="item_id"></param>
-        /// <param name="qty"></param>
-        /// <returns></returns>
-        public static bool GenericLookDescription(int item_id, int qty = 1)
+        public static void LookAtInventory(int index)
         {
-            string output;
-            if (commonObjDat.PrintableLook(item_id))
+            var objList = playerdat.InventoryObjects;
+            if (index > objList.GetUpperBound(0) || objList[index] == null)
             {
-                output = "You see ";
+                return;
             }
-            else
-            {
-                System.Diagnostics.Debug.Print("No print description");
-                return true;
+            var obj = objList[index];
+            trap.ObjectThatStartedChain = index;
+            trigger.TriggerObjectLink(
+                character: 1,
+                ObjectUsed: obj,
+                triggerType: (int)triggerObjectDat.triggertypes.LOOK,
+                triggerX: obj.tileX,
+                triggerY: obj.tileY,
+                objList: objList);
+            if (objList[index] != obj)
+            {//the trigger took it
+                return;
             }
-            string objectname = GameStrings.GetObjectNounUW(item_id, qty);
-            var article = GetArticle(objectname);
-            output += $"{article}{objectname}";
-            if (ZhText.Enabled)
-            {
-                output = ZhText.YouSee(qty > 1 ? $" {qty} 個{ZhText.ObjectName(item_id)}" : ZhText.ObjectName(item_id));
-            }
-            uimanager.AddToMessageScroll($"{output}");
-            return true;
+            LookAt(obj, objList, LoreCheck(obj));
+            uimanager.NextOutputPrependedString = "";
         }
 
-        public static bool PrintLookDescription(uwObject obj, uwObject[] objList, int lorecheckresult, bool OutputConvo = false)
-        {
-            var output = GetDescriptionString(
-                obj: obj,
-                objList: objList,
-                lorecheckresult: lorecheckresult);
+        /// <summary>
+        /// Prints to the conversation's scroll while a look runs from a conversation (trade, inventory), else to the message scroll.
+        /// </summary>
+        static bool OutputToConvo = false;
 
-            if (OutputConvo)
+        public static void Print(string text)
+        {
+            if (OutputToConvo)
             {
                 uimanager.AddToMessageScroll(
-                    stringToAdd: $"{output}",
+                    stringToAdd: text,
                     option: 2,
                     mode: MessageDisplay.MessageDisplayMode.TemporaryMessage);
             }
             else
             {
-                uimanager.AddToMessageScroll($"{output}");
+                uimanager.AddToMessageScroll(text);
             }
+        }
+
+        /// <summary>
+        /// LookAt: a lookable object gets its description line ('You see ...'), a critter its CritterLook, a decal its
+        /// RectLook; then SpecialLook adds what books, keys, bones and doors say for themselves. At lore 3 a UW1 talisman
+        /// is described by its own text instead. Lore 2 shows that an object is magical, 3 names its enchantment.
+        /// </summary>
+        public static void LookAt(uwObject obj, uwObject[] objList, int lore, bool OutputConvo = false)
+        {
+            if (obj == null)
+            {
+                return;
+            }
+            OutputToConvo = OutputConvo;
+            if (commonObjDat.PrintableLook(obj.item_id))
+            {
+                if ((_RES != GAME_UW2) && (lore == 3) && TalismanDescription(obj))
+                {
+                    OutputToConvo = false;
+                    return;
+                }
+                if (obj.majorclass == 1)
+                {
+                    npc.LookAt(obj);
+                    OutputToConvo = false;
+                    return;
+                }
+                Print(GetDescriptionString(obj: obj, objList: objList, lorecheckresult: lore));
+            }
+            else if (obj.OneF0Class == 0x16)
+            {
+                RectLook(obj, lore);
+            }
+            SpecialLook(obj, objList, lore);
+            OutputToConvo = false;
+        }
+
+        /// <summary>
+        /// RectLook for the decals: the texture behind a texture map object (a UW1 shaft only from close by), a bridge,
+        /// a gravestone, a plaque.
+        /// </summary>
+        static void RectLook(uwObject obj, int lore)
+        {
+            switch (obj.classindex)
+            {
+                case 4:
+                    bridge.LookAt(obj); break;
+                case 5:
+                    gravestone.Use(obj); break;
+                case 6:
+                    writing.LookAt(obj); break;
+                case 0xE:
+                case 0xF:
+                    tmap.LookAt(obj, showShaft: lore > 0); break;
+            }
+        }
+
+        /// <summary>
+        /// SpecialLook: the second line of a look for books and scrolls (UW2 below class index 10), keys, bones, and a
+        /// spiked closed door (UW1 0x83; UW2's 0x91 is an empty string).
+        /// </summary>
+        static void SpecialLook(uwObject obj, uwObject[] objList, int print)
+        {
+            switch (obj.majorclass)
+            {
+                case 4:
+                    if (obj.minorclass == 3 && ((_RES != GAME_UW2) || (obj.classindex < 10)))
+                    {
+                        Readable.BookLook(obj, print);
+                    }
+                    else if (obj.minorclass == 0)
+                    {//KeyLook: the key's description, 0x64 + owner of block 5
+                        if (print != 0)
+                        {
+                            var str = GameStrings.GetDisplayString(5, obj.owner + 0x64);
+                            if (str != "")
+                            {
+                                Print(str);
+                            }
+                        }
+                    }
+                    break;
+                case 3:
+                    if (obj.minorclass == 0 && obj.item_id >= 0xC2 && obj.item_id <= 0xC6)
+                    {
+                        BonesLook(obj, print);
+                    }
+                    break;
+                case 5:
+                    if ((_RES != GAME_UW2) && (obj.minorclass == 0) && (obj.classindex < 8) && ((obj.owner & 1) != 0))
+                    {
+                        Print(GameStrings.GetDisplayString(1, 0x83));//the door is spiked
+                    }
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// BonesLook: whose bones, 'It looks to be that of ' (a pile or more than one: 'They look to be those of ') and the
+        /// creature from the owner field (+ 0x40), or an adventurer (0x3F). Owners 0, 0x28 and 0x3C..0x3E say nothing.
+        /// </summary>
+        static void BonesLook(uwObject obj, int print)
+        {
+            var owner = obj.owner;
+            if (print == 0 || owner == 0 || owner == 0x28 || (owner >= 0x3C && owner != 0x3F))
+            {
+                return;
+            }
+            var id = _RES == GAME_UW2 ? 0x1A : 0x16;
+            if (obj.item_id == 0xC6 || obj.link > 1)
+            {
+                id++;
+            }
+            var creature = owner + 0x40;
+            if (ZhText.Enabled)
+            {
+                Print(GameStrings.GetDisplayString(1, id) + ZhText.ObjectName(creature) + "。");
+            }
+            else
+            {
+                Print(GameStrings.GetString(1, id) + (owner == 0x3F ? "an adventurer." : $"{GameStrings.GetName(creature, true, false)}."));
+            }
+        }
+
+        /// <summary>
+        /// talisman_desc (UW1): at lore 3 an object of COMOBJ fate 10 is described as 'You see ' (0x104) and its own text,
+        /// 0x105 + which talisman it is. Returns false for anything else.
+        /// </summary>
+        static bool TalismanDescription(uwObject obj)
+        {
+            if (commonObjDat.projectilecullingpriority(obj.item_id) != 10)
+            {
+                return false;
+            }
+            var which = System.Array.IndexOf(new[] { 0x136, 0x93, 0x97, 0xBF, 0x11F, 0x37, 0xAE, 0x0A, 0x36 }, obj.item_id);
+            if (which < 0)
+            {
+                return false;
+            }
+            Print(GameStrings.GetDisplayString(1, 0x104) + GameStrings.GetDisplayString(1, 0x105 + which));
             return true;
         }
 
         /// <summary>
-        /// Just returns the identification string
+        /// The description line of LookAt: 'You see' + count or article + quality word + do_mods' word + name + do_of's
+        /// words + 'belonging to' the owner's race. The article comes from the first word before the name (a count takes
+        /// none, nor quality type 13), or else from the name's own ("a_", "some_", "the_", or none).
         /// </summary>
-        /// <param name="obj"></param>
-        /// <param name="objList"></param>
         /// <param name="lorecheckresult">How fully description of enchantments the string is</param>
-        /// <returns></returns>
         public static string GetDescriptionString(uwObject obj, uwObject[] objList, int lorecheckresult, bool IncludeYouSee = true)
         {
-            string output = "";
-            var youSee = commonObjDat.PrintableLook(obj.item_id) && IncludeYouSee;
-            if (youSee)
-            {
-                output = GameStrings.GetString(1, GameStrings.str_you_see_);
-            }
-            // else
-            // {
-            //     // System.Diagnostics.Debug.Print("No print description");
-            //     // return "";
-            // }
+            var youSee = IncludeYouSee;
+            var text = youSee ? GameStrings.GetString(1, GameStrings.str_you_see_) : "";
 
-            var qualityclass = commonObjDat.qualityclass(obj.item_id);
-            int qty = 0;
-            if (obj.is_quant == 1)
+            var first = '\0';
+            var mods = DoMods(obj, objList, lorecheckresult, out var setsArticle, out var magical, out var cursed, out var warmth);
+            if (setsArticle)
             {
-                if (obj.link < 512)
-                {
-                    qty = obj.link;
-                }
+                first = mods[0];
             }
 
-            string objectname = GameStrings.GetObjectNounUW(obj.item_id, qty);
-
-            var finalclass = 0;
-            if (obj.quality > 0)
-            {
-                if (obj.quality == 1)
-                {
-                    var isLight = (obj.item_id & 0x1F8);
-                    if (isLight != 0x90)
-                    {
-                        finalclass = 1 + (obj.quality >> 4);
-                    }
-                }
-                else
-                {
-                    if (qualityclass == 3)
-                    {
-                        finalclass = 5;
-                    }
-                    else
-                    {
-                        finalclass = 1 + (obj.quality >> 4);
-                    }
-                }
+            var q = 0;
+            if ((obj.quality != 0) && ((_RES != GAME_UW2) || (obj.quality > 1) || ((obj.item_id & 0x1F8) != 0x90)))
+            {//UW2 shows no quality word for a light at quality 1
+                q = commonObjDat.qualityclass(obj.item_id) != 3 ? (obj.quality >> 4) + 1 : 5;
             }
-
-            var qualitystringid = commonObjDat.qualitytype(obj.item_id) * 6 + finalclass;
+            var qualitytype = commonObjDat.qualitytype(obj.item_id);
+            var qualitystringid = qualitytype * 6 + q;
             var qualitystring = GameStrings.GetString(5, qualitystringid);
-            if (qualitystring.Length > 0) { qualitystring += " "; }
-
-            var article = "a ";
-
-            string qtystring = "";
-            if (qty > 1)
+            if (qualitystring.Length > 0)
             {
-                qtystring = $"{qty} ";
+                first = qualitystring[0];
             }
 
-            if (qty >= 2)
+            var plural = false;
+            if ((obj.is_quant == 1) && ((obj.link & 0x200) == 0) && (obj.link > 1))
             {
-                article = ""; //GetArticle(qtystring);
+                plural = true;
+                first = 'x';
+                text += $"{obj.link} ";
             }
-            else
+            else if ((first != '\0') && (qualitytype != 13))
             {
-                if (qualitystring.Length > 0)
-                {
-                    article = GetArticle(qualitystring);
-                }
-                else
-                {
-                    article = GetArticle(objectname);
-                }
+                text += "aeiou".IndexOf(first) >= 0 ? "an " : "a ";
             }
-            //enchantments            
-            string enchantmenttext = "";
-            string magical = "";
-            string cursed = "";
-            MagicEnchantment.Description enchantment = null;
+            if (qualitystring.Length > 0)
+            {
+                text += $"{qualitystring} ";
+            }
+            text += mods;
+            text += GameStrings.GetName(obj.item_id, article: first == '\0', plural: plural);
+            text += DoOf(obj, objList, lorecheckresult, out var enchantment);
 
-            if (!((obj.majorclass == 2) && (obj.minorclass == 0))) //when not a container
+            var ownerRace = -1;
+            if (commonObjDat.canhaveowner(obj.item_id) && (obj.owner > 0) && (obj.race <= (_RES == GAME_UW2 ? 0x1E : 0x1B)))
             {
-                BuildEnchantmentStrings(obj, objList, lorecheckresult, ref enchantmenttext, ref magical, ref cursed, ref enchantment);
-            }
-            else
-            {//a container
-                //Try and check if the container directly contains a spell.
-                var linkedspell = objectsearch.FindMatchInObjectChain(
-                    ListHeadIndex: obj.link,
-                    majorclass: 4, minorclass: 2, classindex: 0,
-                    objList: objList,
-                    SkipNext: false,
-                    SkipLinks: true);
-
-                if (linkedspell != null)
-                {
-                    if (linkedspell.item_id == 288)//container is linked directly to a spell.
-                    {
-                        BuildEnchantmentStrings(obj, objList, lorecheckresult, ref enchantmenttext, ref magical, ref cursed, ref enchantment);
-                    }
-                }
-            }
-
-            if (objectname.StartsWith("some "))
-            {
-                output += $"{qtystring}{qualitystring}{cursed}{magical}{objectname}";
-            }
-            else
-            {
-                output += $"{article}{qtystring}{qualitystring}{cursed}{magical}{objectname}";
-            }
-
-            var ownership = "";
-            if (
-                commonObjDat.canhaveowner(obj.item_id)
-                &&
-                (
-                    (_RES == GAME_UW2) && (obj.race <= 30)
-                    ||
-                    (_RES != GAME_UW2) && (obj.race <= 27)
-                )
-            )
-            {
-                if (obj.owner > 0)
-                {
-                    ownership = $" belonging to{GameStrings.GetString(1, 370 + obj.race)}";
-                }
+                ownerRace = obj.race;
+                text += $" belonging to{GameStrings.GetString(1, 0x172 + obj.race)}";
             }
 
             if (ZhText.Enabled)
             {
                 return ZhText.LookObject(
                     youSee: youSee,
-                    qty: qty,
+                    qty: plural ? obj.link : 0,
                     qualityId: qualitystring.Length > 0 ? qualitystringid : -1,
-                    magical: magical != "",
-                    cursed: cursed != "",
+                    magical: magical,
+                    cursed: cursed,
                     item_id: obj.item_id,
                     enchantment: enchantment,
-                    ownerRace: ownership != "" ? obj.race : -1);
+                    ownerRace: ownerRace,
+                    warmthString: warmth);
             }
-            return $"{output}{enchantmenttext}{ownership}";
+            return youSee ? $"{text}." : text;
         }
 
-        /// <param name="enchantment">The enchantment in pieces, for ZhText, when it is named or poison.</param>
-        private static void BuildEnchantmentStrings(uwObject obj, uwObject[] objList, int lorecheckresult, ref string enchantmenttext, ref string magical, ref string cursed, ref MagicEnchantment.Description enchantment)
+        /// <summary>
+        /// UW2 GetObjDesc, the short description the enchanting and mending messages use: the quality word and the
+        /// name without its article, plural for a stack.
+        /// </summary>
+        public static string GetObjDesc(uwObject obj)
         {
-            var magicenchantment = MagicEnchantment.GetSpellEnchantment(obj, objList);
-
-            if (magicenchantment != null)
+            var q = 0;
+            if (obj.quality != 0)
             {
-                System.Diagnostics.Debug.Print($"{magicenchantment.NameEnchantment(obj, objList)}");
-                switch (lorecheckresult)
+                q = commonObjDat.qualityclass(obj.item_id) != 3 ? (obj.quality >> 4) + 1 : 5;
+            }
+            var qual = GameStrings.GetString(5, commonObjDat.qualitytype(obj.item_id) * 6 + q);
+            var qty = ((obj.is_quant == 1) && ((obj.link & 0x200) == 0)) ? obj.link : 1;
+            return (qual != "" ? $"{qual} " : "") + GameStrings.GetName(obj.item_id, article: false, plural: qty > 1);
+        }
+
+        /// <summary>
+        /// The conversation's identify_inv (conv_inv_name): an article (when describe is set, by do_mods' word or the
+        /// name's own) or a count, do_mods' word, the name and do_of's words; no quality word and no owner.
+        /// </summary>
+        public static string ConversationItemName(uwObject obj, uwObject[] objList, bool describe, int ident)
+        {
+            var qty = ((obj.is_quant == 1) && ((obj.link & 0x200) == 0)) ? obj.link : 1;
+            var mods = DoMods(obj, objList, ident, out var setsArticle, out var magical, out var cursed, out var warmth);
+            var name = "";
+            if (setsArticle && describe && (qty == 1))
+            {
+                name = "aeiou".IndexOf(mods[0]) >= 0 ? "an " : "a ";
+                describe = false;
+            }
+            else if (qty > 1)
+            {
+                name = $"{qty} ";
+                describe = false;
+            }
+            name += mods + GameStrings.GetName(obj.item_id, article: describe, plural: qty > 1);
+            name += DoOf(obj, objList, ident, out var enchantment);
+            if (ZhText.Enabled)
+            {
+                return ZhText.LookObject(youSee: false, qty: qty > 1 ? qty : 0, qualityId: -1, magical: magical, cursed: cursed,
+                    item_id: obj.item_id, enchantment: enchantment, ownerRace: -1, warmthString: warmth);
+            }
+            return name;
+        }
+
+        /// <summary>
+        /// Whether decode_obj_spell looks at obj: a container only when a spell object is among its contents.
+        /// </summary>
+        static MagicEnchantment DecodeSpell(uwObject obj, uwObject[] objList, bool alwaysDecode)
+        {
+            if ((obj.majorclass == 2) && (obj.minorclass == 0))
+            {
+                var linkedspell = objectsearch.FindMatchInObjectChain(
+                    ListHeadIndex: obj.link,
+                    majorclass: 4, minorclass: 2, classindex: 0,
+                    objList: objList,
+                    SkipNext: false,
+                    SkipLinks: true);
+                if ((linkedspell == null) || (linkedspell.item_id != 288))
                 {
-                    case 2://just magical
-                        magical = "magical "; break;
-                    case 3: // full description
-                        enchantmenttext = magicenchantment.NameEnchantment(obj, objList);
-                        if (magicenchantment.SpellMajorClass != 9)
-                        {
-                            enchantment = magicenchantment.Describe(obj, objList);
-                            if (enchantmenttext == "")
-                            {
-                                enchantmenttext = " of unnamed";
-                            }
-                            else
-                            {
-                                enchantmenttext = $" of {enchantmenttext}";
-                            }
-                        }
-                        else
-                        {
-                            enchantmenttext = "";
-                            cursed = "cursed ";
-                        }
-                        break;
+                    return null;
                 }
             }
-            else
+            MagicEnchantment.AlwaysDecode = alwaysDecode;
+            var spell = MagicEnchantment.GetSpellEnchantment(obj, objList);
+            MagicEnchantment.AlwaysDecode = false;
+            return spell;
+        }
+
+        /// <summary>
+        /// do_mods, the word before the name. Its spell decode has no always_decode, so an uncharged spell may go unseen.
+        /// UW1: 'magical ' at lore 2; at lore 3 a curse adds 'cursed ' without giving the article.
+        /// UW2: 'cursed ' at lore 3, 'magical ' at lore 2 or for a magic book up to class index 8, and 'warm '/'cool '
+        /// for a blackrock gem by whether its owner is set.
+        /// </summary>
+        /// <param name="setsArticle">The article goes by this word's first letter.</param>
+        /// <param name="warmth">The blackrock gem's string in block 1, or -1.</param>
+        static string DoMods(uwObject obj, uwObject[] objList, int lore, out bool setsArticle, out bool magical, out bool cursed, out int warmth)
+        {
+            var s = "";
+            setsArticle = false; magical = false; cursed = false; warmth = -1;
+            var spell = DecodeSpell(obj, objList, alwaysDecode: false);
+            if (spell != null)
             {
-                if ((obj.is_quant == 0) && (obj.link != 0))
-                {//check for a linked damage trap
-                    var dmgtrap = objectsearch.FindMatchInObjectChain(
-                        ListHeadIndex: obj.link,
-                        majorclass: 6,
-                        minorclass: 0,
-                        classindex: 0,
-                        objList: objList);
-                    if (dmgtrap != null)
+                var curse = !spell.IsFlagBit2Set && spell.SpellMajorClass == 9;
+                if (_RES != GAME_UW2)
+                {
+                    if (lore == 2)
                     {
-                        enchantmenttext = " of poison";
-                        enchantment = new MagicEnchantment.Description(Poison: true, Cursed: false, StringNo: -1, Charges: -2);
+                        s = "magical ";
+                        magical = true;
+                        setsArticle = true;
+                    }
+                    else if (lore == 3 && curse)
+                    {
+                        s = "cursed ";
+                        cursed = true;
+                    }
+                }
+                else
+                {
+                    if (lore == 3)
+                    {
+                        if (curse)
+                        {
+                            s = "cursed ";
+                            cursed = true;
+                            setsArticle = true;
+                        }
+                    }
+                    else if ((lore == 2) || ((obj.OneF0Class == 0x13) && (obj.classindex <= 8)))
+                    {
+                        s = "magical ";
+                        magical = true;
+                        setsArticle = true;
                     }
                 }
             }
+            if ((_RES == GAME_UW2) && ((obj.item_id & 0x1F8) == 0x118))
+            {
+                warmth = obj.owner > 0 ? 0x165 : 0x164;
+                s += GameStrings.GetString(1, warmth);
+                setsArticle = true;
+            }
+            return s;
+        }
+
+        /// <summary>
+        /// do_of, the words after the name, at lore 3 only: UW2 ' of Poison' for a potion holding a damage trap, else
+        /// ' of ' + the enchantment ('UNNAMED' without a string) and, for a non-stack holding a charged spell object
+        /// (id bit 11), ' with N full charge(s)' (a UW2 potion says 1). A curse has none.
+        /// </summary>
+        /// <param name="enchantment">The same in pieces for ZhText, or null.</param>
+        static string DoOf(uwObject obj, uwObject[] objList, int lore, out MagicEnchantment.Description enchantment)
+        {
+            enchantment = null;
+            if (lore != 3)
+            {
+                return "";
+            }
+            var potion = (_RES == GAME_UW2) && (obj.item_id >= 0xE1) && (obj.item_id <= 0xE7);
+            if (potion && (obj.is_quant == 0))
+            {
+                var damagetrap = objectsearch.FindMatchInObjectChain(
+                    ListHeadIndex: obj.link,
+                    majorclass: 6, minorclass: 0, classindex: 0,
+                    objList: objList,
+                    SkipNext: false,
+                    SkipLinks: true);
+                if (damagetrap != null)
+                {
+                    enchantment = new MagicEnchantment.Description(Poison: true, Cursed: false, StringNo: -1, Charges: -2);
+                    return " of Poison";
+                }
+            }
+            var spell = DecodeSpell(obj, objList, alwaysDecode: true);
+            if ((spell == null) || (spell.SpellMajorClass == 9))
+            {
+                return "";
+            }
+            var described = spell.Describe(obj, objList, 3);
+            var name = GameStrings.GetString(described.StringNo);
+            var s = $" of {(string.IsNullOrEmpty(name) ? "UNNAMED" : name)}";
+            var charges = -2;
+            if (obj.is_quant == 0)
+            {
+                var spellObject = objectsearch.FindMatchInObjectChain(
+                    ListHeadIndex: obj.link,
+                    majorclass: 4, minorclass: 2, classindex: 0,
+                    objList: objList,
+                    SkipNext: false,
+                    SkipLinks: true);
+                if ((spellObject != null) && (spellObject.flags2 == 1))
+                {
+                    charges = spellObject.quality;
+                    if (potion && charges > 0)
+                    {
+                        charges = 1;
+                    }
+                    s += $" with {(charges > 0 ? charges.ToString() : "no")} full charge{(charges != 1 ? "s" : "")}";
+                }
+            }
+            enchantment = described with { Charges = charges };
+            return s;
         }
 
 

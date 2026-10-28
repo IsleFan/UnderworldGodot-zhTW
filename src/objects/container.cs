@@ -5,19 +5,18 @@ namespace Underworld
 {
     public class container : objectInstance
     {
-        public static bool Use(uwObject obj, bool WorldObject)
+        public static bool Use(uwObject obj, bool WorldObject, bool toPlayer = true)
         {
+            //UseCont: a locked container says so, in the world or in the inventory
+            if (a_lock.CheckLock(playerdat.playerObject, obj, 0, WorldObject) == 0)
+            {
+                var msg = $"The {GameStrings.GetSimpleObjectNameUW(obj.item_id)} is locked";
+                uimanager.AddToMessageScroll(msg);
+                return true;
+            }
             if (WorldObject)
             {
-                if (a_lock.GetIsLocked(obj)==false)
-                {
-                    SpillWorldContainer(obj);
-                }
-                else
-                {
-                    var msg = $"The {GameStrings.GetSimpleObjectNameUW(obj.item_id)} is locked";
-                    uimanager.AddToMessageScroll(msg);
-                }                
+                DumpTheBag(obj, toPlayer);
                 return true;
             }
             else
@@ -38,74 +37,89 @@ namespace Underworld
 
 
         /// <summary>
-        /// Splills the contents of a container onto the tile
+        /// DumpTheBag: a container used in the world is emptied onto the floor, its contents given the container's owner
+        /// (when it can be owned). UW2 tells the owners (player_did_bad) and says "You empty the X." or "The X is empty.";
+        /// UW1 only says "The X is empty.". The messages are for the player using it.
         /// </summary>
-        /// <param name="containerObj"></param>
-        public static void SpillWorldContainer(uwObject containerObj)
+        public static void DumpTheBag(uwObject bag, bool toPlayer)
         {
-            //Checkfor use trigger
-            // trigger.UseTrigger(
-            //     srcObject: obj,
-            //     triggerIndex: obj.link,
-            //     objList: UWTileMap.current_tilemap.LevelObjects);
-            //check for pickup trigger f
-            //trigger.PickupTrigger(UWTileMap.current_tilemap.LevelObjects, obj);
-        
-
-            //container used in the world
-            if (UWTileMap.ValidTile(containerObj.tileX, containerObj.tileY))
+            var owner = commonObjDat.canhaveowner(bag.item_id) ? bag.owner : 0;
+            var dumped = SpillWorldContainer(bag, owner);
+            var name = GameStrings.GetSimpleObjectNameUW(bag.item_id);
+            if (_RES == GAME_UW2)
             {
-                var tile = UWTileMap.current_tilemap.Tiles[containerObj.tileX, containerObj.tileY];
-                if (tile != null)
+                a_do_trap_trespass.HackTrapTrespass(owner);
+                if (toPlayer)
                 {
-                    //add the contents of the container to the tile.
-                    if ((containerObj.majorclass == 2) && (containerObj.minorclass == 0))
-                    {
-                        if ((containerObj.classindex & 1) == 0)
-                        {
-                            containerObj.item_id |= 0x1;// set it to an opened version.
-                            RedrawFull(containerObj);
-                        }
-                    }
-                    int nextobj = containerObj.link;
-                    containerObj.link = 0;//clear the container link
-                    while (nextobj != 0)
-                    {
-                        var objToSpill = UWTileMap.current_tilemap.LevelObjects[nextobj];
-                        if ((objToSpill.majorclass==6) && (objToSpill.minorclass>=2))
-                        {
-                            nextobj = objToSpill.next;
-                            //a trigger has been spilled.
-                            containerObj.link = objToSpill.index;
-                            //run it if it is a use trigger
-                            trigger.TriggerObjectLink(
-                                character: 1, 
-                                ObjectUsed: containerObj,
-                                triggerX: containerObj.tileX,
-                                triggerY: containerObj.tileY,                              
-                                triggerType: (int)triggerObjectDat.triggertypes.USE, 
-                                objList: UWTileMap.current_tilemap.LevelObjects);
-                            containerObj.link = 0;
-                        }
-                        else
-                        {
-                            Debug.Print($"Spilling {objToSpill.index} {objToSpill.a_name}");
-                            objToSpill.tileX = containerObj.tileX;
-                            objToSpill.tileY = containerObj.tileY;
-                            UWTileMap.GetRandomXYZForTile(tile, out int newxpos, out int newypos, out int newzpos);
-                            objToSpill.xpos = (short)newxpos;//obj.xpos;
-                            objToSpill.ypos = (short)newypos;///obj.ypos;
-                            objToSpill.zpos = (short)newzpos; //obj.zpos;
-                            objToSpill.owner = 0; //clear owner
-                            ObjectCreator.RenderObject(objToSpill, UWTileMap.current_tilemap); 
-                            nextobj = objToSpill.next;   
-                            //insert to object list
-                            objToSpill.next = tile.indexObjectList;
-                            tile.indexObjectList = objToSpill.index; 
-                        }   
-                    }
+                    uimanager.AddToMessageScroll(dumped ? $"You empty the {name}." : $"The {name} is empty.");
                 }
             }
+            else if (!dumped && toPlayer)
+            {
+                uimanager.AddToMessageScroll($"The {name} is empty.");
+            }
+        }
+
+        /// <summary>
+        /// drop_link_chain: empties a container (or a dead critter) onto the floor near where it is, each object put with
+        /// put_at (range 6). UW2 first removes its locks, gives each object the owner (when nonzero and it can be owned),
+        /// puts out lit lights, and sets off a trigger among the contents as it falls out (a use trigger). UW1 gives the
+        /// owner to the container instead and does none of the rest. Returns true if anything was inside.
+        /// </summary>
+        public static bool SpillWorldContainer(uwObject containerObj, int owner = 0)
+        {
+            var objList = UWTileMap.current_tilemap.LevelObjects;
+            if (_RES == GAME_UW2)
+            {
+                a_lock.RemoveAllLocks(containerObj, true);
+            }
+            if ((containerObj.is_quant != 0) || (containerObj.link == 0))
+            {
+                return false;
+            }
+            int nextobj = containerObj.link;
+            containerObj.link = 0;//clear the container link
+            int tx = containerObj.IsStatic ? containerObj.tileX : containerObj.npc_xhome;
+            int ty = containerObj.IsStatic ? containerObj.tileY : containerObj.npc_yhome;
+            var x = (tx << 3) + containerObj.xpos;
+            var y = (ty << 3) + containerObj.ypos;
+            var z = containerObj.zpos;
+            while (nextobj != 0)
+            {
+                var objToSpill = objList[nextobj];
+                nextobj = objToSpill.next;
+                objToSpill.next = 0;
+                if (_RES == GAME_UW2)
+                {
+                    if ((owner != 0) && commonObjDat.canhaveowner(objToSpill.item_id))
+                    {
+                        objToSpill.owner = (short)owner;
+                    }
+                    if ((objToSpill.item_id >= 0x94) && (objToSpill.item_id <= 0x97))
+                    {//lit lights go out
+                        objToSpill.item_id -= 4;
+                    }
+                }
+                else if ((owner != 0) && commonObjDat.canhaveowner(containerObj.item_id))
+                {//UW1: the container gets the owner, not the item
+                    containerObj.owner = (short)owner;
+                }
+                Debug.Print($"Spilling {objToSpill.index} {objToSpill.a_name}");
+                var placed = motion.PutAt(objToSpill, x, y, z, 6, false);
+                if ((_RES == GAME_UW2) && (placed != null) && (placed.majorclass == 6) && (placed.minorclass >= 2))
+                {//a trigger that falls out goes off, with the rest of the contents linked back while it runs
+                    containerObj.link = (short)nextobj;
+                    trigger.RunTrigger(
+                        character: 1,
+                        ObjectUsed: null,
+                        TriggerObject: placed,
+                        triggerType: (int)triggerObjectDat.triggertypes.USE,
+                        objList: objList);
+                    nextobj = containerObj.link;
+                    containerObj.link = 0;
+                }
+            }
+            return true;
         }
 
 
@@ -294,6 +308,32 @@ namespace Underworld
 
 
 
+        /// <summary>
+        /// The inventory container that holds the object at index, or -1 at the top level.
+        /// </summary>
+        static int EnclosingContainer(int index)
+        {
+            for (int i = 0; i < 19; i++)
+            {
+                if (playerdat.GetInventorySlotListHead(i) == index)
+                {
+                    return -1;
+                }
+            }
+            foreach (var objToCheck in playerdat.InventoryObjects)
+            {
+                if (objToCheck != null)
+                {
+                    var result = objectsearch.GetContainingObject(ListHead: objToCheck.index, ToFind: index, objList: playerdat.InventoryObjects);
+                    if (result != -1)
+                    {
+                        return result;
+                    }
+                }
+            }
+            return -1;
+        }
+
         public static bool TestContainerCanHold(uwObject containerobject, uwObject objectToAdd, bool printReason = true)
         {//assume containerobject = in player object list, objecttoadd in level objects list
             MessageDisplay.MessageDisplayMode printmode = MessageDisplay.MessageDisplayMode.NormalMode;
@@ -301,146 +341,98 @@ namespace Underworld
             {
                 printmode = MessageDisplay.MessageDisplayMode.TemporaryMessage;
             }
-            bool WeightTest = false;
-            bool ContainerCanHold = false;
-            bool WrongTypeMessage = false;
-            var mask = containerObjectDat.objectmask(containerobject.item_id);
-            if (mask <= -1)
+            //ItemFitsSlot: first the weight. Only the contents count, plus the new object; capacity 0 means no limit.
+            //Every open bag around it must also have room (the open bags from the opened one outwards).
+            var capacity = containerObjectDat.capacity(containerobject.item_id);
+            var contentsMass = GetTotalMass(containerobject, playerdat.InventoryObjects, true) - commonObjDat.mass(containerobject.item_id);
+            var itemToAddMass = GetTotalMass(objectToAdd, UWTileMap.current_tilemap.LevelObjects, true);
+            var fits = (capacity == 0) || (contentsMass + itemToAddMass <= capacity);
+            var openBag = uimanager.OpenedContainerIndex;
+            while (fits && (openBag > 0))
             {
-                ContainerCanHold = true;
+                var bag = playerdat.InventoryObjects[openBag];
+                var bagCapacity = containerObjectDat.capacity(bag.item_id);
+                var bagContents = GetTotalMass(bag, playerdat.InventoryObjects, true) - commonObjDat.mass(bag.item_id);
+                fits = (bagCapacity == 0) || (bagContents + itemToAddMass <= bagCapacity);
+                openBag = EnclosingContainer(openBag);
+            }
+            if (!fits)
+            {
+                if (printReason)
+                {
+                    uimanager.AddToMessageScroll(
+                        stringToAdd: ZhText.Enabled
+                            ? ZhText.Compose(ZhText.ObjectName(containerobject.item_id), "已經滿了。")
+                            : $"The {GameStrings.GetSimpleObjectNameUW(containerobject.item_id)} is too full.",
+                        mode: printmode);
+                }
+                return false;
+            }
+            //then the kind of object the container takes
+            var mask = containerObjectDat.objectmask(containerobject.item_id);
+            if (mask < 0)
+            {
+                return true;
+            }
+            var id = objectToAdd.item_id;
+            var major = objectToAdd.majorclass; var minor = objectToAdd.minorclass; var sub = objectToAdd.classindex;
+            bool ContainerCanHold;
+            if (mask < 512)
+            {//only that exact item
+                ContainerCanHold = id == mask;
             }
             else
             {
-                if ((mask >= 0) && (mask < 512))
-                {//check for exact match. I don't think this actually happens with any container but just incase...
-                    if (objectToAdd.item_id == mask)
-                    {
-                        if (printReason)
+                switch (mask)
+                {
+                    case 512://rune bag: runestones (and the 0xE8-0xEF stones)
+                        if (!((major == 3) && ((minor == 3) || ((minor == 2) && (sub > 7)))))
                         {
-                            if (uimanager.InConversation)
-                            {
-                                uimanager.AddToMessageScroll(
-                                    stringToAdd: GameStrings.GetDisplayString(1, GameStrings.str_that_item_does_not_fit_),
-                                    mode: printmode);
-                            }
-                        }
-                        ContainerCanHold = false;
-                    }
-                    else
-                    {
-                        ContainerCanHold = true;
-                    }
-                }
-                else
-                {//check category against mask-512;
-                    //mask = mask - 512s;
-                    switch (mask)
-                    {
-                        case 512://rune bag, this will probably never hit but included this case for completedness
-                            ContainerCanHold = runestone.IsRunestone(objectToAdd.item_id);
-                            if ((!ContainerCanHold) && (printReason))
+                            if (printReason)
                             {
                                 uimanager.AddToMessageScroll(
                                     stringToAdd: GameStrings.GetDisplayString(1, GameStrings.str_you_can_only_put_runes_in_the_rune_bag_),
-                                    mode:printmode);
+                                    mode: printmode);
                             }
-                            break;
-                        case 513://quivers, accepts missiles and wands
-                            {
-                                if (
-                                    ((objectToAdd.majorclass == 0) && (objectToAdd.minorclass == 3) && (objectToAdd.classindex <= 3))
-                                    ||
-                                    ((objectToAdd.majorclass == 0) && (objectToAdd.minorclass == 3) && (objectToAdd.classindex >= 8))
-                                )
-                                {//a wand or ammo
-                                    ContainerCanHold = true;
-                                }
-                                else
-                                {
-                                    ContainerCanHold = false;
-                                    WrongTypeMessage = true;
-                                }
-                                break;
-                            }
-                        case 514://scrolls
-                            {
-                                if (
-                                    ((objectToAdd.majorclass == 4) && (objectToAdd.minorclass == 3) && (_RES != GAME_UW2))
-                                    ||
-                                    ((objectToAdd.majorclass == 4) && (objectToAdd.minorclass == 3) && (objectToAdd.classindex <= 0xA) && (_RES == GAME_UW2))
-                                    )
-                                {
-                                    //a book/scroll
-                                    ContainerCanHold = true;
-                                }
-                                else
-                                {
-                                    ContainerCanHold = false;
-                                    WrongTypeMessage = true;
-                                }
-                                break;
-                            }
-                        case 515://bowl/food
-                            {
-                                if (Food.IsFood(objectToAdd))
-                                {
-                                    ContainerCanHold = true;
-                                }
-                                else
-                                {
-                                    ContainerCanHold = false;
-                                    WrongTypeMessage = true;
-                                }
-                                break;
-                            }
-                        case 516://keyring
-                            {
-                                if ((objectToAdd.majorclass == 4) && (objectToAdd.minorclass == 0))
-                                {
-                                    ContainerCanHold = true;
-                                }
-                                else
-                                {
-                                    ContainerCanHold = false;
-                                    WrongTypeMessage = true;
-                                }
-                                break;
-                            }
-                    }
+                            return false;
+                        }
+                        return true;
+                    case 513://quivers: sling stones, bolts and arrows (UW2 also wands)
+                        ContainerCanHold = ((major == 0) && (minor == 1) && (sub < 3))
+                            || ((_RES == GAME_UW2) && (major == 2) && (minor == 1) && (sub >= 8));
+                        break;
+                    case 514://scroll and map cases: UW1 0x138-0x13F, UW2 0x134-0x137, 0x139 and 0x13A
+                        ContainerCanHold = (major == 4) && (minor == 3) &&
+                            ((_RES == GAME_UW2) ? (((sub >= 4) && (sub < 8)) || (sub == 9) || (sub == 10)) : (sub >= 8));
+                        break;
+                    case 515://bowl: food (UW2 not drinks) and a few reagents
+                        if (_RES == GAME_UW2)
+                        {
+                            ContainerCanHold = ((major == 2) && (minor == 3) && (id != 0xBB) && (id != 0xBC) && (id != 0xBD))
+                                || (id == 0xCE) || (id == 0xCF) || (id == 0x114) || (id == 0xD2) || (id == 0x13E) || (id == 0xC5);
+                        }
+                        else
+                        {
+                            ContainerCanHold = ((major == 2) && (minor == 3))
+                                || (id == 0xCE) || (id == 0xCF) || (id == 0x92) || (id == 0x125) || (id == 0x11B) || (id == 0xD9);
+                        }
+                        break;
+                    case 516://key ring (UW2): keys (not 0x100), or another key ring
+                        ContainerCanHold = ((major == 4) && (minor == 0) && (sub != 0))
+                            || ((objectToAdd.OneF0Class == 8) && (containerObjectDat.objectmask(id) == 516));
+                        break;
+                    default:
+                        ContainerCanHold = false;
+                        break;
                 }
             }
-
-            if (!ContainerCanHold && WrongTypeMessage)
+            if (!ContainerCanHold && printReason)
             {
                 uimanager.AddToMessageScroll(
                     stringToAdd: GameStrings.GetDisplayString(1, GameStrings.str_that_item_does_not_fit_),
                     mode: printmode);
             }
-
-            //Test total weight.
-            if (ContainerCanHold)
-            {
-                var containerMass = GetTotalMass(containerobject, playerdat.InventoryObjects, true);
-                var itemToAddMass = GetTotalMass(objectToAdd, UWTileMap.current_tilemap.LevelObjects, true);
-                if (containerMass + itemToAddMass > containerObjectDat.capacity(containerobject.item_id))
-                {
-                    WeightTest = false;
-                    if (printReason)
-                    {
-                        uimanager.AddToMessageScroll(
-                            stringToAdd: ZhText.Enabled
-                                ? ZhText.Compose(ZhText.ObjectName(containerobject.item_id), "已經滿了。")
-                                : $"The {GameStrings.GetSimpleObjectNameUW(containerobject.item_id)} is too full",
-                            mode:printmode);
-                    }
-                }
-                else
-                {
-                    WeightTest = true;
-                }
-            }
-
-            return (ContainerCanHold && WeightTest);
+            return ContainerCanHold;
         }
 
 

@@ -67,16 +67,18 @@ namespace Underworld
                 case 7:
                     {//Map area
                         if (automap.CanMap(playerdat.dungeon_level))
-                        {
-                            var castscore = Math.Max(playerdat.Casting - 13, 0);
-                            var range = 2 + (castscore / 5);
+                        {//special_spells 7: a circle of Casting / 5 + 2, Casting counting twice over 15 (less 13)
+                            var range = playerdat.Casting;
+                            range += range > 15 ? range - 13 : 0;
+                            range = range / 5 + 2;
 
-                            automap.MarkRangeOfTilesVisited(
+                            automap.MarkCircleOfTilesVisited(
                                 range: range,
                                 cX: playerdat.playerObject.tileX,
                                 cY: playerdat.playerObject.tileY,
                                 dungeon_level: playerdat.dungeon_level
                                 );
+                            uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, 0x113));//You gain a sudden awareness of your surroundings.
                         }
                         else
                         {
@@ -154,12 +156,14 @@ namespace Underworld
             var cX = playerdat.playerObject.tileX; var cY = playerdat.playerObject.tileY;
             var linesOfPower = playerdat.GetQuest(128);
 
-            //try and find a guardian signet ring in the area
-            for (int aX = cX - range; aX <= cX + range; aX++)
+            //try and find a guardian signet ring in the area: the original's area (process_area) is
+            //w + 1 squares from cX - range with w = range * 2 + 1, so it runs one square further on
+            //the high side, and it stops at the first marker.
+            for (int aX = cX - range; aX <= cX + range + 1; aX++)
             {
-                for (int aY = cX - range; aY <= cY + range; aY++)
+                for (int aY = cY - range; aY <= cY + range + 1; aY++)
                 {
-                    if (UWTileMap.ValidTile(aY, aX))
+                    if (UWTileMap.ValidTile(aX, aY))
                     {
                         var tile = UWTileMap.current_tilemap.Tiles[aX, aY];
                         var next = tile.indexObjectList;
@@ -196,6 +200,12 @@ namespace Underworld
 
                                         UWsoundeffects.PlaySoundEffectAtAvatar(UWsoundeffects.SoundEffectRumble, 0x40, 0x28);
                                         UWsoundeffects.PlaySoundEffectAtAvatar(UWsoundeffects.SoundEffectSpellRing1, 0x40, 0x14);
+                                        return;
+                                    }
+                                    else
+                                    {//this world's line is already cut: the marker still goes, and nothing else happens
+                                        ObjectRemover_OLD.DeleteObjectFromTile_DEPRECIATED(nextObj.tileX, nextObj.tileY, nextObj.index);
+                                        uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, GameStrings.str_the_spell_has_no_discernable_effect_));
                                         return;
                                     }
                                 }

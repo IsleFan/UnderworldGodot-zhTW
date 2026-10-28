@@ -17,9 +17,8 @@ namespace Underworld
         /// <param name="objList"></param>
         /// <param name="WorldObject"></param>
         public static void EnchantObject(int index, uwObject[] objList, bool WorldObject)
-        {
+        {//sp_enchant
             var failed = true;
-            bool MakeAttemptVar8;
             var objToEnchant = objList[index];
 
             if (objToEnchant == null) { return; }
@@ -28,127 +27,76 @@ namespace Underworld
 
             if (ExistingEnchantment != null)
             {   //is already enchanted
-                var var2SpellMajorClass = ExistingEnchantment.SpellMajorClass;
-                if ((ExistingEnchantment.IsFlagBit2Set) && (ExistingEnchantment.SpellMajorClass == 0))
-                {
-                    ExistingEnchantment.SpellMajorClass = RunicMagic.SpellList[ExistingEnchantment.SpellMinorClass].SpellMajorClass;
-                    ExistingEnchantment.SpellMinorClass = RunicMagic.SpellList[ExistingEnchantment.SpellMinorClass].SpellMinorClass;
+                var major = ExistingEnchantment.SpellMajorClass;
+                var effect = ExistingEnchantment.SpellMinorClass;
+                var flag = ExistingEnchantment.IsFlagBit2Set;
+                if (flag && (major == 0))
+                {//a spell from the rune table: look it up, then carry on
+                    major = RunicMagic.SpellList[effect].SpellMajorClass;
+                    effect = RunicMagic.SpellList[effect].SpellMinorClass;
                 }
-                else
-                {
-
-                    if ((ExistingEnchantment.IsFlagBit2Set) && (CanObjectBeEnchanted(objToEnchant, ExistingEnchantment.SpellMajorClass, ExistingEnchantment.SpellMinorClass)))
+                if (flag && CanObjectBeEnchanted(objToEnchant, major, effect))
+                {//recharge it
+                    failed = ChargeSpellObjectwithEffectId(objToEnchant, objList, effect, playerdat.playerObject.tileX, playerdat.playerObject.tileY, WorldObject);
+                    if (failed)//if true object has been destroyed.
                     {
-                        //can object be enchanted.
-                        //EnchantObjectwithEffectId andupdate failed variable
-                        failed = ChargeSpellObjectwithEffectId(objToEnchant, objList, ExistingEnchantment.SpellMinorClass, playerdat.playerObject.tileX, playerdat.playerObject.tileY, WorldObject);
-                        if (failed)//if true object has been destroyed.
-                        {
-                            return;
-                        }
+                        return;
                     }
-                    else
+                }
+                else if (flag)
+                {
+                    FailEnchantment(objToEnchant, objList, WorldObject, playerdat.playerObject.tileX, playerdat.playerObject.tileY);
+                    return;
+                }
+                else if ((major == 0xC) && (objToEnchant.majorclass == 0))
+                {//a weapon's damage and accuracy tiers (effects 0..2, 4..6) or armour's (0..6, 8..14) go up one
+                    var attempt = false;
+                    var diff = 0;
+                    var skill = 0;
+                    if ((objToEnchant.minorclass <= 1) && (effect < 8) && ((effect & ~4) < 3))
                     {
-                        if (ExistingEnchantment.IsFlagBit2Set)
+                        attempt = true;
+                        diff = effect & ~4;
+                        skill = (playerdat.play_level - 8) / 4 + playerdat.Casting / 11;
+                    }
+                    else if ((objToEnchant.minorclass >= 2) && ((effect & ~8) < 7))
+                    {
+                        attempt = true;
+                        diff = effect & ~8;
+                        skill = playerdat.play_level + playerdat.Casting / 11 - 10;
+                    }
+                    if (attempt)
+                    {
+                        if (diff > skill)
                         {
-                            //Failenchantment
                             FailEnchantment(objToEnchant, objList, WorldObject, playerdat.playerObject.tileX, playerdat.playerObject.tileY);
                             return;
                         }
-                        else
-                        {
-                            if (ExistingEnchantment.SpellMajorClass == 0xC)
-                            {
-                                MakeAttemptVar8 = false;
-                                if (objToEnchant.majorclass == 0)
-                                {
-                                    int diDifficulty = 0;
-                                    int siSkill = 0;
-                                    //ovr157_921
-                                    if (
-                                        (objToEnchant.minorclass > 1)
-                                        ||
-                                        (objToEnchant.minorclass <= 1 && ExistingEnchantment.SpellMinorClass >= 8)
-                                        ||
-                                        (objToEnchant.minorclass <= 1 && ExistingEnchantment.SpellMinorClass < 8 && (ExistingEnchantment.SpellMinorClass & 0xFFFB) >= 3)
-                                    )
-                                    {
-                                        //ovr157_978:
-                                        if ((objToEnchant.minorclass >= 2) && (ExistingEnchantment.SpellMinorClass & 0xFFF7) < 7)
-                                        {
-                                            MakeAttemptVar8 = true;
-                                            diDifficulty = ExistingEnchantment.SpellMinorClass & 0xFFF7;
-                                            siSkill = playerdat.play_level + (playerdat.Casting / 0xB) - 10;
-                                        }
-                                    }
-                                    else
-                                    {
-                                        //ovr157_943:
-                                        MakeAttemptVar8 = true;
-                                        diDifficulty = ExistingEnchantment.SpellMinorClass & 0xFFF8;
-                                        siSkill = (playerdat.Casting / 0xB) + (playerdat.play_level - 8) / 4;
-                                    }
-                                    if (MakeAttemptVar8)
-                                    {
-                                        if (diDifficulty <= siSkill)
-                                        {
-                                            failed = false;
-                                            objToEnchant.link = (short)((objToEnchant.link & 0x1F0) | ((ExistingEnchantment.SpellMinorClass + 1) & 0xF) | 0x200);//increase the power of the existing enchantment
-                                        }
-                                        else
-                                        {
-                                            //blowup
-                                            //Fail enchantment
-                                            FailEnchantment(objToEnchant, objList, WorldObject, playerdat.playerObject.tileX, playerdat.playerObject.tileY);
-                                            return;
-                                        }
-                                    }
-                                }
-                            }
-                            else
-                            {
-                                //ovr157_a01, not applicable 
-                            }
-                        }
+                        objToEnchant.link = (short)((objToEnchant.link & 0x1F0) | ((effect + 1) & 0xF) | 0x200);//SET_ENCHANT
+                        failed = false;
                     }
                 }
             }
-            else
-            {  //is not enchanted
-                if (objToEnchant.majorclass == 0)
+            else if ((objToEnchant.majorclass == 0) && ((objToEnchant.is_quant == 1) || (objToEnchant.link == 0)))
+            {  //an unenchanted weapon or armour holding nothing: the lowest tier of one of its two kinds
+                objToEnchant.link = 0x201;
+                objToEnchant.enchantment = 1;
+                objToEnchant.flags = (short)(objToEnchant.flags & 0xB); //clear flag 2
+                objToEnchant.is_quant = 1;
+                switch (objToEnchant.minorclass)
                 {
-                    uwObject linkedspell = null;
-                    if ((objToEnchant.is_quant == 0) && (objToEnchant.link != 0))
-                    {
-                        linkedspell = objList[objToEnchant.link];
-                    }
-
-                    if (linkedspell == null)
-                    {
-                        objToEnchant.link = 201;// or maybe 102
-                        objToEnchant.enchantment = 1;
-                        objToEnchant.flags = (short)(objToEnchant.flags & 0xB); //clear flag 2
-                        objToEnchant.is_quant = 1; //?why?
+                    case 0:
+                    case 1://weapons: damage or accuracy
+                        objToEnchant.link = (short)((objToEnchant.link & 0xF) | 0x2C0);
+                        objToEnchant.link = (short)((objToEnchant.link & 0x1F0) | ((Rng.r.Next(2) << 2) & 0xF) | 0x200);
                         failed = false;
-                        switch (objToEnchant.minorclass)
-                        {
-                            case 0:
-                            case 1://weapons
-                                {
-                                    var newlink = ((((objToEnchant.link & 0xF) | 0x2C0) | ((Rng.r.Next(2) << 2) & 0xF)) & 0x1f0) | 0x200;
-                                    objToEnchant.link = (short)newlink;
-                                    break;
-                                }
-                            case 2://armour
-                            case 3:
-                                {
-                                    var newlink = ((((objToEnchant.link & 0xF) | 0x2C0) | (((Rng.r.Next(2) << 3) / 3) & 0xF)) & 0x1f0) | 0x200;
-                                    objToEnchant.link = (short)newlink;
-                                    break;
-                                }
-
-                        }
-                    }
+                        break;
+                    case 2://armour: protection or toughness
+                    case 3:
+                        objToEnchant.link = (short)((objToEnchant.link & 0xF) | 0x2C0);
+                        objToEnchant.link = (short)((objToEnchant.link & 0x1F0) | ((Rng.r.Next(2) << 3) & 0xF) | 0x200);
+                        failed = false;
+                        break;
                 }
             }
 
@@ -161,7 +109,9 @@ namespace Underworld
             {
                 uimanager.AddToMessageScroll(ZhText.Enabled
                     ? ZhText.PhraseAndName(0x12D, objToEnchant.item_id)
-                    : $"{GameStrings.GetString(1, 0x12D)}{GameStrings.GetSimpleObjectNameUW(objToEnchant.item_id)}");
+                    : _RES == GAME_UW2
+                        ? $"{GameStrings.GetString(1, 0x12D)}{look.GetObjDesc(objToEnchant)}."
+                        : $"{GameStrings.GetString(1, 0x12D)}{GameStrings.GetSimpleObjectNameUW(objToEnchant.item_id)}");
             }
         }
 
@@ -232,7 +182,7 @@ namespace Underworld
 
             var si_difficulty = (var3 + (16 - var2) << 10) / (var3 + 24);
 
-            var rng = Rng.r.Next(0x3ff);
+            var rng = Rng.r.Next(0x400);//rand() & 0x3FF
 
             if (rng < si_difficulty)
             {
@@ -309,12 +259,16 @@ namespace Underworld
         static void EnchantFailureExplosion(uwObject obj, int x, int y)
         {
             var tile = UWTileMap.current_tilemap.Tiles[x, y];
-            animo.SpawnAnimoInTile(
+            var boom = animo.SpawnAnimoInTile(
                 subclassindex: 2, xpos: 3, ypos: 3, zpos: (short)(tile.floorHeight << 3), tileX: x, tileY: y);
+            if (boom != null)
+            {//sp_enchant_faildestroymess: the explosion scatters its flames (fireball_effect)
+                animo.SpawnAnimoCopies(boom, x, y);
+            }
             uimanager.AddToMessageScroll(ZhText.Enabled
                 ? ZhText.Compose(GameStrings.GetDisplayString(1, 0x13E), ZhText.ObjectName(obj.item_id), GameStrings.GetDisplayString(1, 0x13F))
-                : $"{GameStrings.GetString(1, 0x13E)}{GameStrings.GetSimpleObjectNameUW(obj.item_id)}{GameStrings.GetString(1, 0x13F)}");//your attempt to enchant X destroys it in a blaze of flame
-            damage.DamageObjectsInTile(playerdat.playerObject.tileX, playerdat.playerObject.tileY, 1, 1);
+                : $"{GameStrings.GetString(1, 0x13E)}{(_RES == GAME_UW2 ? look.GetObjDesc(obj) : GameStrings.GetSimpleObjectNameUW(obj.item_id))}{GameStrings.GetString(1, 0x13F)}");//your attempt to enchant X destroys it in a blaze of flame
+            damage.DamageObjectsInTile(x, y, 1, 1);//damage_square on the object's square
         }
 
         /// <summary>

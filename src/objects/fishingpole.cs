@@ -39,7 +39,11 @@ namespace Underworld
                                     if (playerdat.CanCarryWeight(182))
                                     {
                                         uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, GameStrings.str_you_catch_a_lovely_fish_));
-                                        ObjectCreator.SpawnObjectInHand(182);
+                                        var fishIndex = ObjectCreator.SpawnObjectInHand(182);
+                                        if (fishIndex > 0)
+                                        {//a fresh fish, quality 0x3F
+                                            UWTileMap.current_tilemap.LevelObjects[fishIndex].quality = 0x3F;
+                                        }
                                     }
                                     else
                                     {

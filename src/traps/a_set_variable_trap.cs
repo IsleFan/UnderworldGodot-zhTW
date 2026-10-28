@@ -46,9 +46,9 @@ namespace Underworld
         private static void VariableOperationUW1(short LeftOperator, short Operation, int RightOperator)
         {
             if (LeftOperator == 0)
-            {// bitwise operations on quest variables. no known instances of this happening?
+            {// z 0: the operand is the quest flag's number (bit RightOperator of the quest flags), as level 3 sets quest 7
                 Debug.Print("Quest var bitwise operation");
-                var questToChange = (1 << RightOperator);
+                var questToChange = RightOperator;
                 switch (Operation)
                 {
                     case 1://Unset
@@ -153,10 +153,9 @@ namespace Underworld
                     {//Quest vars
                         var questno = LeftVariable - 0x100;// >> 2;
                         switch (Operation)
-                        {   //assuming these cases are the same as UW1. the dissasembly is complex so I could be wrong here
-                            case 1://maybe unset
+                        {   //set_numbered_variable: 5 toggles, 1 leaves the flag as it is, anything else sets it to right > 0
+                            case 1:
                                 {
-                                    playerdat.SetQuest(questno,0);
                                     break;
                                 }
                             case 5://maybe xor
@@ -166,9 +165,9 @@ namespace Underworld
                                     playerdat.SetQuest(questno, tmp);
                                     break;
                                 }
-                            default://maybe set
+                            default:
                                 {
-                                    playerdat.SetQuest(questno,1);
+                                    playerdat.SetQuest(questno, RightVariable > 0 ? 1 : 0);
                                     break;
                                 }
                         }

@@ -162,8 +162,17 @@ public partial class SfxStreamPlayer : Node
                 // Drain commands: start voices for any pending triggers.
                 while (_commands.TryDequeue(out var cmd))
                 {
+                    if (cmd.NoteOff)
+                    {
+                        _allocator.NoteOff(cmd.Slot);
+                        continue;
+                    }
                     var voice = _allocator.Allocate();
-                    voice?.StartKeyon(cmd.Patch, cmd.LifetimeTicks, cmd.VolScale);
+                    if (voice != null)
+                    {
+                        voice.StartKeyon(cmd.Patch, cmd.LifetimeTicks, cmd.VolScale);
+                        voice.Slot = cmd.Slot;
+                    }
                     // null = saturated (all 9 voices busy) → drop trigger silently,
                     // matching authentic UW behaviour.
                 }

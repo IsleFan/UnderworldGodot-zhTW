@@ -34,7 +34,7 @@ namespace Underworld
 
             if (spell != null)
             {
-                MagicEnchantment.CastObjectSpell(potion, spell);
+                MagicEnchantment.CastObjectSpell(potion, spell, cooldown: false);
             }
             else
             {//no spell was attached. See if a damage trap is present.

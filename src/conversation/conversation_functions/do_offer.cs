@@ -40,7 +40,7 @@ namespace Underworld
                     }
                     else
                     {
-                        evaluation = ((playervalue - npcvalue) * 100) / npcvalue;
+                        evaluation = (short)((playervalue - npcvalue) * 100) / npcvalue;//16-bit, as DOS: a gross overpayment wraps into a loss
                     }
                     if (evaluation >= TradeThreshold)
                     {//accept offer

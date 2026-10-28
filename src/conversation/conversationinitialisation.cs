@@ -53,8 +53,13 @@ namespace Underworld
                     TeleportToLevel = -1;
                     TeleportTileX = - 1;
                     TeleportTileY = -1;
+                    TeleportTalkerX = -1;
 
                     SetupConversationUI(talker);
+                    if (_RES == GAME_UW2)
+                    {//converse: the effects stop as the conversation screen comes up
+                        UWsoundeffects.KillAllEffects();
+                    }
 
                     if (_RES != GAME_UW2)
                         {
@@ -72,6 +77,10 @@ namespace Underworld
                     stack = currentConversation.NoOfMemorySlots;
 
                     ImportVariables(talker);
+                    if (!TemporaryTalker)
+                    {//Converse: an NPC without an inventory gets one before the script runs (not the stand-in for a door or wisp, which is deleted afterwards)
+                        npc.spawnloot(talker);
+                    }
 
                     
                     //Launch conversation VM co-routine 
@@ -165,17 +174,26 @@ namespace Underworld
             if (talker.majorclass == 1 && talker.npc_whoami != 0)
             {//a translated name only replaces the one a_name took from the names block
                 talkername = Localization.Lookup(7, talker.npc_whoami + 16, talkername);
+                if ((_RES != GAME_UW2) && (talker.npc_whoami < 0xF0) && (GameStrings.GetString(7, talker.npc_whoami + 16) == ""))
+                {//UW1's get_name gives nothing for a whoami with no name, and no name is shown (UW2 falls back on the kind)
+                    talkername = "";
+                }
             }
             uimanager.instance.NPCNameLabel.Text = $"[color={uimanager.CharNameColour}]{talkername}[/color]";
             uimanager.instance.NPCPortrait.Texture = NPCPortrait(talker.npc_whoami, talker.item_id);
 
             //Init conversation trade globals
-            //Rng.r = new System.Random(talker.item_id);//rng is always set to npcs item id
-            Rng.Seed = (uint)talker.item_id;
+            //barter_init: seeded with the NPC's object index, so the same NPC always gets the same temper
+            Rng.Seed = (uint)talker.index;
             BablTradeBonus = 0;
-            TradeThreshold = Rng.RandomOffset(critterObjectDat.TradeThreshold(talker.item_id), -25, +25);
+            TradeThreshold = Rng.RandomOffset(critterObjectDat.TradeThreshold(talker.item_id) * 6, -25, +25);//greed, from haggle
             TradePatience = Rng.RandomOffset(critterObjectDat.TradePatience(talker.item_id), -20, +100); 
-            NPCAppraisalAccuracy = Rng.RandomOffset( (16 - critterObjectDat.TradeAppraisal(talker.item_id)) * 6 , -25,+50); 
+            NPCAppraisalAccuracy = Rng.RandomOffset((15 - critterObjectDat.TradeAppraisal(talker.item_id)) * 6, -25, +50);//from shrewd
+            Rng.RandomOffset(critterObjectDat.level(talker.item_id), -20, 20);//npc_wit: worked out, never used, but it draws
+            //charisma: the NPC wants less and puts up with more
+            TradeThreshold -= playerdat.Charm * 2;
+            TradePatience += playerdat.Charm >> 1;
+            Rng.InitRng();//reseeded from the clock
             PreviousEvaluation = 0;
             TradeResult = 0;
 

@@ -53,7 +53,7 @@ namespace Underworld
                 return; //at end game.
             }
 
-            for (int si_whoami = 0x82; si_whoami < 0x8F; si_whoami++)//note vanilla starts with a guard (0x81) but due to the way I've handled the arrays I'm skipping that npc for now
+            for (int si_whoami = 0x81; si_whoami <= 0x8F; si_whoami++)
             {
                 var run = true;
                 switch (si_whoami)
@@ -131,63 +131,68 @@ namespace Underworld
         /// <param name="NewTileX"></param>
         /// <param name="NewTileY"></param>
         static void GetCastleDestination(uwObject critter, out short NewTileX, out short NewTileY)
-        {
+        {//where_shall_we_hang_out
             NewTileX = (short)critter.tileX;
             NewTileY = (short)critter.tileY;
 
-            var var2_hour = playerdat.TwelveHourClock;
-            var2_hour++;
-            var2_hour = var2_hour >> 1;
-            var2_hour = var2_hour + 0xB;
-
-            var varC_stage = var2_hour % 0xC; // can be 0 to 11
+            //two-hour stages of the 24 hour day: stage 0 is 1 to 2 am, stage 11 is 11 pm to 1 am
+            var var2_hour = (playerdat.ClockValue / 0xE1000) % 24;
+            var varC_stage = (((var2_hour + 1) >> 1) + 0xB) % 0xC;
 
             var di_location = Rng.r.Next(6);//pick a random location.
 
             var rng_result = Rng.r.Next(3);
-            if ((rng_result == 0) || ((rng_result != 0) && (varC_stage <= 2)))
-            {
+            if ((rng_result == 0) || (varC_stage <= 2))
+            {//at night, and otherwise one time in three, the stage decides
                 switch (varC_stage)
                 {
-                    case 0: //case0
+                    case 0:
                     case 1:
                     case 2:
                     case 11:
                         di_location = 0;//go to default location
                         break;
-                    case 3: //case3
+                    case 3:
                     case 5:
                     case 9:
-                        di_location = 3;   //go to throne room.                 
+                        di_location = 4;//stays where it is
                         break;
-                    case 6://case 6
+                    case 6:
                     case 7:
                     case 8:
                         di_location = 1;    //go to the lobby.
                         break;
-
                 }
             }
 
-            //special cases for miranda and xclock, Lord British and strike, and Nystrul and xclock after murders.
+            //Miranda always, everyone before the castle plot starts, Lord British once he is on strike and Nystul late in the plot keep their own spot
             if (
-                (critter.npc_whoami == 0x88 && playerdat.GetXClock(1) != 0)
+                (critter.npc_whoami == 0x88) || (playerdat.GetXClock(1) == 0)
                 ||
                 (critter.npc_whoami == 0x8E && playerdat.GetQuest(115) == 1)
                 ||
                 (critter.npc_whoami == 0x82 && playerdat.GetXClock(1) >= 0xC)
                 )
             {
-                di_location = 0;//stay in place
+                di_location = 0;
             }
 
-
-            if (di_location == 0)
+            if (di_location == 5)
+            {//stays home
+                NewTileX = critter.quality;
+                NewTileY = critter.owner;
+            }
+            else if (di_location == 0)
             {//when 0 go to the NPC default hangout location.
                 if (critter.npc_whoami == 0xA8)
                 {//special case for Syria
                     NewTileX = 0x2A; //guardroom/training room
                     NewTileY = 0x24;
+                }
+                else if (critter.npc_whoami == 0x81)
+                {//the guard reads below both tables in the original: the last y entry, and 0
+                    NewTileX = CastleY[13];
+                    NewTileY = 0;
                 }
                 else
                 {
@@ -218,15 +223,14 @@ namespace Underworld
                         locX2 = 0x21;
                         locY2 = 0x33;
                         break;
-                    case 4://kitchens
-                           //Although the kitchens have co-ordinates defined NPCs will not actually move here
+                    case 4://kitchens: the original sets the area but falls through to staying put
                     default:
                         return;//remain at current position as set at start of function.
                 }
 
-                //Find random spot within the bounds of the locations.
-                NewTileX = (short)(locX1 + Rng.r.Next(locX2 - locX1));
-                NewTileY = (short)(locY1 + Rng.r.Next(locY2 - locY1));
+                //Find random spot within the bounds of the locations, both ends included.
+                NewTileX = (short)(locX1 + Rng.r.Next(locX2 - locX1 + 1));
+                NewTileY = (short)(locY1 + Rng.r.Next(locY2 - locY1 + 1));
                 if ((di_location == 2) && (NewTileX == 0x1F) && (NewTileY == 0x29))
                 {//fountain, special case for the fountain pedestal location.
                     NewTileX++;

@@ -135,12 +135,13 @@ namespace Underworld
             return t;
         }    
 
-        public static bool LookAt(uwObject obj)
+        /// <param name="showShaft">RectLook shows the UW1 shaft only for a look from close by (lore above 0).</param>
+        public static bool LookAt(uwObject obj, bool showShaft = true)
         {
             int textureindex = UWTileMap.current_tilemap.texture_map[obj.owner];
             uimanager.AddToMessageScroll(GameStrings.TextureDescription(textureindex));
-            if ((textureindex == 142) && ((_RES != GAME_UW2)))
-            {//This is a window into the abyss.
+            if (showShaft && (_RES != GAME_UW2) && ((TerrainDatLoader.Terrain[textureindex] & 0xFF) == 9))
+            {//This is a window into the abyss (the texture's terrain is TERR_WINDOW).
                 uimanager.DisplayCutsImage(cutsfile: "cs400.n01", imageNo: playerdat.dungeon_level - 1, targetControl: uimanager.CutsSmall);
             }
             return true; //prevents the default you cannot use message

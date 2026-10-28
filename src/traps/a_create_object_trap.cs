@@ -15,7 +15,7 @@ namespace Underworld
         public static void Activate(uwObject trapObj, int triggerX, int triggerY, uwObject[] objList)
         {
             //rng test on trap.
-            if (Rng.r.Next(0x3F) < trapObj.quality)
+            if (Rng.r.NextScaled(0x3F) < trapObj.quality)//rand() * 0x3F / 0x8000
             {
                 Debug.Print($"Cancelling createobject trap {trapObj.a_name} i:{trapObj.index} l:{trapObj.link} due to RNG");
                 return;
@@ -27,7 +27,7 @@ namespace Underworld
                 if (template.majorclass == 1)
                 {
                     //check for nearby spawns
-                    doCreate = !CheckForMobileBitD_8InArea();
+                    doCreate = !CheckForMobileBitD_8InArea(template);
                 }
                 else
                 {
@@ -44,24 +44,13 @@ namespace Underworld
                         }
                         else
                         {
-                            CreateObjectUW1(template, trapObj, triggerX, triggerY, objList);
+                            DoCreateObject(triggerX, triggerY, template);//the one roll above is all UW1 makes
                         }
                     }
                 }
 
 
 
-            }
-        }
-
-        static void CreateObjectUW1(uwObject template, uwObject trapObj, int triggerX, int triggerY, uwObject[] objList)
-        {
-            if (Rng.r.Next(0, 63) >= trapObj.quality)
-            {
-                //there appears to be a logic check here first that runs in the area around the template. 
-                //not currently implemented as I suspect it is a check that the template is on the map and/or maybe the player 
-                //do spawn
-                DoCreateObject(triggerX, triggerY, template);
             }
         }
 
@@ -88,43 +77,25 @@ namespace Underworld
                 //spawn a random leveled creature. this is caused by sleeping near the trap or on the playerupdatetimer 
                 // if within range of 8 tiles from the trap.
                 //Eg traps with this condition exist in the gem chamber
-                var spawnRngFactor = worlds.GetWorldNo(playerdat.dungeon_level);
-                spawnRngFactor++;
-                spawnRngFactor *= 3;
-                spawnRngFactor += playerdat.GetXClock(1);
-                spawnRngFactor /= 9;
-
+                //TRAP_CREATE_OBJECT: rows of 16 creatures up to (level within the world * 3 + castle clock) / 9, and
+                //within the row up to the player's level + castle clock + 1 (at most 16), redrawn until eligible
+                var lo = ((((playerdat.dungeon_level - 1) % 8) + 1) * 3 + playerdat.GetXClock(1)) / 9;
+                var range = playerdat.play_level + playerdat.GetXClock(1) + 1;
+                if (range > 16)
+                {
+                    range = 16;
+                }
+                if (lo < 1)
+                {
+                    lo = 1;
+                }
                 var item_id = 0;
                 bool CritterFound = false;
-                //loop rng until we get a critter with random str>1
                 do
                 {
-                    var playRngFactor = playerdat.play_level;
-                    playRngFactor++;
-                    if (playRngFactor <= 0x10)
-                    {
-                        playRngFactor = 0x10;
-                    }
-                    if (playRngFactor <= 0)
-                    {
-                        playRngFactor = 1;
-                    }
-                    var rnd1 = Rng.r.Next(0, spawnRngFactor);
-                    rnd1 <<= 4;
-
-                    var rnd2 = Rng.r.Next(0, playRngFactor);
-
-                    item_id = 0x40 + rnd1 + rnd2;
-
-                    var str = critterObjectDat.strength(item_id);
-                    if (str == 0)
-                    {
-                        CritterFound = false;
-                    }
-                    else
-                    {
-                        CritterFound = Rng.r.Next(0, str) == 0;
-                    }
+                    item_id = 0x40 + (Rng.r.Next(lo) << 4) + Rng.r.Next(range);
+                    var str = critterObjectDat.strength(item_id);//eligible_castle_monster
+                    CritterFound = (str != 0) && (Rng.r.Next(str) == 0);
                 } while (!CritterFound);
 
                 Debug.Print($"This trap will spawn {GameStrings.GetSimpleObjectNameUW(item_id)}");
@@ -137,8 +108,11 @@ namespace Underworld
                 //template.MobileUnk_0xA |=0x80; //set bit
                 template.UnkBit_0XA_Bit7 = 1;
                 var spawned = DoCreateObject(triggerX, triggerY, template);
-                spawned.npc_attitude = 0;
-                spawned.SpawnedCritter_0XD_Bit8 = 1;
+                if (spawned != null)
+                {
+                    spawned.npc_attitude = 0;
+                    spawned.SpawnedCritter_0XD_Bit8 = 1;
+                }
                 //and then revert it back to a the adventurer template.
                 template.item_id = 127;
 
@@ -167,6 +141,10 @@ namespace Underworld
             {
                 //mobile object spawn
                 slot = ObjectFreeLists.GetAvailableObjectSlot(ObjectFreeLists.ObjectListType.MobileList);
+            }
+            if (slot == 0)
+            {//no free object: nothing is created
+                return null;
             }
             var newobj = UWTileMap.current_tilemap.LevelObjects[slot];
             //copy from template to new obj
@@ -198,15 +176,38 @@ namespace Underworld
                 newobj.next = tile.indexObjectList;//link to tile
                 tile.indexObjectList = newobj.index;
             }
+            if ((newobj.is_quant == 0) && (newobj.link > 0))
+            {//the copy gets its own copy of the first object the template holds, with nothing after or in it
+                var contentSlot = ObjectFreeLists.GetAvailableObjectSlot(ObjectFreeLists.ObjectListType.StaticList);
+                if (contentSlot != 0)
+                {
+                    var source = UWTileMap.current_tilemap.LevelObjects[newobj.link];
+                    var contentCopy = UWTileMap.current_tilemap.LevelObjects[contentSlot];
+                    for (int i = 0; i < 8; i++)
+                    {
+                        contentCopy.DataBuffer[contentCopy.PTR + i] = source.DataBuffer[source.PTR + i];
+                    }
+                    contentCopy.next = 0;
+                    if ((contentCopy.is_quant == 0) && (contentCopy.link > 0))
+                    {
+                        contentCopy.link = 0;
+                    }
+                    newobj.link = contentCopy.index;
+                }
+            }
             ObjectCreator.RenderObject(newobj, UWTileMap.current_tilemap);
+            if (newobj.majorclass == 7)
+            {//an animation joins the animation list (add_animobj, running until it ends)
+                animo.CreateAnimoLink(newobj, 0xFFFF);
+            }
             return newobj;
         }
 
         /// <summary>
         /// Search for Create Object Traps that are on the map and if the player is within 8 tiles of them trigger them
         /// </summary>
-        public static void FindAndRunCreateObjectTraps()
-        {
+        public static void FindAndRunCreateObjectTraps(bool isPlayer)
+        {//DoWanderingMonsters: awake (isPlayer) only out of the player's sight, 8 squares or more away; asleep everywhere
             //function that spawns critters randomly based on create object traps on the map");
             //this is called from sleeping and during playerupdates on a random chance.
             for (int x = 0; x < 64; x++)
@@ -233,7 +234,7 @@ namespace Underworld
                                     {
                                         toCreate.SpawnedCritter_0XD_Bit8 = 1;
 
-                                        if (!TileInfo.CheckIfOutsideRange(targetX: x, targetY: y, isPlayer: true, range: 8))
+                                        if (TileInfo.CheckIfOutsideRange(targetX: x, targetY: y, isPlayer: isPlayer, range: 8))
                                         {
                                             trap.ActivateTrap(0, foundObject, null, x, y, UWTileMap.current_tilemap.LevelObjects);
                                         }
@@ -246,14 +247,14 @@ namespace Underworld
             }
         }
 
-        static bool CheckForMobileBitD_8InArea()
-        {
+        static bool CheckForMobileBitD_8InArea(uwObject template)
+        {//dont_create_wandering_monster_here: a created object within four squares of the template
             FoundCritterWithBitD = false;
 
             //CallBacks.RunCodeOnTargetsAroundObject()
             CallBacks.RunCodeOnTargetsAroundObject(
                 methodToCall: CheckForMobileBitD_8,
-                CentreObject: 1,
+                CentreObject: template.index,
                 rngProbablity: 1,
                 targetType: 0,
                 distanceFromObject: 0,

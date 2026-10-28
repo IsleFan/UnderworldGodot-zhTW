@@ -8,7 +8,6 @@ namespace Underworld
     public partial class playerdat : Loader
     {
         public static int previousLightLevel = -1;
-        public static bool previousMazeNavigation = false;
 
         static double playertimer;
         static int playerUpdateCounter;
@@ -19,6 +18,13 @@ namespace Underworld
         static byte FootSteps_77A = 0xFF;
         static uint FootStepTimerA_19DF;
         static uint FootStepTimerB_19E5;
+
+        /// <summary>reset_times: the next footstep (nextstep) and the water sound's restart (watertime) are due at once.</summary>
+        public static void ResetFootStepTimers()
+        {
+            FootStepTimerA_19DF = 0;
+            FootStepTimerB_19E5 = 0;
+        }
         static uint FootstepSoundIndex_dseg_79B = 0;
         static uint WaterSoundPanIndex_dseg_79B = 0;
         static uint dseg_79C = 0;//used in footsteps
@@ -99,35 +105,30 @@ namespace Underworld
                             secondcounter = 0;
                             playerUpdateCounter++;
 
-                            UpdateLightStability(playerUpdateCounter);
+                            UpdateLightStability(1, playerUpdateCounter);
 
-                            for (int effectindex = 0; effectindex < 3; effectindex++)
-                            {
-                                if (effectindex < ActiveSpellEffectCount)
+                            for (int effectindex = 0; effectindex < ActiveSpellEffectCount; effectindex++)
+                            {//duration_check: a spell on its last check ends, the others count down
+                                var stability = GetEffectStability(effectindex);
+                                if (stability == 1)
                                 {
-                                    var stability = GetEffectStability(effectindex);
-                                    stability--;
-                                    if (stability == 1)
-                                    {
-                                        var effectclass = playerdat.GetEffectClass(effectindex);
-                                        var majorclass = effectclass & 0xF;
-                                        var minorclass = effectclass >> 4;
-                                        if ((majorclass == 1) && (((minorclass & 0x3F) == 3) || ((minorclass & 0x3F) == 5)))
-                                        {
-                                            var neweffectid = (2 << 4) + majorclass;
-                                            //Fly or levitate.
-                                            playerdat.SetSpellEffect(index: effectindex, effectid: neweffectid, stability: playerdat.GetEffectStability(effectindex));
-                                        }
-                                        else
-                                        {
-                                            playerdat.CancelEffect(effectindex);
-                                        }
-                                        effectindex = 0;//restart loop                                        
+                                    var effectclass = playerdat.GetEffectClass(effectindex);
+                                    var majorclass = effectclass & 0xF;
+                                    var minorclass = effectclass >> 4;
+                                    if ((majorclass == 1) && (((minorclass & 0x3F) == 3) || ((minorclass & 0x3F) == 5)))
+                                    {//Fly or levitate become slow fall for one more check (dispel_spell)
+                                        var neweffectid = (2 << 4) + majorclass;
+                                        playerdat.SetSpellEffect(index: effectindex, effectid: neweffectid, stability: 1);
                                     }
                                     else
                                     {
-                                        SetEffectStability(effectindex, stability);
+                                        playerdat.CancelEffect(effectindex);
+                                        effectindex--;//the next effect has moved into this slot
                                     }
+                                }
+                                else
+                                {
+                                    SetEffectStability(effectindex, stability - 1);
                                 }
                             }
 
@@ -162,8 +163,9 @@ namespace Underworld
                                         special_effects.SpecialEffect(effecttype: 4, effectparam: 0x2C);
                                         if (!FreezeTimeEnchantment)
                                         {
-                                            SetQuest(questno: 134, newValue: GetQuest(134) - 1);
-                                            if (GetQuest(134) - 1 == 0)
+                                            var countdown = GetQuest(134);//tested before it counts down (quest_bytes[6]-- == 0)
+                                            SetQuest(questno: 134, newValue: countdown - 1);
+                                            if (countdown == 0)
                                             {
                                                 killorn.KilornIsCrashing(false);
                                                 //Apply raw damage to player in order to kill them for spending too much time in kilorn before it crashed
@@ -215,9 +217,9 @@ namespace Underworld
                                     ManaRegenChange(-manaskillcheck);
                                 }
                             }//end every 60 seconds update
-                            if ((playerUpdateCounter % 30) == 0)
-                            {//every 5 minutes
-                                var hungerchange = -3 - Rng.r.Next(0, 3);
+                            if ((playerUpdateCounter % (_RES == GAME_UW2 ? 30 : 24)) == 0)
+                            {//every 10 minutes in UW2, 8 in UW1 (duration_check)
+                                var hungerchange = -3 - (Rng.r.Next(0x8000) & 3);//3 to 6
                                 play_hunger = (byte)Math.Max(play_hunger + hungerchange, 0);
 
                                 if (intoxication > 0)
@@ -227,26 +229,37 @@ namespace Underworld
 
                                 if ((Rng.r.Next(0, 0xffff) & 0x3) == 0)
                                 {
-                                    a_create_object_trap.FindAndRunCreateObjectTraps();
+                                    a_create_object_trap.FindAndRunCreateObjectTraps(isPlayer: true);
                                 }
 
-                                Debug.Print("Do something with Npc hunger");
+                                //yearly_checkup: every active mobile gets a random fed bit and, three times in four, loses the ally bit
+                                for (int m = 0; m < UWTileMap.current_tilemap.NoOfActiveMobiles; m++)
+                                {
+                                    var mobile = UWTileMap.current_tilemap.LevelObjects[UWTileMap.current_tilemap.GetActiveMobileAtIndex(m)];
+                                    mobile.UnkBit_0x19_7 = (short)(Rng.r.Next(2));
+                                    if (Rng.r.Next(4) != 1)
+                                    {
+                                        mobile.IsAlly = 0;
+                                    }
+                                }
 
                                 Debug.Print("Increment values at  bx+3a(fatigue), bx+3b(related to food health regen), bx+3c (unknown)");
                                 play_fatigue = (byte)Math.Min(play_fatigue + 1, 0xFF);
 
                                 foodhealthbonus = (byte)Math.Min(foodhealthbonus + 1, 0xFF);
 
-                                var hpskillcheck = (int)SkillCheck(STR, 10);
-                                if (hpskillcheck > 0)
-                                {//regular health regen
-                                    HPRegenerationChange(hpskillcheck);
+                                if (SkillCheck(STR, 15) > 0)
+                                {//regular health regen: exactly one hit point
+                                    HPRegenerationChange(-1);
                                 }
-                            }//end every 5 mins update
+                                if (_RES != GAME_UW2)
+                                {//UW1's count starts again here
+                                    playerUpdateCounter = 0;
+                                }
+                            }//end every 8 or 10 mins update
                             if ((playerUpdateCounter % 60) == 0)//every 20 mins
                             {
-                                Debug.Print("TODO Update 'day' value");
-                                Debug.Print("TODO something with scd.ark");
+                                scd.AdvanceTimeOfDay();
                                 playerUpdateCounter = 0;
                             }//end every 20 mins update
 
@@ -288,7 +301,7 @@ namespace Underworld
             {
                 if (worlds.GetWorldNo(dungeon_level) == 5)//Academy
                 {
-                    var academylevel = 1 + dungeon_level % 8;
+                    var academylevel = 1 + (dungeon_level - 1) % 8;//the level within the world (restore_mana)
                     if ((academylevel > 1) && (academylevel < 8))
                     {
                         return;
@@ -303,8 +316,8 @@ namespace Underworld
                 }
             }
             
-            if (regeneration < 0)
-            {//boost mana by a fixed amount, mana regen on a schedule.
+            if (regeneration <= 0)
+            {//boost mana by a fixed amount, mana regen on a schedule (restore_mana: anything not above 0 is a flat amount)
                 play_mana = Math.Min(play_mana - regeneration, max_mana);
             }
             else
@@ -337,11 +350,11 @@ namespace Underworld
                 checkvalue = (playerdat.WeightCarried << 5) / playerdat.WeightMax;
             }
             var result = SkillCheck(skillValue: playerdat.Swimming, targetValue: checkvalue, debug: true);
-            if (result <= 0)
+            if ((result <= 0) && (playerdat.SwimCounter < 0x8C))
             {
-                //fail or crit fail, dice roll and increase the swim counter.
+                //fail or crit fail, dice roll and increase the swim counter, while it is below 0x8C (sink_sink_sink)
                 var roll = Rng.DiceRoll(NoOfLoops: (int)(3 - result), diceRange: 4);
-                playerdat.SwimCounter += (byte)roll;  //this is what the vanilla code does but what will stop it from overflowing and stop applying damage.
+                playerdat.SwimCounter += (byte)roll;
             }
             if (playerdat.SwimCounter > 0x78)
             {
@@ -363,10 +376,17 @@ namespace Underworld
             }
         }
 
-        public static void UpdateLightStability(int updatecounter)
+        /// <summary>
+        /// Burns the lit lights in the four light slots (DegradeLights): one with burn rate r loses a point of quality
+        /// when the counter is a multiple of r, and amount / r more when amount is over 1 (sleep). It goes out at
+        /// quality 1 in UW2 and 0 in UW1. Nothing burns in UW2 while time is stopped.
+        /// </summary>
+        public static void UpdateLightStability(int amount, int counter)
         {
-            //loop each lit light source.
-            //when updatecounter % lightsource class index. decrease light quality by 1 point
+            if ((_RES == GAME_UW2) && FreezeTimeEnchantment)
+            {
+                return;
+            }
             for (int slot = 5; slot <= 8; slot++)
             {
                 var objInSlot = GetInventorySlotObject(slot);
@@ -375,14 +395,30 @@ namespace Underworld
                     if ((objInSlot.majorclass == 2) && (objInSlot.minorclass == 1) && (objInSlot.classindex >= 4 && objInSlot.classindex <= 7))
                     {
                         //a lit light source
-                        if (updatecounter % objInSlot.classindex == 0)
+                        var rate = lightsourceObjectDat.duration(objInSlot.item_id);
+                        if (rate == 0)
                         {
-                            objInSlot.quality = (short)Math.Max(objInSlot.quality - 1, 1);
-                            if (objInSlot.quality == 1)
-                            {
-                                light.LightOff(objInSlot);
-                                uimanager.UpdateInventoryDisplay();
-                            }
+                            continue;
+                        }
+                        var burn = (counter % rate == 0) ? 1 : 0;
+                        if (amount > 1)
+                        {
+                            burn += amount / rate;
+                        }
+                        if (burn == 0)
+                        {
+                            continue;
+                        }
+                        var lastQuality = _RES == GAME_UW2 ? 1 : 0;
+                        if (objInSlot.quality - lastQuality > burn)
+                        {
+                            objInSlot.quality = (short)(objInSlot.quality - burn);
+                        }
+                        else
+                        {
+                            objInSlot.quality = (short)lastQuality;
+                            light.LightOff(objInSlot);
+                            uimanager.UpdateInventoryDisplay();
                         }
                     }
                 }
@@ -397,7 +433,6 @@ namespace Underworld
             previousLightLevel = lightlevel;
             lightlevel = 0;
             Palette.ColourTone = 0;
-            Palette.CurrentPalette = 0;
 
             MagicalMotionAbilities = 0;
             for (int i = 0; i <= 3; i++)
@@ -441,11 +476,16 @@ namespace Underworld
             ApplyDamageResistance(DamageResistance);
             ApplyStealthBonus(StealthBonus);
 
-            if (shrooms != 0)
-            {
-                Palette.CurrentPalette = Rng.r.Next(1, 4);
-            }
+            SetDrugged(shrooms > 0);
 
+            if (RoamingSightEnchantment)
+            {//WizEye: UW1 light 6 outright, UW2 6 unless the level's own light is brighter
+                lightlevel = _RES == GAME_UW2 ? Math.Max(6, LastAmbientLight) : 6;
+            }
+            if (lightlevel == 5)
+            {//set_light loads the grey table for level 5, whatever gave it (night vision)
+                Palette.ColourTone = 1;
+            }
 
             RefreshLighting();//either brightest physical light or brightest magical light
 
@@ -465,8 +505,9 @@ namespace Underworld
                 //Do a test here to see if the player has entered a previously visible tile. If so renable automap, not sure where in the game the getting lost mechanic occurs but possibly caused by some teleportation effects.             
                 if (UWTileMap.ValidTile(playerdat.playerObject.tileX, playerdat.playerObject.tileY))
                 {
-                    if (automap.automaps[dungeon_level - 1].tiles[playerObject.tileX, playerObject.tileY].visited)
-                    {
+                    var maptype = automap.automaps[dungeon_level - 1].tiles[playerObject.tileX, playerObject.tileY].tileType;
+                    if ((maptype > 0) && (maptype < 10))
+                    {//player_newsq: only a tile seen (1-9), not one known but unseen (0xA-0xF)
                         Debug.Print("Visiting a previously discovered tile. You remember where you are and automap is reenabled");
                         AutomapEnabled = true;
                     }
@@ -541,8 +582,8 @@ namespace Underworld
         /// <returns></returns>
         private static void ApplyEquipmentEffects(bool CastOnEquip, ref int DamageResistance, ref int StealthBonus)
         {
-            //apply spell effects from inventory objects
-            for (int slot = 0; slot < 10; slot++)
+            //apply spell effects from inventory objects: everything worn in slots 0 to 10 (FixPlayerEquips, ObjWorn)
+            for (int slot = 0; slot <= 10; slot++)
             {
                 var objindex = uimanager.GetPaperDollObjAtSlot(slot);
                 if (objindex != -1)
@@ -550,76 +591,19 @@ namespace Underworld
                     var obj = InventoryObjects[objindex];
                     if (obj != null)
                     {
-                        bool isValid = true;
+                        bool isValid = uwObject.CheckIfObjectInValidSlot(obj, slot);
 
-                        if (!uimanager.ValidObjectForSlot(slot, obj))
-                        {
-                            isValid = false;
-                        }
-
-                        //filter for other scenarios that are not valid.  
-                        //Rings not in the ring slot.     
-                        if ((obj.majorclass == 0) && (obj.minorclass == 3))
-                        {
-                            if (_RES == GAME_UW2)
-                            {
-                                if (((obj.classindex >= 7) && (obj.classindex <= 0xA)) || obj.classindex == 5)//rings
+                        if (isValid)
+                        {//only a passive enchantment works while worn: a spell cast on use (id bit 11, decode_obj_spell's flag) does not
+                            var spell = MagicEnchantment.GetSpellEnchantment(obj: obj, InventoryObjects);
+                            if ((spell == null) || spell.IsFlagBit2Set)
+                            {//UW1: otherwise worn dragon skin boots
+                                if ((_RES != GAME_UW2) && (obj.item_id == 0x2F))
                                 {
-                                    if ((slot != 9) && (slot != 10))
-                                    {
-                                        isValid = false;
-                                    }
+                                    playerdat.DragonSkinBoots = true;
                                 }
                             }
                             else
-                            {
-                                if (((obj.classindex >= 7) && (obj.classindex <= 0xA)) || obj.classindex == 6)//rings
-                                {
-                                    if ((slot != 9) && (slot != 10))
-                                    {
-                                        isValid = false;
-                                    }
-                                }
-                            }
-                        }
-
-
-                        if ((slot >= 5) && (slot <= 8))
-                        {
-                            //shoulders and arms. do not cast effects from here.
-                            // if (uimanager.DominantHandSlot == slot)
-                            // {//Check for weapon in dominant hand. 
-                            //     if (
-                            //         !
-                            //     (
-                            //         ((obj.majorclass == 0) && (obj.minorclass == 0))
-                            //         ||
-                            //         ((obj.majorclass == 0 && obj.minorclass == 1) && (obj.classindex >= 8 && obj.classindex <= 10))
-                            //     )
-                            //     )
-                            //     {
-                            isValid = false;
-                            //     }
-                            // }
-                        }
-
-
-
-                        if ((slot == 4) && (_RES != GAME_UW2))
-                        {
-                            if (obj.item_id == 0x2F)//dragon skin boots
-                            {
-                                playerdat.DragonSkinBoots = true;
-                            }
-                        }
-
-
-
-
-                        if (isValid)
-                        {
-                            var spell = MagicEnchantment.GetSpellEnchantment(obj: obj, InventoryObjects);
-                            if (spell != null)
                             {
                                 SpellCasting.CastEnchantedItemSpell(
                                     majorclass: spell.SpellMajorClass,
@@ -650,7 +634,7 @@ namespace Underworld
                 {
                     if (uimanager.ValidObjectForSlot(i, obj))
                     {//apply protection if object is valid
-                        var protection = armourObjectDat.protection(obj.item_id);
+                        var protection = ArmourValue(obj);
                         switch (i)
                         {//apply protection to the appropiate body location
                             case 0://helm
@@ -665,6 +649,45 @@ namespace Underworld
                         }
                     }
                 }
+            }
+            //a shield in the off hand covers the body and the hands (FixPlayerEquips)
+            var offhand = uimanager.GetPaperDollObjAtSlot(7 + handednessvalue);
+            var shield = offhand > 0 ? InventoryObjects[offhand] : null;
+            if (shield != null && shield.majorclass == 0 && shield.minorclass == 3 && shield.classindex >= 11 && shield.classindex <= 15)
+            {
+                var protection = ArmourValue(shield);
+                LocationalArmourValues[0] += protection;
+                LocationalArmourValues[1] += protection;
+            }
+        }
+
+        /// <summary>
+        /// An armour item's protection, scaled by its quality out of 64, plus one; weapons give none (armor_val).
+        /// </summary>
+        static int ArmourValue(uwObject obj)
+        {
+            if (obj.majorclass == 0 && obj.minorclass < 2)
+            {
+                return 0;
+            }
+            return ((obj.quality * armourObjectDat.protection(obj.item_id)) >> 6) + 1;
+        }
+
+        /// <summary>
+        /// The target value critters roll against: the Defense skill plus half the skill of the weapon in hand,
+        /// Sword, Axe or Mace for a hand weapon and Unarmed otherwise (FixPlayerEquips).
+        /// </summary>
+        public static int DefenceScore
+        {
+            get
+            {
+                var weapon = PrimaryHandObject;
+                var skill = 2;
+                if (weapon != null && weapon.majorclass == 0 && weapon.minorclass == 0)
+                {
+                    skill = System.Math.Clamp(weaponObjectDat.skill(weapon.item_id), 3, 5);
+                }
+                return Defense + (GetSkillValue(skill) >> 1);
             }
         }
 
@@ -733,6 +756,51 @@ namespace Underworld
             }
         }
 
+        /// <summary>UW2 loc_lght, the level's own light at the player's square, or -1.</summary>
+        static int LastAmbientLight = -1;
+
+        /// <summary>set_drugged: the effect chosen when a dose starts, -1 for none.</summary>
+        static int ShroomsEnabled = -1;
+        /// <summary>The very first dose is always the 3D distortion.</summary>
+        static bool FirstShrooms = true;
+
+        /// <summary>
+        /// set_drugged: a dose picks one effect and keeps it: the first ever the 3D distortion (set_cyb), then that, a
+        /// palette of the first eight, or a scrambled light table (random_light), at random. Over, it is undone.
+        /// Only the palette is shown here; the other two are not drawn.
+        /// </summary>
+        static void SetDrugged(bool on)
+        {
+            if (on)
+            {
+                if (ShroomsEnabled < 0)
+                {
+                    if (FirstShrooms)
+                    {
+                        ShroomsEnabled = 0;
+                        FirstShrooms = false;
+                    }
+                    else
+                    {
+                        ShroomsEnabled = Rng.r.Next(0x8000) % 3;
+                    }
+                    if (ShroomsEnabled == 1)
+                    {
+                        var pal = Rng.r.Next(0x8000) & 7;
+                        Palette.CurrentPalette = pal < PaletteLoader.Palettes.Length ? pal : 0;
+                    }
+                }
+            }
+            else if (ShroomsEnabled >= 0)
+            {
+                if (ShroomsEnabled == 1)
+                {
+                    Palette.CurrentPalette = 0;
+                }
+                ShroomsEnabled = -1;
+            }
+        }
+
         public static void RefreshLighting()
         {
             RenderingServer.GlobalShaderParameterSet("cutoffdistance", shade.GetViewingDistance(lightlevel));
@@ -746,10 +814,14 @@ namespace Underworld
         public static int BrightestNonMagicalLight()
         {
             int lightlevel = 0; //darkness
-            //5,6,7,8
-            for (int i = 5; i <= 8; i++)
+            LastAmbientLight = -1;
+            //5,6,7,8, then the object held on the cursor (FixPlayerEquips)
+            int bestSlot = 0;
+            for (int i = 5; i <= 9; i++)
             {
-                var obj = GetInventorySlotObject(i);
+                var obj = i <= 8
+                    ? GetInventorySlotObject(i)
+                    : (ObjectInHand > 0 && UWTileMap.current_tilemap != null ? UWTileMap.current_tilemap.LevelObjects[ObjectInHand] : null);
                 if (obj != null)
                 {
                     if ((obj.majorclass == 2) && (obj.minorclass == 1) && (obj.classindex >= 4) && (obj.classindex <= 7))
@@ -758,10 +830,12 @@ namespace Underworld
                         if (level > lightlevel)
                         {
                             lightlevel = level;
+                            bestSlot = i - 5;
                         }
                     }
                 }
             }
+            SetCarriedLight(lightlevel, bestSlot);
             //If uw2 check for dungeon light level
             if (_RES == GAME_UW2)
             {
@@ -783,6 +857,7 @@ namespace Underworld
                     {
                         dungeon_ambientlight = -1;
                     }
+                    LastAmbientLight = dungeon_ambientlight;
                     if (dungeon_ambientlight > lightlevel)
                     {
                         lightlevel = dungeon_ambientlight;
@@ -837,32 +912,42 @@ namespace Underworld
         // }
 
         /// <summary>
-        /// Changes the colour of the maze tiles in Tybals Lair in UW1 when the maze navigation crown is work
+        /// set_maze (UW1, every FixPlayerEquips): on level 7, Tybal's maze, the level's fifth floor texture is swapped
+        /// (swap_tmap) to 0x0C (texture 222) while maze navigation is on, unless it already is, and back to 0x0E (224)
+        /// when it is off and the texture is 0x0C. The level's texture map itself changes, so looking at the floor and
+        /// a save see it too.
         /// </summary>
         static void ApplyMazeNavigation()
         {
-            if (dungeon_level == 7)
+            if ((dungeon_level != 7) || (UWTileMap.current_tilemap == null))
             {
-                if (previousMazeNavigation != MazeNavigation)
-                {
-                    //change in stage
-                    if (MazeNavigation)
-                    {
-                        //apply effect
-                        //set tiles to use texture 222
-                        var material = tileMapRender.mapTexturesFloors.GetMaterial(52, UWTileMap.current_tilemap.texture_map);
-                        material.SetShaderParameter("texture_albedo", (Texture)tileMapRender.mapTexturesFloors.LoadImageAt(222));
-                    }
-                    else
-                    {
-                        //remove effect
-                        //set tiles to us texture 224
-                        var material = tileMapRender.mapTexturesFloors.GetMaterial(52, UWTileMap.current_tilemap.texture_map);
-                        material.SetShaderParameter("texture_albedo", (Texture)tileMapRender.mapTexturesFloors.LoadImageAt(224));
-                    }
-                }
+                return;
             }
-            previousMazeNavigation = MazeNavigation;
+            const int slot = 52;//the walls' 48, then floor 4
+            var map = UWTileMap.current_tilemap;
+            int tex = -1;
+            if (MazeNavigation && (map.texture_map[slot] != 222))
+            {
+                tex = 222;
+            }
+            if (!MazeNavigation && (map.texture_map[slot] == 222))
+            {
+                tex = 224;
+            }
+            if (tex < 0)
+            {
+                return;
+            }
+            map.texture_map[slot] = (short)tex;
+            var block = map.tex_ark_block?.Data;
+            var at = 48 * 2 + (slot - 48) * 2;//the level's texture block: 48 wall words, then the floor words
+            if ((block != null) && (block.Length > at + 1))
+            {
+                block[at] = (byte)((tex - 210) & 0xFF);
+                block[at + 1] = (byte)((tex - 210) >> 8);
+            }
+            var material = tileMapRender.mapTexturesFloors.GetMaterial(slot, map.texture_map);
+            material.SetShaderParameter("texture_albedo", (Texture)tileMapRender.mapTexturesFloors.LoadImageAt(tex));
         }
 
 
@@ -896,7 +981,11 @@ namespace Underworld
             {
                 if (motion.playerMotionParams.momentum_14 != 0)
                 {
-                    cl += ((motion.playerMotionParams.momentum_14 / 0xA) / motion.PlayerActualForwardSpeed_1_dseg_67d6_22A6) - 5;  //could this work out to be negative?
+                    //set_sound: louder with speed, from -5 standing to +5 at full run
+                    if (motion.PlayerActualForwardSpeed_1_dseg_67d6_22A6 != 0)
+                    {
+                        cl += ((short)(motion.playerMotionParams.momentum_14 * 10) / motion.PlayerActualForwardSpeed_1_dseg_67d6_22A6) - 5;
+                    }
                 }
                 else
                 {
@@ -947,8 +1036,8 @@ namespace Underworld
                 if (FootSteps_77A != 0xFF)
                 {
                     if (FootStepTimerB_19E5 + 0x1800 <= main.GlobalPITTimer) //the globalpittimer is probably a bit slow leading to gaps in the sound.
-                    {
-                        //do something in seg016_1FFD(FootStepGlobal77A)
+                    {//make_noise: the looping water sound is stopped and started again
+                        UWsoundeffects.KillEffect(FootSteps_77A);
                         FootSteps_77A = 0xFF;
                     }
                 }
@@ -956,12 +1045,11 @@ namespace Underworld
                 if (FootSteps_77A == 0xFF)
                 {
                     FootStepTimerB_19E5 = main.GlobalPITTimer;
-                    Debug.Print("playing Watersound");
-                    UWsoundeffects.PlaySoundEffectAtAvatar(
+                    var waterSound = UWsoundeffects.PlaySoundEffectAtAvatar(
                         effectno: 0,
                         pan: 0x40,
                         velocityOffset: 0);//plays the water edge sound
-                    FootSteps_77A = 0;//always appears to be zero/;//unknown value Set from LoadBasicSound or Seg016_1FFD
+                    FootSteps_77A = waterSound == UWsoundeffects.NoEffect ? (byte)0xFF : (byte)waterSound;//water_eff, the effect's handle
                 }
 
                 if (_RES == GAME_UW2)
@@ -979,7 +1067,7 @@ namespace Underworld
                                 UWsoundeffects.PlaySoundEffectAtAvatar(
                                     effectno: 0x1A,
                                     pan: FootstepSoundPanning[WaterSoundPanIndex_dseg_79B],
-                                    velocityOffset: 0);
+                                    velocityOffset: (byte)((motion.playerMotionParams.momentum_14 >> 5) - 0x10));
                             }
                         }
                     }
@@ -989,8 +1077,8 @@ namespace Underworld
             {
                 //tilestate&1 == 0 (not in water)
                 if (FootSteps_77A != 0xFF)
-                {
-                    //do something with seg016_1FFD // If I had to guess there probably needs to be handling to turn off the running sound effect of water?
+                {//out of the water the water sound stops
+                    UWsoundeffects.KillEffect(FootSteps_77A);
                     FootSteps_77A = 0xFF;
                 }
                 if ((TileState & 0x8) == 0)
@@ -1017,11 +1105,10 @@ namespace Underworld
 
                     if ((motion.playerMotionParams.tilestate25 & 0x10) == 0)
                     {
-                        if (EasyMove == false)
-                        {
-                            if (motion.playerMotionParams.momentum_14 > 0x2F)
-                            {
-                                if (main.GlobalPITTimer > FootStepTimerA_19DF)
+                        {//a step key's step always sounds (make_noise with easy set)
+                            if (EasyMove || ((_RES == GAME_UW2) ? (motion.playerMotionParams.momentum_14 > 0x2F) : (motion.playerMotionParams.momentum_14 != 0)))
+                            {//(a signed volume change of speed / 32 - 16; UW1 steps at any speed)
+                                if (EasyMove || (main.GlobalPITTimer > FootStepTimerA_19DF))
                                 {
                                     //seg035_8F0
                                     if (_RES == GAME_UW2)
@@ -1029,7 +1116,7 @@ namespace Underworld
                                         UWsoundeffects.PlaySoundEffectAtAvatar(
                                             effectno: FootStepSoundEffectsUW2[FootstepSoundIndex_dseg_79B + (OnSnowOrIce << 1)],
                                             pan: FootstepSoundPanning[FootstepSoundIndex_dseg_79B],
-                                            velocityOffset: (byte)(0xF + (motion.playerMotionParams.momentum_14 >> 5)));
+                                            velocityOffset: (byte)((motion.playerMotionParams.momentum_14 >> 5) - 0x10));
                                     }
                                     else
                                     {
@@ -1039,14 +1126,14 @@ namespace Underworld
                                             UWsoundeffects.PlaySoundEffectAtAvatar(
                                                 effectno: 2,
                                                 pan: 0x38,
-                                                velocityOffset: (byte)(0xF + (motion.playerMotionParams.momentum_14 >> 5)));
+                                                velocityOffset: (byte)((motion.playerMotionParams.momentum_14 >> 5) - 0x10));
                                         }
                                         else
                                         {
                                             UWsoundeffects.PlaySoundEffectAtAvatar(
                                                 effectno: 1,
                                                 pan: 0x48,
-                                                velocityOffset: (byte)(0xF + (motion.playerMotionParams.momentum_14 >> 5)));
+                                                velocityOffset: (byte)((motion.playerMotionParams.momentum_14 >> 5) - 0x10));
                                         }
                                     }
                                     //toggle to other foot
@@ -1057,14 +1144,14 @@ namespace Underworld
                                     {
                                         nextinterval = 0xC8;
                                     }
+                                    if (EasyMove)
+                                    {
+                                        nextinterval = 100;
+                                    }
                                     FootStepTimerA_19DF = (uint)(main.GlobalPITTimer + nextinterval);
                                 }
 
                             }
-                        }
-                        else
-                        {
-                            Debug.Print("unimplemented easymove footstep sounds.");
                         }
                     }
                 }

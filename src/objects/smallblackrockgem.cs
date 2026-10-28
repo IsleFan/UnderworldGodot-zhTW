@@ -18,10 +18,10 @@ namespace Underworld
         public static bool UseOn(uwObject smallGem, uwObject itemUsedOn, bool WorldObject)
         {
             //assume small gem in inventory, largegem in world
-            if (itemUsedOn.item_id == 0x168)
-            {//used on large gem
-                if (smallGem.owner == 1)
-                {//small gem has been treated
+            if ((itemUsedOn.item_id == 0x168) && WorldObject)
+            {//used on large gem in the world
+                if (smallGem.owner != 0)
+                {//small gem has been treated (any owner)
                     var gemNo = smallGem.classindex - 7;
                     if (gemNo == 4)
                     {
@@ -40,6 +40,7 @@ namespace Underworld
                     var quest130 = playerdat.GetQuest(130);
                     quest130 = quest130 | (1 << (gemNo - 1));
                     playerdat.SetQuest(130, quest130);
+                    playerdat.SetGameVariable(6, gemNo - 1);//vars[6] records the gem (the large gem's face colour reads it)
 
                     ObjectCreator.Consume(smallGem, true);
                     UWsoundeffects.PlaySoundEffectAtAvatar(0x12, 0x40, 0x28);
@@ -58,27 +59,6 @@ namespace Underworld
                 }
             }
             uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, 0x15B));//The key gem remains inert in your hand
-            return true;
-        }
-
-        public static bool LookAt(uwObject obj, uwObject[] objList)
-        {
-            var warmth = "";
-            if (obj.owner == 1)
-            {
-                warmth = GameStrings.GetString(1, 357); //warm
-            }
-            else
-            {
-                warmth = GameStrings.GetString(1, 356); //cool
-            }
-
-            if (ZhText.Enabled)
-            {//the translations of warm and cool end with 的, ready for the name
-                uimanager.AddToMessageScroll(ZhText.YouSee(GameStrings.GetDisplayString(1, obj.owner == 1 ? 357 : 356) + ZhText.ObjectName(obj.item_id)));
-                return true;
-            }
-            uimanager.AddToMessageScroll($"{GameStrings.GetString(1, GameStrings.str_you_see_)}a {warmth}{GameStrings.GetSimpleObjectNameUW(obj.item_id)}");
             return true;
         }
     }//end calss

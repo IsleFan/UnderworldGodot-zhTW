@@ -128,7 +128,6 @@ namespace Underworld
             MessageDisplay.WaitingForTypedInput = true;            
             uimanager.instance.TypedInput.Text = "";
             uimanager.instance.TypedInput.CaretColumn =uimanager.instance.TypedInput.Text.Length;
-            uimanager.instance.scroll.Clear();
             uimanager.AddToMessageScroll(ZhText.Enabled ? ZhText.Compose("誦唸祈禱語：{TYPEDINPUT}|") : "Chant the mantra {TYPEDINPUT}|");
             //Add a waiting co-routine to finish this interaction
 
@@ -351,8 +350,10 @@ namespace Underworld
         {
             if (playerdat.ObjectInHand==-1)
             {//player not holding anything
-                ObjectCreator.SpawnObjectInHand(225);
-                playerdat.GotKeyOfTruth = true;
+                if (ObjectCreator.SpawnObjectInHand(225) != 0)
+                {//only when there is a free object on the level
+                    playerdat.GotKeyOfTruth = true;
+                }
             }
         }
     } //end class

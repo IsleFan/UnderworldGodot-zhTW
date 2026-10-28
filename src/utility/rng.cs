@@ -12,7 +12,6 @@ namespace Underworld
         const int Multiplier = 0x15A4E35;
         public static Rng r = new();
         //public static Random r_unseeded = new(); //for rng calls where the seed never gets reset
-        static Random DotNetRng = new();
 
         public Rng()
         {
@@ -27,10 +26,9 @@ namespace Underworld
         /// <param name="upper_offset"></param>
         /// <returns></returns>
         public static int RandomOffset(int basevalue, int lower_offset, int upper_offset)
-        {
-            var range = upper_offset-lower_offset;
-            var rnd = r.Next(range);
-            return basevalue + basevalue * (lower_offset + rnd) /100;        
+        {//the original's range(): the product is a 16-bit int, as Turbo C's, and the sum is stored in 16 bits
+            var rnd = r.NextScaled(upper_offset - lower_offset);
+            return (short)(basevalue + (short)(basevalue * (lower_offset + rnd)) / 100);
         }
 
 
@@ -58,7 +56,7 @@ namespace Underworld
                 {
                     while (NoOfLoops != 0)
                     {
-                        si += r.Next(0, diceRange);
+                        si += r.NextScaled(diceRange);//rollem
                         NoOfLoops--;
                     }
                     return si;
@@ -84,12 +82,23 @@ namespace Underworld
         /// <param name="max"></param>
         /// <returns></returns>
         public int Next(int max)
+        {//the original's Turbo C rand(): seed = seed * 0x015A4E35 + 1, bits 16 to 30 of the new seed, then % max
+            if (max < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(max));
+            }
+            Seed = (uint)(Seed * Multiplier + 1);
+            var value = (int)((Seed >> 16) & 0x7FFF);
+            return max == 0 ? 0 : value % max;
+        }
+
+        /// <summary>
+        /// rand() scaled into 0 to max - 1 as (rand() * max) / 0x8000, the form rollem and a few other rolls use.
+        /// </summary>
+        public int NextScaled(int max)
         {
-            return DotNetRng.Next(max);
-            // var newSeed = (uint)((Seed * Multiplier) + 1);
-            // Seed = newSeed;
-            // //Debug.Print($"Rng={((newSeed) & 0x7FFF) % max} out of {max}. Next Seed is {Seed}");
-            // return (int)(((newSeed) & 0x7FFF) % max);
+            var value = Next(0x8000);
+            return (int)(((long)value * max) / 0x8000);
         }
 
         public int Next(int min, int max)

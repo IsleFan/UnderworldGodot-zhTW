@@ -179,9 +179,11 @@ public partial class main : Node3D
 		uimanager.instance.InitUI();
 #if DEBUG
 		if (int.TryParse(OS.GetEnvironment("UW_TESTCUTS"), out int testcuts))
-		{//Testing aid: play this cutscene straight away, to see its subtitles.
-			uimanager.EnableDisable(uimanager.instance.uw1UI, false);
-			uimanager.EnableDisable(uimanager.instance.uw2UI, false);
+		{//Testing aid: play this cutscene straight away, to see its subtitles. A windowed one (100h and up) plays in its
+		 //game's layer, which stays on.
+			uimanager.EnableDisable(uimanager.instance.uw1UI, testcuts >= 0x100 && UWClass._RES != UWClass.GAME_UW2);
+			uimanager.EnableDisable(uimanager.instance.uw2UI, testcuts >= 0x100 && UWClass._RES == UWClass.GAME_UW2);
+			uimanager.EnableDisable(uimanager.instance.uwviewport, false);//as a death's cutscene does, so the 3D view does not cover it
 			uimanager.EnableDisable(uimanager.instance.PanelInventory, false);
 			uimanager.EnableDisable(uimanager.instance.ManaFlaskPanel, false);
 			uimanager.EnableDisable(uimanager.instance.HealthFlaskPanel, false);
@@ -191,6 +193,16 @@ public partial class main : Node3D
 		if (OS.GetEnvironment("UW_TESTMENU") == "1")
 		{//Testing aid: straight to the main menu, to see its buttons.
 			uimanager.ReturnToMainMenu();
+			if (OS.GetEnvironment("UW_TESTSELFCHECK") == "1")
+			{//and the menu's theme starts again once it has ended (load_new_music)
+				instance.GetTree().CreateTimer(2.0).Timeout += () =>
+				{
+					var theme = XMIMusic.CurrentlyPlayingThemeNo;
+					MusicStreamPlayer.Instance?.Stop();
+					XMIMusic.RefreshMusic();
+					GD.Print($"SELFCHECK menu music: theme {theme} stopped, after the refresh playing {MusicStreamPlayer.Instance?.IsPlaying} theme {XMIMusic.CurrentlyPlayingThemeNo}");
+				};
+			}
 			return;
 		}
 		if (OS.GetEnvironment("UW_TESTCHARGEN") == "1")
@@ -292,6 +304,58 @@ public partial class main : Node3D
 				};
 				tree.CreateTimer(6.5).Timeout += () => GD.Print($"TESTCONTROLS after wheel: mode {uimanager.InteractionMode}, weapon drawn {playerdat.play_drawn}");
 			}
+			if (int.TryParse(OS.GetEnvironment("UW_TESTCUTS_INGAME"), out int testcutsgame))
+			{//Testing aid: once the level is loaded, play this cutscene the way a death plays its own (the 3D view off), to
+			 //see a windowed cutscene where it belongs
+				instance.GetTree().CreateTimer(1.0).Timeout += () =>
+				{
+					uimanager.EnableDisable(uimanager.instance.uwviewport, false);
+					cutsplayer.PlayCutscene(CutsceneNo: testcutsgame, callBackMethod: null, useSingleRedChannel: true);
+				};
+			}
+			if (OS.GetEnvironment("UW_TESTSELFCHECK") == "1")
+			{//Testing aid: check by measurement what cannot be seen in a picture, printing SELFCHECK lines
+				var tree = instance.GetTree();
+				int lastClock = 0;
+				tree.CreateTimer(1.0).Timeout += () => lastClock = playerdat.ClockValue;
+				tree.CreateTimer(4.0).Timeout += () =>
+				{//the physics clock: what it advanced by in 3 seconds of rounds (about 0x19 a round at 256 ticks a second)
+					var delta = playerdat.ClockValue - lastClock;
+					GD.Print($"SELFCHECK clock advanced {delta} ticks in 3 s (256 a second expected: {3 * 256})");
+					//digital sound: a sound from the west, the player facing north then south
+					var px = (playerdat.playerObject.tileX << 3) + 3; var py = (playerdat.playerObject.tileY << 3) + 3;
+					var before = UWsoundeffects.CalculateSoundFallOff(px - 16, py, 3, 0);
+					var heading = playerdat.playerObject.heading;
+					playerdat.playerObject.heading = (short)((heading + 4) & 7);
+					var after = UWsoundeffects.CalculateSoundFallOff(px - 16, py, 3, 0);
+					playerdat.playerObject.heading = heading;
+					GD.Print($"SELFCHECK sound from the west: pan {before.Pan:X2} vol {before.Vol:X2}; turned round: pan {after.Pan:X2} vol {after.Vol:X2} (the pan should cross 0x40)");
+					//the dream: an object held on waking stays where the player was
+					var index = ObjectCreator.PrepareNewObject(0x80);
+					if (index != 0)
+					{
+						playerdat.ObjectInHand = index;
+						playerdat.DreamingInVoid = true;
+						playerdat.DreamDungeon = playerdat.dungeon_level;
+						playerdat.DreamTileX = playerdat.playerObject.tileX;
+						playerdat.DreamTileY = playerdat.playerObject.tileY;
+						var tx = playerdat.playerObject.tileX; var ty = playerdat.playerObject.tileY;
+						sleep.AwakenFromTheVoid();
+						var o = UWTileMap.current_tilemap.LevelObjects[index];
+						GD.Print($"SELFCHECK dream: held after waking {playerdat.ObjectInHand} (-1 expected); the object at tile {o.tileX},{o.tileY}, player was at {tx},{ty} (within 6 fine units expected)");
+					}
+					//music: a theme that has ended starts again
+					var theme = XMIMusic.CurrentlyPlayingThemeNo;
+					MusicStreamPlayer.Instance?.Stop();
+					XMIMusic.RefreshMusic();
+					GD.Print($"SELFCHECK music: theme {theme} stopped, after the refresh playing {MusicStreamPlayer.Instance?.IsPlaying} theme {XMIMusic.CurrentlyPlayingThemeNo}");
+				};
+			}
+			if (OS.GetEnvironment("UW_TESTTELEPORT") == "1")
+			{//Testing aid: teleport within the level once it is loaded, to see the view fade out and back in
+				instance.GetTree().CreateTimer(1.0).Timeout += () =>
+					Teleportation.Teleport(character: 0, tileX: playerdat.playerObject.tileX, tileY: playerdat.playerObject.tileY + 1, newLevel: 0, HeadingHeightFlag: 0);
+			}
 			if (OS.GetEnvironment("UW_TESTMAP") == "1")
 			{//Testing aid: open the map and put the mouse at (600, 400), to see where the quill points.
 				instance.GetTree().CreateTimer(1.0).Timeout += () => uimanager.DrawAutoMap(playerdat.dungeon_level - 1, 0);
@@ -307,6 +371,16 @@ public partial class main : Node3D
 					Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = at, GlobalPosition = at });
 					Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = at, GlobalPosition = at });
 				};
+				instance.GetTree().CreateTimer(2.3).Timeout += () =>
+				{//type TEST and end the note: it should start at the click, its top 4 rows above it (x 600, y 384 here)
+					foreach (var (key, ch) in new[] { (Key.T, 'T'), (Key.E, 'E'), (Key.S, 'S'), (Key.T, 'T') })
+					{
+						Input.ParseInputEvent(new InputEventKey { Keycode = key, Unicode = ch, Pressed = true });
+						Input.ParseInputEvent(new InputEventKey { Keycode = key, Unicode = ch, Pressed = false });
+					}
+					Input.ParseInputEvent(new InputEventKey { Keycode = Key.Enter, Pressed = true });
+					Input.ParseInputEvent(new InputEventKey { Keycode = Key.Enter, Pressed = false });
+				};
 			}
 			if (OS.GetEnvironment("UW_TESTLOOK") == "1")
 			{//Testing aid: look at a creature, a named NPC, a weapon and a wall once the level is loaded, to see the descriptions.
@@ -321,7 +395,7 @@ public partial class main : Node3D
 					};
 					foreach (var i in picks)
 					{
-						if (i > 0) { look.LookAt(i, objs, true); }
+						if (i > 0) { look.LookAtWorld(i, lore: 1, lookMode: false); }
 					}
 					uimanager.AddToMessageScroll(GameStrings.TextureDescription(1));
 				};
@@ -373,14 +447,14 @@ public partial class main : Node3D
 				{
 					("pocketwatch", () => pocketwatch.Use(objs[weapon], false)),
 					("storage crystal", () => storage_crystal.Use(objs[weapon], false)),
-					("small blackrock gem", () => smallblackrockgem.LookAt(objs[weapon], objs)),
+					("look", () => look.LookAt(objs[weapon], objs, 2)),
 					("orb rock", () => OrbRock.Use(objs[weapon], false, null)),
 					("food taste", () => Call(typeof(Food), "TasteDescriptionString", objs[weapon])),
 					("trap disarmed", () => Call(typeof(trapdisarming), "DoTrapDisarm", objs, 100, objs[weapon], null, objs[weapon])),
 					("mending spell", () => repair.MendingSpell(weapon, objs)),
 					("vending sign", () => Call(typeof(a_hack_trap_vending), "VendingForSaleSign", plain)),
 					("study monster", () => Call(typeof(SpellCasting), "StudyMonster", critter, objs)),
-					("void creature", () => Call(typeof(npc), "EtheralVoidNPCDescription", objs[critter])),
+					("critter look", () => npc.LookAt(objs[critter])),
 					("detect monsters", () => tracking.DetectMonsters(8, 40)),
 					("repair estimate", () => repair.RepairLogic(objs[weapon], 30, false).MoveNext()),
 					//last: the blast can kill the test character, and the death cutscene hides the scroll
@@ -541,7 +615,7 @@ public partial class main : Node3D
 			uimanager.EnableDisable(uimanager.instance.PanelInventory, false);
 			uimanager.EnableDisable(uimanager.instance.ManaFlaskPanel, false);
 			uimanager.EnableDisable(uimanager.instance.HealthFlaskPanel, false);
-			cutsplayer.PlayCutscene(9, uimanager.ReturnToMainMenu);
+			cutsplayer.PlayCutscene(9, uimanager.ReturnToMainMenuOrIntroduction);
 			//Play intro theme after cutscene coroutine is queued, so music and graphics start together
 			XMIMusic.LoadXMI(XMIMusic.IntroTheme);
 			uimanager.AddToMessageScroll(GameStrings.GetDisplayString(1, 13));//welcome message
@@ -606,6 +680,8 @@ public partial class main : Node3D
 
 	public override void _Process(double delta)
 	{
+		WarpMouseStep();
+		DigitalEffectPlayback.Update(DigitalAudioPlayer);
 		base._Process(delta);
 		if (uimanager.InGame)
 		{
@@ -638,8 +714,10 @@ public partial class main : Node3D
 			if (PitTimer >= 0.00391)
 			{
 				//simulation of the dos pit timer.
-				GlobalPITTimer += (uint)(PitTimer / 0.00391);
-				PitTimer = 0;
+				//(the part of a tick left over is kept, so the clock runs at the 256 ticks a second of the original)
+				var ticks = (uint)(PitTimer / 0.00391);
+				GlobalPITTimer += ticks;
+				PitTimer -= ticks * 0.00391;
 				// if ((GlobalPITTimer % 32) == 0)
 				// {
 				if (uimanager.InGame)
@@ -696,8 +774,7 @@ public partial class main : Node3D
 				EasyMoveFrameIncrement += (byte)((GlobalPITTimer >> 4) - (LastGlobalPitTimer >> 4));  //every 16 pits?
 				AnimationFrameDeltaIncrement = (byte)((GlobalPITTimer >> 6) - (LastGlobalPitTimer >> 6));//every 63 pits? This controls how often NPCs and mobile objects move. It could stand to be faster.
 
-				ClockIncrement = 0x19;//ignore original calc since it's too slow. This value is choosen since dosbox debugger shows this value when breaking on motion code often (with some variation)
-									  //Setting value too low prevents some motion in certain directions from working.
+				//check_physics: the time since the last round, at most 0x40 (the loop runs every 0.0977 s, about 0x19 ticks)
 			}
 
 			if ((ClockIncrement != 0) && (!uimanager.blockinput))
@@ -712,8 +789,9 @@ public partial class main : Node3D
 				LastGlobalPitTimer = GlobalPITTimer;
 				AnimationFrameDeltaIncrement = EasyMoveFrameIncrement;
 				if (playerdat.SpeedEnchantment)
-				{
-					EasyMoveFrameIncrement = (byte)((AnimationFrameDeltaIncrement >> 1) & 0x1);
+				{//haste: the mobiles get half the frames and the odd one carries over (check_physics)
+					AnimationFrameDeltaIncrement = (byte)(AnimationFrameDeltaIncrement >> 1);
+					EasyMoveFrameIncrement = (byte)(EasyMoveFrameIncrement & 0x1);
 				}
 				else
 				{
@@ -778,8 +856,8 @@ public partial class main : Node3D
 			(motion.PlayerMotionUpdateRequired_dseg_D3 != false)
 		)
 		{
-			if ((EasyMove == false) && (!playerdat.RoamingSightEnchantment))
-			{
+			if (EasyMove == false)
+			{//(with the roaming sight the input is already zeroed, so only falling, currents and the like move the body)
 				//when any forced movement or player input is not 0
 				motion.PlayerMotion(ClockIncrement); //todo confirm increments
 			}
@@ -799,7 +877,7 @@ public partial class main : Node3D
 
 		playerdat.ApplyPlayerSneakScore(EasyMove);
 
-		playerdat.FootSteps();
+		playerdat.FootSteps(EasyMove);
 
 		//Position player object now after all possible calcs have been completed
 		playerdat.PositionPlayerCamera();
@@ -810,11 +888,216 @@ public partial class main : Node3D
 		playerdat.play_hp != 0 && playerdat.ObjectInHand == -1 && uimanager.UsageMode == 0
 		&& uimanager.InteractionMode != uimanager.InteractionModes.ModeOptions;
 
+	/// <summary>
+	/// Classic controls' movement keys held down (do_player_keyboard), in the original's order: w forward fast, s
+	/// forward slowly, a and d turn, z and c slide, x back, e and q up and down when levitating or flying (else stop).
+	/// None with exactly one of Shift and Caps Lock on (the capitals are the step keys), or with Alt or Ctrl held.
+	/// </summary>
+	static void ClassicKeyboardMotion()
+	{
+		if ((Input.IsKeyPressed(Key.Shift) != CapsLockOn) || Input.IsKeyPressed(Key.Alt) || Input.IsKeyPressed(Key.Ctrl))
+		{
+			return;
+		}
+		var flying = (playerdat.MagicalMotionAbilities & 0x14) != 0;
+		if (Controls.Held(Controls.Action.Forward)) { motion.PlayerMotionWalk_77C = 0x70; motion.MotionInputPressed = 1; }
+		if (Controls.Held(Controls.Action.Walk)) { motion.PlayerMotionWalk_77C = 0x32; motion.MotionInputPressed = 1; }
+		if (Controls.Held(Controls.Action.TurnLeft)) { motion.PlayerMotionHeading_77E = -90; motion.MotionInputPressed = 1; }
+		if (Controls.Held(Controls.Action.TurnRight)) { motion.PlayerMotionHeading_77E = 90; motion.MotionInputPressed = 1; }
+		if (Controls.Held(Controls.Action.StrafeLeft)) { motion.PlayerMotionWalk_77C = 0; motion.PlayerMotionHeading_77E = 0; motion.MotionInputPressed = 9; }
+		if (Controls.Held(Controls.Action.StrafeRight)) { motion.PlayerMotionWalk_77C = 0; motion.PlayerMotionHeading_77E = 0; motion.MotionInputPressed = 0xA; }
+		if (Controls.Held(Controls.Action.Back)) { motion.PlayerMotionWalk_77C = 0; motion.PlayerMotionHeading_77E = 0; motion.MotionInputPressed = 8; }
+		if (Controls.Held(Controls.Action.FlyUp)) { motion.MotionInputPressed = (short)(flying ? 0xC : 0); }
+		if (Controls.Held(Controls.Action.FlyDown)) { motion.MotionInputPressed = (short)(flying ? 0xD : 0); }
+	}
+
+	/// <summary>Whether the left button went down in the 3D view and is still held: classic controls move with it.</summary>
+	public static bool MouseMoveHeld;
+
+	/// <summary>
+	/// Classic controls move with the left button held in the 3D view (parse_playin(-1)): the bottom fifth slides
+	/// left, steps back or slides right by third; elsewhere the pointer's distance from the middle third turns
+	/// (up to 0x80) and its height above two fifths of the view sets the forward speed (up to about 0x73). Both
+	/// buttons jump (forward in the air or swimming), unless the weapon is drawn, when the right button attacks.
+	/// </summary>
+	static void ClassicMouseMotion()
+	{
+		if (!MouseMoveHeld || !Input.IsMouseButtonPressed(MouseButton.Left))
+		{
+			MouseMoveHeld &= Input.IsMouseButtonPressed(MouseButton.Left);
+			return;
+		}
+		if (playerdat.RoamingSightEnchantment)
+		{//player_mous_move: with the Wizard Eye the mouse moves the eye (move_cam(0)) instead of the body
+			RoamingSightMouseMove();
+			return;
+		}
+		if (Input.IsMouseButtonPressed(MouseButton.Right) && playerdat.play_drawn != 1)
+		{
+			motion.MotionInputPressed = 1;
+			if ((playerdat.TileState != 1) && ((motion.playerMotionParams.tilestate25 & 0x10) == 0))
+			{
+				motion.MotionInputPressed = 7;
+			}
+			return;
+		}
+		var view = uimanager.instance.uwviewport;
+		var p = view.GetLocalMousePosition();
+		var inside = new Vector2(Math.Clamp(p.X, 0f, view.Size.X - 1), Math.Clamp(p.Y, 0f, view.Size.Y - 1));
+		if (inside != p)
+		{//mouse_constrain: while the button is held the pointer stays in the view
+			instance.GetViewport().WarpMouse(view.GetGlobalTransformWithCanvas() * inside);
+			p = inside;
+		}
+		var x = Math.Clamp(p.X / view.Size.X, 0f, 0.999f);
+		var up = Math.Clamp(1f - p.Y / view.Size.Y, 0f, 1f);//the original counts y up from the bottom
+		motion.PlayerMotionWalk_77C = 0;
+		motion.PlayerMotionHeading_77E = 0;
+		if (up < 0.2f)
+		{
+			motion.MotionInputPressed = new short[] { 9, 8, 10 }[(int)(x * 3)];
+			return;
+		}
+		if (x < 1f / 3f)
+		{
+			motion.PlayerMotionHeading_77E = (short)-(int)((1f / 3f - x) * 0x180);
+		}
+		if (x > 2f / 3f)
+		{
+			motion.PlayerMotionHeading_77E = (short)(int)((x - 2f / 3f) * 0x180);
+		}
+		if (up > 0.4f)
+		{
+			motion.PlayerMotionWalk_77C = (short)(int)((up - 0.4f) * 0xC0);
+		}
+		motion.MotionInputPressed = 1;
+	}
+
+	/// <summary>
+	/// move_cam(0): the pointer's third of the view across turns the eye left, not at all or right (0x400 a time), and its
+	/// third up from the bottom steps it back, not at all or forward, within 0x180..0x3D80.
+	/// </summary>
+	static void RoamingSightMouseMove()
+	{
+		var view = uimanager.instance.uwviewport;
+		var p = view.GetLocalMousePosition();
+		var turn = (int)(Math.Clamp(p.X / view.Size.X, 0f, 0.999f) * 3);
+		var step = (int)(Math.Clamp(1f - p.Y / view.Size.Y, 0f, 0.999f) * 3);//the original counts y up from the bottom
+		playerdat.DoCameraH += (short)((turn - 1) << 0xA);
+		if (step != 1)
+		{
+			short dx = 0; short dy = 0;
+			motion.SomethingProjectileHeading_seg021_22FD_EAE((ushort)playerdat.DoCameraH, ref dx, ref dy);
+			playerdat.DoCameraX = (short)Math.Clamp(playerdat.DoCameraX + (dx >> 8) * (step - 1), 0x180, 0x3D80);
+			playerdat.DoCameraY = (short)Math.Clamp(playerdat.DoCameraY + (dy >> 8) * (step - 1), 0x180, 0x3D80);
+		}
+	}
+
+	/// <summary>When the last step key was taken: one step at most every 0x18 ticks.</summary>
+	static ulong lastStepMsec;
+	/// <summary>
+	/// player_simple_move, classic's capitals (PLAYER.C): A and D turn 45 degrees, S steps half a tile (not into another
+	/// terrain or off a ledge), W takes that step unchecked, X steps a quarter tile back (simple_fizix). One step at most
+	/// every 0x18 ticks.
+	/// </summary>
+	static void ClassicStepKey(Key key)
+	{
+		int turn;
+		switch (key)
+		{
+			case Key.A: turn = -1; break;
+			case Key.D: turn = 1; break;
+			case Key.S: turn = 0; break;
+			case Key.W: turn = 2; break;
+			case Key.X: turn = -2; break;
+			default: return;
+		}
+		var now = Time.GetTicksMsec();
+		if (now - lastStepMsec < 0x18 * 1000 / 256)
+		{
+			return;
+		}
+		lastStepMsec = now;
+		PlayerSimpleMove(turn);
+	}
+
+	/// <summary>
+	/// player_simple_move: a step or a turn (simple_fizix), then one 0x40 round of the world with it (move_physics
+	/// with easy set: the player's own physics is skipped, the step sounds and is heard).
+	/// </summary>
+	public static void PlayerSimpleMove(int turn)
+	{
+		if (!motion.SimpleFizix(turn))
+		{
+			return;
+		}
+		EasyMoveFrameIncrement += 4;
+		motion.playerMotionParams.momentum_14 = 0;
+		AnimationOverlay.UpdateAnimationOverlays();
+		playerdat.ClockValue += 0x40;
+		LastGlobalPitTimer = GlobalPITTimer;
+		byte frames = EasyMoveFrameIncrement;
+		if (playerdat.SpeedEnchantment)
+		{
+			frames >>= 1;
+			EasyMoveFrameIncrement &= 1;
+		}
+		else
+		{
+			EasyMoveFrameIncrement = 0;
+		}
+		GameObjectLoop(ClockIncrement: 0x40, AnimationFrameDelta: frames, EasyMove: true);
+	}
+
+	/// <summary>
+	/// Caps Lock, as far as the keys show it: Godot does not give the lock's state, but a letter comes as a capital
+	/// exactly when one of Shift and Caps Lock is on, so each letter sets it again; the Caps Lock key itself flips it.
+	/// </summary>
+	static bool CapsLockOn;
+
+	static void TrackCapsLock(InputEventKey key)
+	{
+		if (!key.Pressed || key.Echo)
+		{
+			return;
+		}
+		if (key.Keycode == Key.Capslock)
+		{
+			CapsLockOn = !CapsLockOn;
+		}
+		else if (char.IsLetter((char)key.Unicode) && (key.Unicode < 0x80))
+		{
+			CapsLockOn = char.IsUpper((char)key.Unicode) != key.ShiftPressed;
+		}
+	}
+
+	/// <summary>Classic controls' pitch keys (chg_plyp): 1 and 3 step the pitch by 0x400 within 0x1000 either way, 2 levels it.</summary>
+	static void ClassicPitchKey(Key key)
+	{
+		if (Controls.Is(key, Controls.Action.LookDown))
+		{
+			playerdat.PlayerCameraPitch_dseg_67d6_33D6 = (short)Math.Max(-4096, playerdat.PlayerCameraPitch_dseg_67d6_33D6 - 0x400);
+		}
+		else if (Controls.Is(key, Controls.Action.LookUp))
+		{
+			playerdat.PlayerCameraPitch_dseg_67d6_33D6 = (short)Math.Min(4096, playerdat.PlayerCameraPitch_dseg_67d6_33D6 + 0x400);
+		}
+		else if (Controls.Is(key, Controls.Action.LookCentre))
+		{
+			playerdat.PlayerCameraPitch_dseg_67d6_33D6 = 0;
+		}
+	}
+
 	static void ProcessMotionInputs()
 	{
 		motion.PlayerMotionWalk_77C = 0;
 		motion.PlayerMotionHeading_77E = 0;
-		if (Controls.Held(Controls.Action.Forward))
+		if (!Controls.Modern)
+		{
+			ClassicKeyboardMotion();
+			ClassicMouseMotion();
+		}
+		else if (Controls.Held(Controls.Action.Forward))
 		{
 			if (Input.IsKeyPressed(Key.Shift))//forwards
 			{
@@ -829,37 +1112,40 @@ public partial class main : Node3D
 			motion.MotionInputPressed = 1;
 		}
 
-		if (Controls.Held(Controls.Action.TurnLeft))//turn left
+		if (Controls.Modern)
 		{
-			motion.PlayerMotionHeading_77E = -90;//should this be scaled?
-			motion.MotionInputPressed = 1;
-		}
-		if (Controls.Held(Controls.Action.TurnRight))//turn right
-		{
-			motion.PlayerMotionHeading_77E = +90;
-			motion.MotionInputPressed = 1;
-		}
-		if (Controls.Held(Controls.Action.Back))//walk backwards
-		{
-			motion.PlayerMotionWalk_77C = 0;
-			motion.PlayerMotionHeading_77E = 0;
-			motion.MotionInputPressed = 8;
-		}
-		if (Controls.Held(Controls.Action.StrafeLeft))//slide left
-		{
-			motion.PlayerMotionWalk_77C = 0;
-			motion.PlayerMotionHeading_77E = 0;
-			motion.MotionInputPressed = 9;
-		}
-		if (Controls.Held(Controls.Action.StrafeRight))//slide right
-		{
-			motion.PlayerMotionWalk_77C = 0;
-			motion.PlayerMotionHeading_77E = 0;
-			motion.MotionInputPressed = 0xA;
+			if (Controls.Held(Controls.Action.TurnLeft))//turn left
+			{
+				motion.PlayerMotionHeading_77E = -90;//should this be scaled?
+				motion.MotionInputPressed = 1;
+			}
+			if (Controls.Held(Controls.Action.TurnRight))//turn right
+			{
+				motion.PlayerMotionHeading_77E = +90;
+				motion.MotionInputPressed = 1;
+			}
+			if (Controls.Held(Controls.Action.Back))//walk backwards
+			{
+				motion.PlayerMotionWalk_77C = 0;
+				motion.PlayerMotionHeading_77E = 0;
+				motion.MotionInputPressed = 8;
+			}
+			if (Controls.Held(Controls.Action.StrafeLeft))//slide left
+			{
+				motion.PlayerMotionWalk_77C = 0;
+				motion.PlayerMotionHeading_77E = 0;
+				motion.MotionInputPressed = 9;
+			}
+			if (Controls.Held(Controls.Action.StrafeRight))//slide right
+			{
+				motion.PlayerMotionWalk_77C = 0;
+				motion.PlayerMotionHeading_77E = 0;
+				motion.MotionInputPressed = 0xA;
+			}
 		}
 
-		//Addition. put roaming sight input here and override other inputs.
-		if (playerdat.RoamingSightEnchantment)
+		//Roaming Sight with the keys: UW2 moves the eye (parse_playin's move_cam(PlayerInput + 1)); UW1's keys still move the body
+		if (playerdat.RoamingSightEnchantment && (UWClass._RES == UWClass.GAME_UW2))
 		{
 			var si = 0;
 			var di = 0;
@@ -923,35 +1209,34 @@ public partial class main : Node3D
 					playerdat.DoCameraY = (short)Math.Max((short)Math.Min((short)playerdat.DoCameraY, (short)0x3D80), (short)0x180);
 				}
 			}
+			//the keys went to the eye (move_cam, command = 0): the body gets no input but physics still acts on it
+			motion.PlayerMotionWalk_77C = 0;
+			motion.PlayerMotionHeading_77E = 0;
+			motion.MotionInputPressed = 0;
 			return;
 		}
 
 
 		if (Controls.Held(Controls.Action.Jump))//jump.
 		{
-			if (playerdat.TileState != 1)//ensure we are not swimming
+			//a jump only from the ground and not swimming; in the air or in water the original turns it into
+			//forward movement, so here the movement keys stay as they are (flying up is the fly up key)
+			if ((playerdat.TileState != 1) && ((motion.playerMotionParams.tilestate25 & 0x10) == 0))
 			{
-				if ((playerdat.MagicalMotionAbilities & 0x14) == 0)//check that player is not subject to levitate or fly spells
+				if (Input.IsKeyPressed(Key.Shift))
 				{
-					if (Input.IsKeyPressed(Key.Shift))
-					{
-						//long jump
-						motion.MotionInputPressed = 6;
-					}
-					else
-					{
-						//jump
-						motion.MotionInputPressed = 7;
-					}
+					//long jump
+					motion.MotionInputPressed = 6;
 				}
 				else
 				{
-					motion.MotionInputPressed = 0xC; //translate the jump into a fly up
+					//jump
+					motion.MotionInputPressed = 7;
 				}
 			}
 
 		}
-		if (Controls.Held(Controls.Action.FlyUp))//fly up
+		if (Controls.Modern && Controls.Held(Controls.Action.FlyUp))//fly up (classic: ClassicKeyboardMotion)
 		{
 			if ((playerdat.MagicalMotionAbilities & 0x14) != 0)
 			{
@@ -962,7 +1247,7 @@ public partial class main : Node3D
 				motion.MotionInputPressed = 0;
 			}
 		}
-		if (Controls.Held(Controls.Action.FlyDown))//fly down
+		if (Controls.Modern && Controls.Held(Controls.Action.FlyDown))//fly down
 		{
 			if ((playerdat.MagicalMotionAbilities & 0x14) != 0)
 			{
@@ -976,7 +1261,11 @@ public partial class main : Node3D
 
 
 
-		//Addition. capture look up and down
+		//Addition. capture look up and down (modern; classic steps once a key press, ClassicPitchKey)
+		if (!Controls.Modern)
+		{
+			return;
+		}
 		if (Controls.Held(Controls.Action.LookDown))
 		{
 			//lookdown
@@ -1099,8 +1388,215 @@ public partial class main : Node3D
 		}
 	}
 
+	/// <summary>
+	/// wdialog's editing, for the line typed into the scroll: Ctrl+A/E start and end, Ctrl+B/F left and right, Ctrl+D
+	/// deletes at the cursor, Ctrl+K cuts to the end; the first character typed replaces the offered text; a quantity
+	/// takes only digits; at most 50 characters. Returns whether it dealt with the key (the line edit does the rest).
+	/// </summary>
+	static bool WdialogEditKey(InputEventKey key)
+	{
+		var edit = uimanager.instance.TypedInput;
+		if (key.CtrlPressed)
+		{
+			var caret = edit.CaretColumn;
+			switch (key.Keycode)
+			{
+				case Key.A: edit.CaretColumn = 0; break;
+				case Key.E: edit.CaretColumn = edit.Text.Length; break;
+				case Key.B: edit.CaretColumn = Math.Max(0, caret - 1); break;
+				case Key.F: edit.CaretColumn = Math.Min(edit.Text.Length, caret + 1); break;
+				case Key.D:
+					if (caret < edit.Text.Length) { edit.Text = edit.Text.Remove(caret, 1); edit.CaretColumn = caret; }
+					break;
+				case Key.K: edit.Text = edit.Text.Substring(0, caret); edit.CaretColumn = caret; break;
+				default: return false;
+			}
+			MessageDisplay.TypedInitialPending = false;
+			return true;
+		}
+		var c = (char)key.Unicode;
+		if (c < 0x20 || c > 0x7E)
+		{
+			if (key.Keycode != Key.Enter && key.Keycode != Key.Escape)
+			{//moving about keeps the offered text
+				MessageDisplay.TypedInitialPending = false;
+			}
+			return false;
+		}
+		if (MessageDisplay.TypedInitialPending)
+		{
+			edit.Text = "";
+			edit.CaretColumn = 0;
+			MessageDisplay.TypedInitialPending = false;
+		}
+		if (((MessageDisplay.QuantityPrompt > 0) && !char.IsAsciiDigit(c)) || (edit.Text.Length >= 50))
+		{
+			return true;//not taken
+		}
+		return false;
+	}
+
+	static SysFont noteFont;
+	/// <summary>The width of a map note in the original's note font, FONT4X5P (string_width).</summary>
+	static int NoteFontWidth(string text)
+	{
+		if (noteFont == null)
+		{
+			var path = System.IO.Path.Combine(UWClass.BasePath, "DATA", "FONT4X5P.SYS");
+			noteFont = System.IO.File.Exists(path) ? SysFont.Parse(System.IO.File.ReadAllBytes(path)) : null;
+			if (noteFont == null)
+			{
+				return 0;
+			}
+		}
+		var width = 0;
+		foreach (var ch in text)
+		{
+			width += noteFont.Covers(ch) ? noteFont.AdvanceOf(ch) : 0;
+		}
+		return width;
+	}
+
+	/// <summary>Alt+H (flip_bool on mouse_hand): the left and right buttons swapped.</summary>
+	static bool MouseHandSwapped = false;
+	/// <summary>Marks the button events this file sends itself (INS, DEL, the swap), so they are not taken again.</summary>
+	const int SyntheticMouseDevice = 0x5EED;
+	/// <summary>keyboard_mouse's warp: where the keypad sends the pointer (original 320x200, y up), the key, and the rate.</summary>
+	static Vector2 warpTarget;
+	static Key warpKey = Key.None;
+	static int warpRate = 0;
+
+	static Vector2 OriginalToViewport(float x, float yUp) => new Vector2(x * 4, (200 - yUp) * 4);
+
+	/// <summary>
+	/// The keyboard's mouse (MOUSE.C, PLAYER.C, UWEDIT.C): Tab and Shift+Tab move the pointer between the 3D view, the
+	/// inventory and the bottom right; the keypad warps it toward an edge or corner, faster for each repeat; INS and
+	/// DEL are the left and right buttons; Alt+H swaps the buttons; Alt+X leaves the game. Returns whether it took the event.
+	/// </summary>
+	bool KeyboardMouse(InputEvent @event)
+	{
+		if (Controls.Modern)
+		{//classic only: modern keeps its own layout
+			return false;
+		}
+		if (@event is InputEventMouseButton mb && MouseHandSwapped && mb.Device != SyntheticMouseDevice
+			&& (mb.ButtonIndex == MouseButton.Left || mb.ButtonIndex == MouseButton.Right))
+		{
+			var swapped = (InputEventMouseButton)mb.Duplicate();
+			swapped.ButtonIndex = mb.ButtonIndex == MouseButton.Left ? MouseButton.Right : MouseButton.Left;
+			swapped.Device = SyntheticMouseDevice;
+			Input.ParseInputEvent(swapped);
+			return true;
+		}
+		if (@event is not InputEventKey key || MessageDisplay.WaitingForTypedInput || uimanager.SaveDescriptionPromptActive)
+		{
+			return false;
+		}
+		if (!key.Pressed)
+		{
+			if (key.Keycode == warpKey)
+			{
+				warpKey = Key.None;
+			}
+			return false;
+		}
+		if (key.AltPressed && key.Keycode == Key.H && !key.Echo)
+		{
+			MouseHandSwapped = !MouseHandSwapped;
+			return true;
+		}
+		if (key.AltPressed && key.Keycode == Key.X && !key.Echo)
+		{//graceful_exit
+			GetTree().Quit();
+			return true;
+		}
+		if ((key.Keycode == Key.Insert || key.Keycode == Key.Delete) && !key.Echo)
+		{//mouse_btns: INS the left button, DEL the right, pressed and let go where the pointer is
+			var at = GetViewport().GetMousePosition();
+			foreach (var pressed in new[] { true, false })
+			{
+				Input.ParseInputEvent(new InputEventMouseButton
+				{
+					ButtonIndex = key.Keycode == Key.Insert ? MouseButton.Left : MouseButton.Right,
+					Pressed = pressed, Position = at, GlobalPosition = at, Device = SyntheticMouseDevice
+				});
+			}
+			return true;
+		}
+		var mouse = GetViewport().GetMousePosition();
+		var mx = mouse.X / 4; var my = 200 - mouse.Y / 4;
+		if (key.Keycode == Key.Tab && !key.CtrlPressed && !key.AltPressed)
+		{
+			Vector2 to;
+			if (!key.ShiftPressed)
+			{
+				to = mx < 0xE2 ? new Vector2(0x10E, 0x78) : my > 0x49 ? new Vector2(0x131, 7) : new Vector2(0x64, 0x82);
+			}
+			else
+			{
+				to = mx < 0xE2 ? new Vector2(0x131, 7) : my > 0x49 ? new Vector2(0x64, 0x82) : new Vector2(0x10E, 0x78);
+			}
+			Input.WarpMouse(GetTree().Root.GetFinalTransform() * OriginalToViewport(to.X, to.Y));
+			return true;
+		}
+		Vector2? target = key.Keycode switch
+		{
+			Key.Kp4 => new Vector2(0, my),
+			Key.Kp6 => new Vector2(0x13F, my),
+			Key.Kp8 => new Vector2(mx, 0xC7),
+			Key.Kp2 => new Vector2(mx, 0),
+			Key.Kp7 => new Vector2(0, 0xC7),
+			Key.Kp9 => new Vector2(0x13F, 0xC7),
+			Key.Kp1 => new Vector2(0, 0),
+			Key.Kp3 => new Vector2(0x13F, 0),
+			_ => null,
+		};
+		if (target.HasValue)
+		{//pressing the same key again speeds the warp up (to 40)
+			warpRate = key.Keycode == warpKey ? Math.Min(40, warpRate + 1) : 1;
+			warpKey = key.Keycode;
+			warpTarget = target.Value;
+			return true;
+		}
+		return false;
+	}
+
+	/// <summary>Moves the pointer on toward the keypad's target while its key is held (moveMouse).</summary>
+	void WarpMouseStep()
+	{
+		if (warpKey == Key.None)
+		{
+			return;
+		}
+		var mouse = GetViewport().GetMousePosition();
+		var now = new Vector2(mouse.X / 4, 200 - mouse.Y / 4);
+		var to = warpTarget - now;
+		if (to.Length() < 1)
+		{
+			warpKey = Key.None;
+			return;
+		}
+		var step = to.Normalized() * Math.Min(to.Length(), warpRate);
+		Input.WarpMouse(GetTree().Root.GetFinalTransform() * OriginalToViewport(now.X + step.X, now.Y + step.Y));
+	}
+
 	public override void _Input(InputEvent @event)
 	{
+		if (KeyboardMouse(@event))
+		{
+			GetViewport().SetInputAsHandled();
+			return;
+		}
+		if (@event is InputEventKey menuKey && uimanager.instance.MainMenuKey(menuKey))
+		{
+			GetViewport().SetInputAsHandled();
+			return;
+		}
+		if (@event is InputEventKey optionsKey && !optionsKey.Echo && uimanager.OptionsPanelKey(optionsKey))
+		{//busywaiting_new_options
+			GetViewport().SetInputAsHandled();
+			return;
+		}
 		// The save description prompt takes Escape before anything else. SetInputAsHandled
 		// keeps it away from the LineEdit, and the return keeps it away from the rest of
 		// this method, which would otherwise treat it as closing a conversation or a scroll.
@@ -1136,6 +1632,8 @@ public partial class main : Node3D
 			}
 		}
 
+		uimanager.ContinueLookDrag(@event);
+
 		if ((@event is InputEventMouseButton eventMouseButton)
 			&&
 			((eventMouseButton.ButtonIndex == MouseButton.Left) || (eventMouseButton.ButtonIndex == MouseButton.Right)))
@@ -1152,7 +1650,18 @@ public partial class main : Node3D
 				{
 					if (uimanager.IsMouseInViewPort())
 					{
-						uimanager.ClickOnViewPort(eventMouseButton);
+						if (!Controls.Modern && eventMouseButton.ButtonIndex == MouseButton.Left)
+						{//classic: the left button moves (mous_in_3d)
+							MouseMoveHeld = uimanager.InGame;
+						}
+						else if (!Controls.Modern && Input.IsMouseButtonPressed(MouseButton.Left)
+							&& uimanager.InteractionMode != uimanager.InteractionModes.ModeAttack)
+						{//both buttons are a jump, not a click
+						}
+						else
+						{
+							uimanager.ClickOnViewPort(eventMouseButton);
+						}
 					}
 
 				}
@@ -1183,22 +1692,58 @@ public partial class main : Node3D
 						}
 					}
 				}
+				TrackCapsLock(keyinput);
+				if (keyinput.Pressed && !Controls.Modern && !keyinput.CtrlPressed && !keyinput.AltPressed)
+				{//classic: the capitals step (Shift or Caps Lock, not both), and 1, 2, 3 tilt a step a press (repeats included)
+					if (keyinput.ShiftPressed != CapsLockOn)
+					{
+						ClassicStepKey(keyinput.Keycode);
+					}
+					ClassicPitchKey(keyinput.Keycode);
+				}
 				if (keyinput.Pressed)
 				{
 					switch (keyinput.Keycode)
 					{
-						case Key.F1: //open options menu
-							uimanager.InteractionModeToggle(0); break;
-						case Key.F2: //talk
-							uimanager.InteractionModeButtonPressed((uimanager.InteractionModes)1); break;
-						case Key.F3://pickup
-							uimanager.InteractionModeButtonPressed((uimanager.InteractionModes)2); break;
-						case Key.F4://look
-							uimanager.InteractionModeButtonPressed((uimanager.InteractionModes)3); break;
-						case Key.F5://attack
-							uimanager.InteractionModeButtonPressed((uimanager.InteractionModes)4); break;
-						case Key.F6://use
-							uimanager.InteractionModeButtonPressed((uimanager.InteractionModes)5); break;
+						case Key.F1:
+						case Key.F2:
+						case Key.F3:
+						case Key.F4:
+						case Key.F5:
+						case Key.F6:
+							//the icons, in the order they stand on screen (deal_with_icons: not partway through an action)
+							if (CanChangeInteractionMode())
+							{
+								var icon = Controls.FunctionKeyIcon((int)(keyinput.Keycode - Key.F1));
+								if (icon == uimanager.InteractionModes.ModeOptions)
+								{
+									uimanager.InteractionModeToggle(icon);
+								}
+								else
+								{
+									uimanager.InteractionModeButtonPressed(icon);
+								}
+							}
+							break;
+						case Key.S:
+						case Key.R:
+						case Key.M:
+						case Key.F:
+						case Key.D:
+						case Key.Q:
+							if (keyinput.CtrlPressed && !keyinput.Echo)
+							{//do_option_shortcut: save, restore, music, sound, detail, quit
+								uimanager.OptionShortcut(keyinput.Keycode switch
+								{
+									Key.S => 0,
+									Key.R => 1,
+									Key.M => 2,
+									Key.F => 3,
+									Key.D => 4,
+									_ => 6,
+								});
+							}
+							break;
 						case Key.F7://toggle panel
 							if (keyinput.AltPressed)
 							{
@@ -1258,8 +1803,9 @@ public partial class main : Node3D
 								break;
 							}
 						case Key.Apostrophe:
+							if (OS.IsDebugBuild())
 							{
-								//give full mage abilities
+								//debug builds only: give full mage abilities
 								playerdat.max_mana = 60;
 								playerdat.play_mana = 60;
 								playerdat.Casting = 30;
@@ -1270,14 +1816,15 @@ public partial class main : Node3D
 									playerdat.SetRune(r, true);
 								}
 								playerdat.PlayerStatusUpdate();
-								break;
 							}
+							break;
 					}
 				}
 			}
 		}
 
 		if (ConversationVM.WaitingForInput
+			&& ConversationVM.MenusActive//while a message has cleared the answers, the wait for them takes the input
 			&& !uimanager.MessageScrollIsTemporary
 			&& !MessageDisplay.WaitingForTypedInput)
 		{
@@ -1326,37 +1873,50 @@ public partial class main : Node3D
 		}
 
 		if (MessageDisplay.WaitingForMore)
-		{
-			if (@event is InputEventKey keyinput)
+		{//scroll_wait: a new key, not a release, a repeat or a modifier on its own (clicks are taken above)
+			if (@event is InputEventKey keyinput && keyinput.Pressed && !keyinput.Echo
+				&& keyinput.Keycode is not (Key.Shift or Key.Ctrl or Key.Alt or Key.Meta or Key.Capslock))
 			{
-				Debug.Print("End wait due to key inputclick");
 				MessageDisplay.WaitingForMore = false;
 			}
 		}
 
 		if ((MessageDisplay.WaitingForTypedInput) && (!chargen.ChargenWaitForInput))
-		{
-			if (@event is InputEventKey keyinput)
+		{//wdialog: Enter, Escape or a click ends it; Escape gives no answer and shows "-"
+			string shown = null;
+			if (@event is InputEventKey editKey && editKey.Pressed && WdialogEditKey(editKey))
 			{
-				if (keyinput.Pressed)
+				GetViewport().SetInputAsHandled();
+				return;
+			}
+			if (@event is InputEventKey keyinput && keyinput.Pressed)
+			{
+				switch (keyinput.Keycode)
 				{
-					bool stop = false;
-					switch (keyinput.Keycode)
-					{
-						case Key.Enter:
-							stop = true;
-							break;
-						case Key.Escape:
-							stop = true;
-							uimanager.instance.TypedInput.Text = "";
-							break;
-					}
-					if (stop)
-					{//end typed input
-						uimanager.instance.scroll.Clear();
-						MessageDisplay.WaitingForTypedInput = false;
-					}
+					case Key.Enter:
+						shown = uimanager.instance.TypedInput.Text;
+						break;
+					case Key.Escape:
+						uimanager.instance.TypedInput.Text = "";
+						shown = "-";
+						break;
 				}
+			}
+			else if (@event is InputEventMouseButton typedClick && typedClick.Pressed
+				&& (typedClick.ButtonIndex == MouseButton.Left || typedClick.ButtonIndex == MouseButton.Right))
+			{
+				if (MessageDisplay.QuantityPrompt > 0)
+				{//AskHowMany: left one, right the whole stack, both none
+					var both = Input.IsMouseButtonPressed(MouseButton.Left) && Input.IsMouseButtonPressed(MouseButton.Right);
+					uimanager.instance.TypedInput.Text = both ? "" : typedClick.ButtonIndex == MouseButton.Left ? "1" : MessageDisplay.QuantityPrompt.ToString();
+				}
+				shown = uimanager.instance.TypedInput.Text;
+			}
+			if (shown != null)
+			{//end typed input; the prompt and the answer stay on the scroll
+				uimanager.instance.scroll.FreezeTypedInput(shown);
+				MessageDisplay.QuantityPrompt = 0;
+				MessageDisplay.WaitingForTypedInput = false;
 			}
 		}
 
@@ -1439,6 +1999,10 @@ public partial class main : Node3D
 									uimanager.currentmapnote.notetext = text;
 									uimanager.currentmapnote.textlabel.Text = $"[color=#331C13]{text}[/color]";
 								}
+								else if (UWClass._RES != UWClass.GAME_UW2)
+								{//UW1 beeps at a character it will not take (do_beep(0x12C, 0xA))
+									PcSpeaker.Beep(0x12C, 0xA);
+								}
 								break;
 							}
 
@@ -1452,11 +2016,15 @@ public partial class main : Node3D
 								if (c.Length == 0) break;
 
 								var text = uimanager.currentmapnote.notetext;
-								if (text.Length < automapnote.MaxNoteLength)
-								{
+								if ((text.Length < automapnote.MaxNoteLength) && (uimanager.currentmapnote.posX + NoteFontWidth(text + c) <= 0x13B))
+								{//ManageDungeonMap: not past the map's right edge (x + width at most 0x13B in FONT4X5P)
 									text += c;
 									uimanager.currentmapnote.notetext = text;
 									uimanager.currentmapnote.textlabel.Text = $"[color=#331C13]{text}[/color]";
+								}
+								else if (UWClass._RES != UWClass.GAME_UW2)
+								{//UW1 beeps at a character it will not take (do_beep(0x12C, 0xA))
+									PcSpeaker.Beep(0x12C, 0xA);
 								}
 								break;
 							}
@@ -1486,39 +2054,41 @@ public partial class main : Node3D
 		}
 
 		if (MessageDisplay.WaitingForYesOrNo)
-		{
-			if (@event is InputEventKey keyinput)
+		{//wyorn: only Y and N change the answer; Enter, Escape (No) or a click ends it, the right button alone
+		 //answering yes and the left or both no (the callers' wd_bool(r == 2))
+			bool stop = false;
+			if (@event is InputEventKey keyinput && keyinput.Pressed)
 			{
-				if (keyinput.Pressed)
+				switch (keyinput.Keycode)
 				{
-					bool stop = false;
-					switch (keyinput.Keycode)
-					{
-						case Key.Enter:
-							stop = true;
-							break;
-						case Key.Escape:
-							stop = true;
-							uimanager.instance.TypedInput.Text = "No";
-							MessageDisplay.YesNoOption = "No";
-							break;
-						case Key.Y:
-							uimanager.instance.TypedInput.Text = "Yes";
-							MessageDisplay.YesNoOption = "Yes";
-							break;
-						default:
-							uimanager.instance.TypedInput.Text = "No";
-							MessageDisplay.YesNoOption = "No";
-							break;
-					}
-					if (stop)
-					{//end typed input
-						uimanager.instance.scroll.Clear();
-						MessageDisplay.WaitingForYesOrNo = false;
-						MessageDisplay.YesNoOption = "";
-						cameraPitchGimbal_world.Set("MOVE", true);//re-enable movement
-					}
+					case Key.Enter:
+						stop = true;
+						break;
+					case Key.Escape:
+						stop = true;
+						MessageDisplay.YesNoOption = "No";
+						break;
+					case Key.Y:
+						MessageDisplay.YesNoOption = "Yes";
+						break;
+					case Key.N:
+						MessageDisplay.YesNoOption = "No";
+						break;
 				}
+			}
+			else if (@event is InputEventMouseButton yesNoClick && yesNoClick.Pressed
+				&& (yesNoClick.ButtonIndex == MouseButton.Left || yesNoClick.ButtonIndex == MouseButton.Right))
+			{
+				stop = true;
+				MessageDisplay.YesNoOption = (yesNoClick.ButtonIndex == MouseButton.Right && !Input.IsMouseButtonPressed(MouseButton.Left)) ? "Yes" : "No";
+			}
+			uimanager.instance.TypedInput.Text = MessageDisplay.YesNoOption;
+			if (stop)
+			{//end the question; it and its answer stay on the scroll
+				uimanager.instance.scroll.FreezeTypedInput(MessageDisplay.YesNoText(MessageDisplay.YesNoOption));
+				MessageDisplay.WaitingForYesOrNo = false;
+				MessageDisplay.YesNoOption = "";
+				cameraPitchGimbal_world.Set("MOVE", true);//re-enable movement
 			}
 		}
 	}

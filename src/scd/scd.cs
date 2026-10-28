@@ -15,7 +15,6 @@ namespace Underworld
         public static void ProcessSCDArk(int mode)
         {
             Debug.Print("Starting to process SCU.ARK");
-            ArkHasBeenModified = false;
             if (scd_data == null)
             {
                 scd_data = new UWBlock[0x10];
@@ -56,163 +55,157 @@ namespace Underworld
                 {
                     return;
                 }
-                else
-                {
-                    if (ArkHasBeenModified)
-                    {
-                        Debug.Print("Ark file needs to be saved with new data.");
-                    }
-                    else
-                    {
-                        scd_data[blockno]= null;//simulate discarding of data that is unsaved.
-                    }
-                }
+                //The block stays loaded: scd_data is this game's SCD.ARK as it now stands (the
+                //original writes a changed block back to the save directory's SCD.ARK at once,
+                //Sched_Save), and ScdArkWriter writes it out with the save. Dropping an unchanged
+                //block here used to reload it from the save folder next time, losing what earlier
+                //calls had changed (deleted rows, the levels' clocks and next rows).
             }
         }
 
         /// <summary>
-        /// Special case that is called on xclock 0
+        /// UW2's hour (every 60 checks, 20 minutes of game time): the time of day, X clock 0, steps
+        /// on round its 72 steps, and block 0, the daily schedule, runs up to it (duration_check).
         /// </summary>
-        /// <param name="currentblock"></param>
-        /// <param name="arg0_xclock"></param>
-        /// <param name="NoOfMaps"></param>
-        /// <param name="mode_arg4"></param>
-        /// <returns></returns>
+        public static void AdvanceTimeOfDay()
+        {
+            if (_RES != GAME_UW2)
+            {
+                return;
+            }
+            var time = (playerdat.GetXClock(0) + 1) % 72;
+            playerdat.SetXClock(0, time);
+            scd_data ??= new UWBlock[0x10];
+            if (scd_data[0] == null && !LoadSCDBlock(0))
+            {
+                return;
+            }
+            scd_data[0].Data[2] = 0;
+            ProcessBlock0(scd_data[0].Data, time, 72, 1);
+        }
+
+        static int Word(byte[] block, int offset) => block[offset] | (block[offset + 1] << 8);
+
+        static void SetWord(byte[] block, int offset, int value)
+        {
+            block[offset] = (byte)value;
+            block[offset + 1] = (byte)(value >> 8);
+        }
+
+        //A block as stored in SCD.ARK: the row count (word), the block number, a spare byte, 80
+        //clocks of two words (the time the level has reached, the next row it has not run), then
+        //16-byte rows starting with their time (word).
+        static int Rows(byte[] block) => Word(block, 0);
+        static int ClockTime(byte[] block) => Word(block, 4 + playerdat.dungeon_level * 4);
+        static void SetClockTime(byte[] block, int time) => SetWord(block, 4 + playerdat.dungeon_level * 4, time);
+        static int NextRow(byte[] block) => Word(block, 6 + playerdat.dungeon_level * 4);
+        static void SetNextRow(byte[] block, int row) => SetWord(block, 6 + playerdat.dungeon_level * 4, row);
+        static int RowTime(byte[] block, int row) => Word(block, 324 + row * 16);
+
+        /// <summary>
+        /// Block 0, the time of day: a cyclic clock of NoOfMaps steps (Sched_WrapTime). The time is
+        /// taken modulo the span; when it has wrapped, the level first runs to the end of the day
+        /// and then starts again from 0.
+        /// </summary>
         static int ProcessBlock0(byte[] currentblock, int arg0_xclock, int NoOfMaps, int mode_arg4)
         {
-            Debug.Print($"ProcessBlock0 for {arg0_xclock}");
-            var di = arg0_xclock % NoOfMaps;
-            var var1 = 0;
-            if (currentblock[4 + (playerdat.dungeon_level * 4)] > di)
+            var time = arg0_xclock % NoOfMaps;
+            if (ClockTime(currentblock) > time)
             {
-                Debug.Print($"ProcessBlock0: found valid block to process at {4 + (playerdat.dungeon_level * 4)}");
-                var1 = ProcessGeneralBlock(
-                    currentblock: currentblock,
-                    XClockValue: NoOfMaps - 1,
-                    mode: mode_arg4);
-                if (var1 != 0)
+                var result = ProcessGeneralBlock(currentblock, NoOfMaps - 1, mode_arg4);
+                if (result != 0)
                 {
-                    return var1;
+                    return result;
                 }
-                else
-                {
-                    currentblock[4 + (playerdat.dungeon_level * 4)] = 0;
-                    currentblock[6 + (playerdat.dungeon_level * 4)] = 0;
-                }
+                SetClockTime(currentblock, 0);
+                SetNextRow(currentblock, 0);
             }
-
-            return ProcessGeneralBlock(
-                currentblock: currentblock,
-                XClockValue: di,
-                mode: mode_arg4);
-
+            return ProcessGeneralBlock(currentblock, time, mode_arg4);
         }
 
         /// <summary>
-        /// General Processing of a SCD block.
+        /// Sets the current level's clock on the block to XClockValue and, with mode set, runs the
+        /// rows that fall due (Sched_SetTime). A clock going back starts again from row 0 when
+        /// running, and otherwise only moves the level's next row back.
         /// </summary>
-        /// <param name="currentblock"></param>
-        /// <param name="XClockValue"></param>
-        /// <param name="mode"></param>
-        /// <returns></returns>
         static int ProcessGeneralBlock(byte[] currentblock, int XClockValue, int mode)
         {
-            playerdat.SetXClock(0,0);
-            Debug.Print($"ProcessGeneralBlock xclockvalue {XClockValue}");
-            var si_offset = currentblock[4 + playerdat.dungeon_level * 4];
-            var di = XClockValue;
-            currentblock[4 + (playerdat.dungeon_level * 4)] = (byte)XClockValue;
-            if (si_offset != di)
-            {
-                if (si_offset > di)
-                {
-                    if (mode == 0)
-                    {
-                        return SomethingWithSCDRows_ovr151_D3(mode);//TOOD figure out.
-                    }
-                    else
-                    {
-                        currentblock[6 + (playerdat.dungeon_level * 4)] = 0;
-                        return FindSCDRowsToExecute(currentblock, mode);
-                    }
-                }
-                else
-                {
-                    return FindSCDRowsToExecute(currentblock, mode);
-                }
-            }
-            else
+            var old = ClockTime(currentblock);
+            SetClockTime(currentblock, XClockValue);
+            if (old == XClockValue)
             {
                 return 0;
             }
+            if (old > XClockValue)
+            {
+                if (mode == 0)
+                {
+                    return SetSomeValuesInSCDRows_ovr151_D3(currentblock);
+                }
+                SetNextRow(currentblock, 0);
+            }
+            return FindSCDRowsToExecute(currentblock, mode);
         }
 
-
-        static int SomethingWithSCDRows_ovr151_D3(int mode)
+        /// <summary>
+        /// The clock went back without running: moves the level's next row back to the first row
+        /// after the clock time (SetSomeValuesInSCDRows_ovr151_D3).
+        /// </summary>
+        static int SetSomeValuesInSCDRows_ovr151_D3(byte[] currentblock)
         {
-            Debug.Print("Something with SCD Rows");
+            //(the original starts at the next row itself, which past the last row reads beyond the block)
+            var i = System.Math.Min(NextRow(currentblock), System.Math.Max(Rows(currentblock) - 1, 0));
+            while (i > 0)
+            {
+                if (RowTime(currentblock, i) <= ClockTime(currentblock))
+                {
+                    i++;
+                    break;
+                }
+                i--;
+            }
+            SetNextRow(currentblock, i);
             return 0;
         }
 
         /// <summary>
-        /// Loops event rows to find possible matches to run
+        /// Runs (mode set) or skips the rows from the level's next row up to its clock time
+        /// (FindSCDRowsToExecute_ovr151_0). An event's result: 0 it ran, 4 its row was deleted (so
+        /// the same index is looked at again), 5 nothing to do; anything else stops here and is
+        /// returned. Block 15 is scanned from row 0 every time.
         /// </summary>
-        /// <param name="currentblock"></param>
-        /// <param name="mode"></param>
-        /// <returns></returns>
         static int FindSCDRowsToExecute(byte[] currentblock, int mode)
         {
-            int var1 = 0;
-            Debug.Print("Trying to find SCD Rows to Execute");
-            var si = currentblock[6 + (playerdat.dungeon_level * 4)];
+            var i = NextRow(currentblock);
             if (currentblock[2] == 0xF)
             {
-                si = 0;
+                i = 0;
             }
-
-            while (currentblock[0] > si)
+            while (i < Rows(currentblock))
             {
-                if (currentblock[324 + (si * 16)] <= currentblock[4 + (playerdat.dungeon_level * 4)])
-                {
-                    if (mode != 0)
-                    {
-                        var1 = ProcessSCDEventRow(currentblock, 324 + (si * 16));
-                        switch (var1)
-                        {
-                            case 0:
-                                ArkHasBeenModified = true;
-                                si++;
-                                break;
-                            case 4: //deleted record (do not come here until record deletion is in place!)                                
-                                ArkHasBeenModified = true;
-                                Debug.Print("Deleted Record"); 
-                                si--;                                
-                                break;
-                            case 5:
-                                si++;
-                                break;
-                            default:
-                                currentblock[6 + playerdat.dungeon_level * 4] = si;
-                                return var1;
-                        }
-                    }
-                    else
-                    {
-                        si++;
-                    }
-                }
-                else
+                if (RowTime(currentblock, i) > ClockTime(currentblock))
                 {
                     break;
                 }
+                if (mode != 0)
+                {
+                    var result = ProcessSCDEventRow(currentblock, 324 + (i * 16));
+                    switch (result)
+                    {
+                        case 4://the row deleted itself: the next row has moved into its place
+                            i--;
+                            break;
+                        case 0:
+                        case 5:
+                            break;
+                        default:
+                            SetNextRow(currentblock, i);
+                            return result;
+                    }
+                }
+                i++;
             }
-
-            currentblock[6 + (playerdat.dungeon_level * 4)] = si;
-            // if (scd_data[2] == 0xF)
-            // {
-            //     si = 0;
-            // }
-
+            SetNextRow(currentblock, i);
             return 0;
         }
 

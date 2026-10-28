@@ -80,8 +80,8 @@ namespace Underworld
                         bool ValidMonster = false;
                         int retries = 0;//just in case probability runs against us
                         while ((!ValidMonster) && (retries <= 16))
-                        {
-                            itemid = 0x40 + (Rng.r.Next(0, monsterlevel) & 0x3F);
+                        {//creat_spell: a creature from lvl to 2 * lvl - 1 (kept inside the creature table)
+                            itemid = 0x40 + ((monsterlevel + Rng.r.Next(0, monsterlevel)) & 0x3F);
                             //whichList = ObjectFreeLists.ObjectListType.MobileList;
                             if (
                                 (critterObjectDat.avghit(itemid) == 0)
@@ -162,11 +162,15 @@ namespace Underworld
                         newIndex = ObjectCreator.PrepareNewObject(itemid, ObjectFreeLists.ObjectListType.StaticList);
                     }
                 }
+                if (newIndex == 0)
+                {//no free object on the level
+                    return;
+                }
                 var newObject = UWTileMap.current_tilemap.LevelObjects[newIndex];
                 newObject.tileX = x0 >> 3;
                 newObject.tileY = y0 >> 3;
                 newObject.xpos = (short)(x0 & 7);
-                newObject.ypos = (short)(x0 & 7);
+                newObject.ypos = (short)(y0 & 7);
                 if (newObject.IsStatic)
                 {
                     newObject.quality = 0x3F;

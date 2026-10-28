@@ -16,7 +16,7 @@ namespace Underworld
         /// Accumulated damage caused by Repel undead.
         /// </summary>
         static int RepelUndeadGlobal = 0;
-        public static void CastClass6_SpellsAroundPlayer(int minorclass)
+        public static void CastClass6_SpellsAroundPlayer(int minorclass, uwObject caster)
         {
             CallBacks.AreaEffectCallBack methodtorun = null;
             //These values come from a table in the exe
@@ -62,8 +62,8 @@ namespace Underworld
             }
             else
             {
-                distanceFromCaster = 4;
-                rngProbablity = 2;//these values are always the same in uw1.
+                distanceFromCaster = 4; tileRadius = 2;
+                rngProbablity = Rng.DiceRoll(3, 4);//nail_area: these values are always the same in uw1.
                 switch (minorclass & 0x3F) //the other bits in minorclass define the target type for the area effect spell
                 {
                     case 1: //reveal
@@ -82,50 +82,49 @@ namespace Underworld
             }
             if (methodtorun != null)
             {
-                CallBacks.RunCodeOnTargetsAroundObject(methodtorun, 1, rngProbablity, minorclass & 0xC0, distanceFromCaster, tileRadius);
+                CallBacks.RunCodeOnTargetsAroundObject(methodtorun, caster.index, rngProbablity, minorclass & 0xC0, distanceFromCaster, tileRadius);//around the caster (gronk_area)
             }
         }
 
         /// <summary>
-        /// Casts flamewind in a cross shape around each target tile.
+        /// Flame Wind in UW1 (sp_meteor): one explosion on the square, with its scattered flames, and damage_square kind 1
+        /// on the square and the four next to it.
         /// </summary>
-        /// <param name="x"></param>
-        /// <param name="y"></param>
-        /// <param name="critter"></param>
-        /// <param name="tile"></param>
-        /// <param name="srcIndex"></param>
-        /// <returns></returns>
         public static bool FlameWindUW1(int x, int y, uwObject critter, TileInfo tile, int srcIndex)
         {
-            //centre tile
-            DamageEffectinTile(tile.tileX, tile.tileY, 2, 1);
-
-            //cross shape
-            DamageEffectinTile(tile.tileX + 1, tile.tileY, 2, 1);
-            DamageEffectinTile(tile.tileX - 1, tile.tileY, 2, 1);
-            DamageEffectinTile(tile.tileX, tile.tileY + 1, 2, 1);
-            DamageEffectinTile(tile.tileX, tile.tileY - 1, 2, 1);
+            var boom = SpawnAreaEffect(2, tile);
+            DamageSquare(tile.tileX, tile.tileY, 1, srcIndex);
+            DamageSquare(tile.tileX + 1, tile.tileY, 1, srcIndex);
+            DamageSquare(tile.tileX - 1, tile.tileY, 1, srcIndex);
+            DamageSquare(tile.tileX, tile.tileY + 1, 1, srcIndex);
+            DamageSquare(tile.tileX, tile.tileY - 1, 1, srcIndex);
+            if (boom != null)
+            {
+                animo.SpawnAnimoCopies(boom, tile.tileX, tile.tileY);
+            }
             return true;
         }
 
-
         /// <summary>
-        /// Just spawns a damaging effect in a tile
+        /// build_new_obj: an effect object (animation class animoNo) for the square, at a random height between its
+        /// floor and 0x80.
         /// </summary>
-        /// <param name="tileX"></param>
-        /// <param name="tileY"></param>
-        /// <param name="animoNo">The class index of the animation to play</param>
-        /// <param name="damageClass">Lookup into a table of damage parameters for DamageObjectsInTile</param>
-        private static void DamageEffectinTile(int tileX, int tileY, int animoNo, int damageClass)
+        static uwObject SpawnAreaEffect(int animoNo, TileInfo tile)
+        {
+            var z = tile.floorHeight << 3;
+            if (z < 0x80)
+            {
+                z += Rng.r.Next(0x8000) % (0x80 - z);
+            }
+            return animo.SpawnAnimoInTile(animoNo, 3, 3, (short)z, tile.tileX, tile.tileY);
+        }
+
+        /// <summary>damage_square: every object on the square, by the caster.</summary>
+        static void DamageSquare(int tileX, int tileY, int kind, int srcIndex)
         {
             if (UWTileMap.ValidTile(tileX, tileY))
             {
-                var tile = UWTileMap.current_tilemap.Tiles[tileX, tileY];
-                if (tile.tileType != 0)
-                {
-                    animo.SpawnAnimoInTile(animoNo, 3, 3, (short)(tile.floorHeight << 3), tile.tileX, tile.tileY);
-                    damage.DamageObjectsInTile(tile.tileX, tile.tileY, 1, damageClass);
-                }
+                damage.DamageObjectsInTile(tileX, tileY, srcIndex, kind);
             }
         }
 
@@ -153,23 +152,25 @@ namespace Underworld
                 Debug.Print($"Flamewind on {targetObject.a_name}");
                 isNPC = (targetObject.majorclass == 1);
             }
-            if ((var6 != di) && (si < 5))
-            {//likely a check that the spell is cast once per tile and hits a max of 5 targets
-                if (!isNPC)
-                {
-                    if (Rng.r.Next(3) != 0)
-                    {
-                        return false;
-                    }
-                }
-                DamageEffectinTile(tile.tileX, tile.tileY, 2, 1);
-                if (isNPC)
-                {
-                    si++;
-                }
-                FlameWindGlobal = (di << 4) | (si & 0xF);
+            if ((var6 == di) || (si >= 5))
+            {//never twice in a row on one square, and at most five critters: neither counts as a go (sp_meteor returns 0)
+                return false;
             }
-
+            if (!isNPC && (Rng.r.Next(0x8000) % 3 != 0))
+            {
+                return false;
+            }
+            var boom = SpawnAreaEffect(2, tile);
+            DamageSquare(tile.tileX, tile.tileY, 1, srcIndex);
+            if (boom != null)
+            {//the explosion's scattered flames (fireball_effect)
+                animo.SpawnAnimoCopies(boom, tile.tileX, tile.tileY);
+            }
+            if (isNPC)
+            {
+                si++;
+            }
+            FlameWindGlobal = (di << 4) | (si & 0xF);
             return true;
         }
 
@@ -253,8 +254,9 @@ namespace Underworld
         /// <param name="srcIndex"></param>
         /// <returns></returns>
         public static bool SheetLightning(int x, int y, uwObject targetObject, TileInfo tile, int srcIndex)
-        {
-            DamageEffectinTile(tile.tileX, tile.tileY, 5, 2);
+        {//sp_sheet_light: a lightning effect and damage_square kind 2
+            SpawnAreaEffect(5, tile);
+            DamageSquare(tile.tileX, tile.tileY, 2, srcIndex);
             return true;
         }
 

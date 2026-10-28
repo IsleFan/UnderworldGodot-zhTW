@@ -84,6 +84,23 @@ namespace Underworld
         public static void DrawAutoMap(int level, int worldno)
         {
             uimanager.CurrentGameMode = GameModes.AUTOMAP;
+            if (UWClass._RES == UWClass.GAME_UW2)
+            {//ShowDungeonMap: the effects stop while the map is up
+                UWsoundeffects.KillAllEffects();
+            }
+            if ((UWClass._RES != UWClass.GAME_UW2) && (level > MapsPerWorld))
+            {//past the last level (ChangeAutoMapLevel loads nothing): a blank map with its number
+                foreach (var child in instance.NotesPanel.GetChildren())
+                {
+                    child.QueueFree();
+                }
+                instance.AutomapImage.Texture = null;
+                instance.AutomapNumberLabel.Text = $"{level + 1}";
+                EnableDisable(instance.AutomapPanel, true);
+                automap.currentautomap = level;
+                automap.currentworld = worldno;
+                return;
+            }
             int blockno = GetAutomapBlock(ref level, worldno);
             Debug.Print($"Displaying automap {blockno}");
             if (automap.automaps[blockno] == null)
@@ -94,6 +111,13 @@ namespace Underworld
             {
                 return;
             }
+            //the map is drawn on the whole 320x200 screen, as the original draws it on the blank map
+            instance.AutomapImage.FlipV = false;
+            instance.AutomapImage.ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize;
+            instance.AutomapImage.StretchMode = TextureRect.StretchModeEnum.Scale;
+            instance.AutomapImage.TextureFilter = CanvasItem.TextureFilterEnum.Nearest;
+            instance.AutomapImage.Position = Vector2.Zero;
+            instance.AutomapImage.Size = new Vector2(1280, 800);
             instance.AutomapImage.Texture = AutomapRender.MapImage(blockno);
             instance.AutomapNumberLabel.Text = $"{level + 1}";
             EnableDisable(instance.AutomapPanel, true);
@@ -124,7 +148,10 @@ namespace Underworld
                     {
                         if (i != 0)
                         {
-                            if (playerdat.HasWorldBeenVisited(i - 1))
+                            //slot i is drawn with gem part worldmappingVisited[i], whose visited bit is part number = world - 1;
+                            //slots 6 and 7 hold worlds 7 and 6 (show_gem_parts)
+                            var slotworld = i == 6 ? 7 : (i == 7 ? 6 : i);
+                            if (playerdat.HasWorldBeenVisited(slotworld - 1))
                             {
                                 instance.AutomapWorldGem[i].Texture = grGempt.LoadImageAt(worldmappingVisited[i]);
                             }
@@ -202,6 +229,11 @@ namespace Underworld
                 CurrentAutomapAction = automapactions.NONE;
                 EnableDisable(AutomapPanel, false);
                 uimanager.CurrentGameMode = GameModes.GAME;
+                if (UWClass._RES == UWClass.GAME_UW2)
+                {//ExitAutoMap remembers the level shown
+                    var level = automap.currentautomap;
+                    playerdat.map_scrap = (byte)(GetAutomapBlock(ref level, automap.currentworld) + 1);
+                }
                 if (UWClass._RES != UWClass.GAME_UW2)
                 {
                     if (playerdat.play_drawn == 1)
@@ -242,7 +274,8 @@ namespace Underworld
                 {
                     return;//don't do anything while writing.
                 }
-                var newlevel = Math.Min(MapsPerWorld, automap.currentautomap + 1);
+                //UW1's arrows go on to level 0x63, the maps past the dungeon's blank
+                var newlevel = Math.Min(UWClass._RES == UWClass.GAME_UW2 ? MapsPerWorld : 0x62, automap.currentautomap + 1);
                 if (newlevel != automap.currentautomap)
                 {
                     DrawAutoMap(newlevel, automap.currentworld);
@@ -289,13 +322,28 @@ namespace Underworld
                         {
                             return;//don't allow writing on the right hand side near ui elements.
                         }
+                        if ((UWClass._RES != UWClass.GAME_UW2) && (automap.currentautomap > MapsPerWorld))
+                        {
+                            return;//the blank maps past the dungeon have no notes here
+                        }
+                        {
+                            var level = automap.currentautomap;
+                            var notes = automapnote.automapsnotes[GetAutomapBlock(ref level, automap.currentworld)];
+                            if (notes != null && notes.NoOfNotes >= 100)
+                            {
+                                return;//a map holds at most 100 notes (ManageDungeonMap)
+                            }
+                        }
                         //start writing
                         CurrentAutomapAction = automapactions.WRITING;
                         uimanager.instance.mousecursor.SetCursorToCursor(12);
                                                 
                         Debug.Print($"Begin writing at {eventMouseButton.Position.X / 4},{eventMouseButton.Position.Y / 4}");
-                        writingX = (int)(-1 + (eventMouseButton.Position.X / 4));
-                        writingY = (int)(195 - (eventMouseButton.Position.Y / 4));                        
+                        //ManageDungeonMap: the note starts at the click (note.x = mx) with its top 4 rows above it
+                        //(note.y = my + 4), in the screen's coordinates (y counted up from the bottom), the ones the map is
+                        //drawn in
+                        writingX = (int)((AutomapImage.Position.X + eventMouseButton.Position.X) / 4);
+                        writingY = (int)(199 - ((AutomapImage.Position.Y + eventMouseButton.Position.Y) / 4)) + 4;
                         currentmapnote = new automapnote.mapnotetext("", writingX, writingY);                                          
                         currentmapnote.textlabel =  RichTextLabelMapNote.AddAutoMapNoteToScreen(currentmapnote);
                         break;

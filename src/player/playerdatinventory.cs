@@ -665,15 +665,54 @@ namespace Underworld
         /// <param name="objIndex"></param>
         /// <param name="updateUI"></param>
         /// <param name="RemoveNext"></param>
-        /// <returns></returns>
+        /// <returns>The world index, or 0 when the level has no free static objects for it and its contents (nothing is changed)</returns>
         public static int AddInventoryObjectToWorld(int objIndex, bool updateUI, bool RemoveNext, bool DestroyInventoryObject = true, bool ClearLink = true)
+        {
+            //Carried objects take no level objects here (the original keeps them in the level list), so the whole
+            //chain needs free static objects before anything moves. Short of them, garbage collect as Obj_Alloc would.
+            var needed = CountInventoryObjects(objIndex, RemoveNext);
+            while (UWTileMap.current_tilemap.StaticFreeListPtr + 1 < needed)
+            {
+                if (ObjectRemover_OLD.GarbageCollect(range: 3, count: 10) == 0)
+                {
+                    Debug.Print($"No free objects to move {InventoryObjects[objIndex].a_name} to the world");
+                    return 0;
+                }
+            }
+            return MoveInventoryObjectToWorld(objIndex, updateUI, RemoveNext, DestroyInventoryObject, ClearLink);
+        }
+
+        /// <summary>
+        /// How many objects the inventory object takes with its contents (and the objects after it when includeNext)
+        /// </summary>
+        static int CountInventoryObjects(int objIndex, bool includeNext)
+        {
+            var count = 0;
+            while (objIndex != 0)
+            {
+                var obj = InventoryObjects[objIndex];
+                count++;
+                if (obj.link != 0 && obj.is_quant == 0)
+                {
+                    count += CountInventoryObjects(obj.link, true);
+                }
+                if (!includeNext)
+                {
+                    break;
+                }
+                objIndex = obj.next;
+            }
+            return count;
+        }
+
+        static int MoveInventoryObjectToWorld(int objIndex, bool updateUI, bool RemoveNext, bool DestroyInventoryObject = true, bool ClearLink = true)
         {
             var oldObj = InventoryObjects[objIndex];
 
             // recursively add linked/next objects to the world first. Updating oldobj so that its link/next is pointing to the world
             if (oldObj.link != 0 && oldObj.is_quant == 0)
             {
-                oldObj.link = (short)AddInventoryObjectToWorld(
+                oldObj.link = (short)MoveInventoryObjectToWorld(
                     objIndex: oldObj.link,
                     updateUI: false,
                     RemoveNext: true,
@@ -683,7 +722,7 @@ namespace Underworld
             }
             if (oldObj.next != 0 && RemoveNext)
             {
-                oldObj.next = (short)AddInventoryObjectToWorld(
+                oldObj.next = (short)MoveInventoryObjectToWorld(
                     objIndex: oldObj.next,
                     updateUI: false,
                     RemoveNext: true,
@@ -814,7 +853,8 @@ namespace Underworld
         /// <returns></returns>
         public static bool CanCarryWeight(uwObject obj)
         {
-            if (playerdat.WeightMax >= playerdat.WeightCarried + (commonObjDat.mass(obj.item_id) * obj.ObjectQuantity))
+            //EncumCheck: the object's weight with everything in it (ItemWeight)
+            if (playerdat.WeightMax >= playerdat.WeightCarried + container.GetTotalMass(obj, UWTileMap.current_tilemap.LevelObjects, true))
             {
                 return true; //playerdat can carry weight.
             }
@@ -831,7 +871,7 @@ namespace Underworld
         /// <returns></returns>
         public static bool CanCarryWeight(int item_id)
         {
-            if (playerdat.WeightCapacity > playerdat.WeightCarried + commonObjDat.mass(item_id))
+            if (playerdat.WeightMax >= playerdat.WeightCarried + commonObjDat.mass(item_id))//EncumCheck: fails only past the maximum
             {
                 return true; //playerdat can carry weight.
             }
@@ -851,11 +891,11 @@ namespace Underworld
             {
                 uimanager.BackPackIndices[s]=-1;
             }
-            for (int s=0;s<18;s++)
-            {
+            for (int s=0;s<=18;s++)
+            {//every paperdoll and backpack slot, 0 to 18
                 SetInventorySlotListHead(s,0);
             }
-            for (int i = 0; i<InventoryObjects.GetUpperBound(0);i++)
+            for (int i = 0; i<=InventoryObjects.GetUpperBound(0);i++)
             {
                 var obj = InventoryObjects[i];
                 if (obj!=null)
@@ -864,6 +904,7 @@ namespace Underworld
                     {
                         pdat[obj.PTR+b] = 0;
                     }
+                    InventoryObjects[i] = null;
                 }
             }
             uimanager.UpdateInventoryDisplay();

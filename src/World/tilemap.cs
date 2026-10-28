@@ -334,7 +334,6 @@ namespace Underworld
             }
 
 
-            playerdat.previousMazeNavigation = false;//to force maze navigation to reset on level load.
 
             playerdat.PlayerStatusUpdate();
 

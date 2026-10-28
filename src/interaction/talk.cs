@@ -73,7 +73,10 @@ namespace Underworld
             {
                 //a wisp, which is a static object in UW2
                 var wisp = SpawnTemporaryTalker(whoami: 48, tileX: playerdat.playerObject.tileX, tileY: playerdat.playerObject.tileY);
-                ConversationVM.StartConversation(wisp);
+                if (wisp != null)
+                {
+                    ConversationVM.StartConversation(wisp);
+                }
             }
 
             else
@@ -196,6 +199,10 @@ namespace Underworld
                 tileX: tileX, tileY: tileY,
                 xpos: 0, ypos: 0, zpos: 0,
                 WhichList: ObjectFreeLists.ObjectListType.MobileList);
+            if (temporaryTalker == null)
+            {//no free object on the level
+                return null;
+            }
             temporaryTalker.npc_whoami = (short)whoami;
             temporaryTalker.npc_attitude = (short)attitude;
             temporaryTalker.npc_goal = (byte)goal;

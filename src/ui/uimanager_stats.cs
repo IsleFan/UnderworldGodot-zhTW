@@ -132,7 +132,12 @@ namespace Underworld
 			instance.StatsValue.Text = "";
 			for (int s = 0; s < 6; s++)
 			{
-				if ((StatsOffset == 0) && (s == 0))
+				if (UWClass._RES != UWClass.GAME_UW2)
+				{//UW1 has no skill point row: row s is skill StatsOffset + s
+					instance.StatsName.Text += $"[color={SkillsFontColor}]{GameStrings.GetDisplayString(2, 31 + StatsOffset + s).ToUpper()}[/color]\n";
+					instance.StatsValue.Text += $"[right][color={SkillsFontColor}]{playerdat.GetSkillValue(StatsOffset + s)}[/color][/right]\n";
+				}
+				else if ((StatsOffset == 0) && (s == 0))
 				{
 					//display training points
 					instance.StatsName.Text = $"[color={SkillsFontColor}]{(ZhText.Enabled ? ZhText.Compose("技能點") : "Skill Pt")}[/color]\n";
@@ -158,7 +163,7 @@ namespace Underworld
 						RefreshStatsDisplay();
 						break;
 					case 1:
-						StatsOffset = Math.Min(15, StatsOffset + 1);
+						StatsOffset = Math.Min(UWClass._RES == UWClass.GAME_UW2 ? 15 : 14, StatsOffset + 1);//UW1 shows skills 0-19 six at a time
 						RefreshStatsDisplay();
 						break;
 				}

@@ -25,7 +25,7 @@ namespace Underworld
         {
             get
             {
-                return $"Use {GameStrings.GetObjectNounUW(itemBeingUsed.item_id, 0)} on?";
+                return $"Use {GameStrings.GetName(itemBeingUsed.item_id, article: false, plural: false)} on what?";//UseThing
             }
         }
 
@@ -71,16 +71,7 @@ namespace Underworld
             {
                 targetobjList = playerdat.InventoryObjects;
             }
-            //Check for use trigger on this action and try activate if so.
-            trigger.TriggerObjectLink
-            (
-                character: 1,
-                ObjectUsed: ObjectUsed,
-                triggerType: (int)triggerObjectDat.triggertypes.USE,
-                triggerX: ObjectUsed.tileX,
-                triggerY: ObjectUsed.tileY,
-                objList: targetobjList
-            );
+            //(the original's two-object uses fire no use triggers on the target; a pole on a switch uses the switch itself)
 
             //Clear the cursor icons
             CurrentItemBeingUsed = null;
@@ -94,6 +85,14 @@ namespace Underworld
         {
             switch (objInHand.minorclass)
             {
+                case 0:
+                    {
+                        if ((objInHand.classindex >= 2) && (objInHand.classindex <= 6))
+                        {//skulls and bones
+                            return bones.UseOn(objInHand, targetObject, WorldObject);
+                        }
+                        break;
+                    }
                 case 1:
                     {//some misc items                    
                         switch (objInHand.classindex)
@@ -125,30 +124,14 @@ namespace Underworld
         {
             switch (objInHand.minorclass)
             {
-                case 0: //keys up to 0xE
+                case 0: //UseKey: the lockpick (0x101) picks, every item below the lock (0x10F) is a key matched by its owner
                     {
-                        if (_RES == GAME_UW2)
+                        switch (objInHand.classindex)
                         {
-                            switch (objInHand.classindex)
-                            {
-                                case 0:
-                                case 1:
-                                    //LOCKPICK and curious implement.
-                                    return lockpick.UseOn(objInHand, targetObject);
-                                case > 1 and < 0xE://keys
-                                    return doorkey.UseOn(objInHand, targetObject);
-                            }
-                        }
-                        else
-                        {
-                            switch (objInHand.classindex)
-                            {
-                                case 0:
-                                case > 1 and < 0xE://keys
-                                    return doorkey.UseOn(objInHand, targetObject);
-                                case 1://lockpick
-                                    return lockpick.UseOn(objInHand, targetObject);
-                            }
+                            case 1:
+                                return lockpick.UseOn(objInHand, targetObject, WorldObject);
+                            case < 0xF:
+                                return doorkey.UseOn(objInHand, targetObject, WorldObject);
                         }
                         break;
                     }
@@ -190,7 +173,7 @@ namespace Underworld
                                 }
                             case 0xD://oil flask
                                 {
-                                    return oilflask.UseOn(objInHand, targetObject);
+                                    return oilflask.UseOn(objInHand, targetObject, WorldObject);
                                 }
                         }
                         break;

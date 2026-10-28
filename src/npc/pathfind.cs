@@ -104,14 +104,8 @@ namespace Underworld
             var var12 = Path5859.Path5859_Records[0x40];
 
             PathFindingData49.pathfindmap49 = new byte[0x5000];
+            //UW2's test for 10 (world 0 and a level within the world of 0) can never pass, so the reach is always 5
             var LikelyPathFindRange_var22 = 5;
-            if (_RES == GAME_UW2)
-            {
-                if (worlds.GetWorldNo(playerdat.dungeon_level) == 0)
-                {
-                    LikelyPathFindRange_var22 = 0xA;
-                }
-            }
 
             int X1_var6;
             int Y1_var8;
@@ -290,7 +284,7 @@ namespace Underworld
             //seg006_1413_1C83:
             MaybePathPathLength_var1D = 1;
             //seg006_1413_1F52: 
-            while ((MaybePathPathLength_var1D < 0x28) && (NoOfStepsIndex_var13 > 0))
+            while ((MaybePathPathLength_var1D < (_RES == GAME_UW2 ? 0x28 : 0x20)) && (NoOfStepsIndex_var13 > 0))//UW1 searches 32 steps
             {
                 //seg006_1413_1C8A:
                 Counter_var14 = 0;
@@ -515,7 +509,7 @@ namespace Underworld
                 {
                     if ((tile3type >= 6) && (tile3type <= 9))
                     {
-                        var idx = ((tile3_X_arg8 - tile2_X_arg4) * 3) - (tile3_Y_argA - tile2_Y_arg6); // should only return 1,-1 (yaxis), 3,-3(xaxis) in a cross pattern
+                        var idx = ((tile3_X_arg8 - tile2_X_arg4) * 3) + (tile3_Y_argA - tile2_Y_arg6); // path_turns[dx + 1][dy + 1]: 1,-1 (yaxis), 3,-3(xaxis) in a cross pattern
                         var bx = TilePathingFlags[4 + idx];//This may be wrong!
                         if (SlopePathingTypes[bx] != tile3type)
                         {
@@ -632,10 +626,10 @@ namespace Underworld
                         if ((obj.majorclass == 5) && (obj.minorclass == 0) && (obj.classindex < 8))
                         {
                             // is a closed door
-                            if (door.CharacterDoorLockAndKeyInteraction(critter, obj, 0) == 0)
-                            {
+                            if ((_RES != GAME_UW2) || (a_lock.CheckLock(critter, obj, 0) == 0))
+                            {//UW1 tests every closed door, UW2 only a locked one (checkLock 0)
                                 //seg006_1413_1216:
-                                var DoorHeading_var22 = obj.heading;
+                                var DoorHeading_var22 = obj.heading & 3;
                                 var DoorXPos_var23 = obj.xpos;
                                 var DoorYPos_var24 = obj.ypos;
                                 if (TestedDoors_var21 == false)
@@ -850,7 +844,7 @@ namespace Underworld
                                             }
                                             else
                                             {
-                                                if (DoorXPos_var23 == 1)
+                                                if (DoorHeading_var22 == 1)
                                                 {
                                                     return false;
                                                 }
@@ -907,7 +901,7 @@ namespace Underworld
                         //seg006_1413_14CC:
                         if ((tile3type >= 6) && (tile3type <= 9))
                         {
-                            var idx = ((tile3_X_arg8 - tile2_X_arg4) * 3) - (tile3_Y_argA - tile2_Y_arg6);
+                            var idx = ((tile3_X_arg8 - tile2_X_arg4) * 3) + (tile3_Y_argA - tile2_Y_arg6);//path_turns[dx + 1][dy + 1]
                             var bx = TilePathingFlags[4 + idx];//This may be wrong!
                             if (SlopePathingTypes[bx] != tile3type)
                             {
@@ -956,7 +950,7 @@ namespace Underworld
                                     {
                                         arg12 = TallestHeight_Tile2_3_var14;
                                     }
-                                    PathDistanceResult_arg16 = TallestHeight_Tile1_2_var13 - arg12 - 1;
+                                    PathDistanceResult_arg16 += TallestHeight_Tile1_2_var13 - arg12 - 1;//the drops add up along the path
                                     if (PathDistanceResult_arg16 > MaybeMaxTravelDistance_dseg_67d6_2272)
                                     {
                                         return false;
@@ -986,13 +980,13 @@ namespace Underworld
                                     return false;
                                 }
                                 //seg006_1413_1606:
-                                if (
-                                    ((argE & (8 << tile3terrain)) != 0)
-                                    &&
-                                    (PathDistanceResult_arg16 + 2 >= MaybeMaxTravelDistance_dseg_67d6_2272)
-                                    )
-                                {
-                                    return false;
+                                if ((argE & (8 << tile3terrain)) != 0)
+                                {//a costly terrain adds 2
+                                    PathDistanceResult_arg16 += 2;
+                                    if (PathDistanceResult_arg16 >= MaybeMaxTravelDistance_dseg_67d6_2272)
+                                    {
+                                        return false;
+                                    }
                                 }
 
                                 //seg006_1413_162C:
@@ -1028,13 +1022,13 @@ namespace Underworld
                                     var18 == false
                                     )
                                 {
-                                    //seg006_1413:169E
-                                    if ((argC & (8 << tile3terrain)) == 0)
+                                    //seg006_1413:169E: leaving a forbidden terrain, not into more of it
+                                    if ((argC & (8 << tile3terrain)) != 0)
                                     {
                                         return false;
                                     }
-                                    //seg006_1413_16AF
-                                    if ((argE & (8 << tile3terrain)) == 0)
+                                    //seg006_1413_16AF: into a costly one adds 2
+                                    if ((argE & (8 << tile3terrain)) != 0)
                                     {
                                         PathDistanceResult_arg16 += 2;
                                         if (PathDistanceResult_arg16 > MaybeMaxTravelDistance_dseg_67d6_2272)
@@ -1113,7 +1107,7 @@ namespace Underworld
                         {
                             //seg006_1413_1076:
                             arg12 = TallestHeight_Tile2_3_var14;
-                            PathDistanceResult_arg16 = ProbablyHeight_arg10 - arg12 - 1;
+                            PathDistanceResult_arg16 += ProbablyHeight_arg10 - arg12 - 1;//the drops add up along the path
                             if (PathDistanceResult_arg16 > MaybeMaxTravelDistance_dseg_67d6_2272)
                             {
                                 return false;
@@ -1330,7 +1324,7 @@ namespace Underworld
                     {
                         return 0;
                     }
-                } while ((xVar3 != targetX) && (yVar4 != targetY));
+                } while ((xVar3 != targetX) || (yVar4 != targetY));//beeline: until both reach the end
 
                 //seg006_1413:225C
                 var Step1 = FinalPath56.finalpath[Pathfind.MaybePathIndexOrLength_dseg_67d6_225A];

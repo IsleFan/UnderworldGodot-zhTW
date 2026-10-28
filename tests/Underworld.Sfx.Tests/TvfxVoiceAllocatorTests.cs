@@ -20,6 +20,27 @@ public class TvfxVoiceAllocatorTests
     }
 
     [Fact]
+    public void Note_off_releases_only_the_voices_of_its_slot()
+    {
+        // kill_effect sends a note off for one effect slot; kill_all_effects for every one (slot -1).
+        var a = new TvfxVoiceAllocator();
+        var p = SyntheticPatch.Build(0xFFFF, 0x8000);
+        var water = a.Allocate()!;
+        water.StartKeyon(p, lifetimeTicks: -1);
+        water.Slot = 0;
+        var step = a.Allocate()!;
+        step.StartKeyon(p, lifetimeTicks: -1);
+        step.Slot = 1;
+
+        a.NoteOff(0);
+        Assert.Equal(TvfxPhase.Release, water.Phase);
+        Assert.Equal(TvfxPhase.Keyon, step.Phase);
+
+        a.NoteOff(-1);
+        Assert.Equal(TvfxPhase.Release, step.Phase);
+    }
+
+    [Fact]
     public void Allocate_returns_distinct_channels_until_saturated()
     {
         var a = new TvfxVoiceAllocator();

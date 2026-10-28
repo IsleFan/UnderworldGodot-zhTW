@@ -275,6 +275,51 @@ namespace Underworld
                         set_sequence();
                         break;
                     }
+                case "plural":
+                    {
+                        plural();
+                        break;
+                    }
+                case "append":
+                    {
+                        append();
+                        break;
+                    }
+                case "copy":
+                    {
+                        copy();
+                        break;
+                    }
+                case "find":
+                    {
+                        find();
+                        break;
+                    }
+                case "val":
+                    {
+                        val();
+                        break;
+                    }
+                case "add_to_npc_inv":
+                    {
+                        add_to_npc_inv(talker);
+                        break;
+                    }
+                case "end_barter":
+                    {
+                        end_barter();
+                        break;
+                    }
+                case "say":
+                    {//npc_say
+                        yield return say_op(GetConvoStackValueAtPtr(stack + stackptr - 1));
+                        break;
+                    }
+                case "respond":
+                    {//play_respond
+                        yield return say_op(GetConvoStackValueAtPtr(stack + stackptr - 1), PC_SAY);
+                        break;
+                    }
                 default:
                     {                       
                         Debug.Print($"Unimplemented {func.importname}"); break;

@@ -51,9 +51,36 @@ namespace Underworld
         /// Player has to type an input string
         /// </summary>
         public static bool WaitingForTypedInput = false;
+        /// <summary>wdialog's negative position: the offered text is still untouched, and the first character typed replaces it.</summary>
+        public static bool TypedInitialPending = false;
 
         public static bool WaitingForYesOrNo = false;
         public static string YesNoOption = "Yes";
+
+        /// <summary>
+        /// The stack a "Move how many?" prompt is for (AskHowMany), 0 for other typed input: a click answers it, the left
+        /// button with one, the right with the whole stack, both with none.
+        /// </summary>
+        public static int QuantityPrompt = 0;
+
+        /// <summary>Yes or No as the scroll shows it.</summary>
+        public static string YesNoText(string option) => ZhText.Enabled ? (option == "Yes" ? "是" : "否") : option;
+
+        /// <summary>
+        /// Writes the answer into the prompt's line for good (wd_bool, wd_replace): the question and its answer stay on the
+        /// scroll, as the original prints them into it.
+        /// </summary>
+        public void FreezeTypedInput(string answer)
+        {
+            for (int i = 0; i <= Lines.GetUpperBound(0); i++)
+            {
+                if (Lines[i].LineText.Contains("{TYPEDINPUT}"))
+                {
+                    Lines[i].SetLine(Lines[i].LineText.Replace("{TYPEDINPUT}|", answer).Replace("{TYPEDINPUT}", answer), Lines[i].OptionNo);
+                }
+            }
+            UpdateMessageDisplay();
+        }
 
         public RichTextLabel[] OutputControl;
 
@@ -116,11 +143,13 @@ namespace Underworld
         private IEnumerator AddLineWithMore(string newText, int Option, int Colour = 0)
         {
             if (newText.Trim() == "") { yield return 0; }
+            //[MORE] is drawn in UW2's colour 0x12 (scroll_more); UW1's 0x60 is \3, the colour it is given
+            var colourCode = (newText == "[MORE]" && UWClass._RES == UWClass.GAME_UW2) ? PaletteLoader.ToBBCode(0, 0x12) : ScrollColour(Colour);
             if (newText == "[MORE]" && ZhText.Enabled)
             {//shown in the Chinese font, the size of the text around it; "[MORE]" stays the marker AddText and AddLine split on
                 newText = ZhText.Compose("［繼續］");
             }
-            newText = $"[color={ScrollColour(Colour)}]{newText}[/color]";
+            newText = $"[color={colourCode}]{newText}[/color]";
             if (LinePtr <= Lines.GetUpperBound(0))
             {
                 Lines[LinePtr++].SetLine(newText, Option);
@@ -203,7 +232,7 @@ namespace Underworld
             if (MessageDisplay.WaitingForYesOrNo)
             {
                 uimanager.instance.TypedInput.Text = MessageDisplay.YesNoOption;
-                output = output.Replace("{TYPEDINPUT}", ZhText.Enabled ? (MessageDisplay.YesNoOption == "Yes" ? "是" : "否") : MessageDisplay.YesNoOption);
+                output = output.Replace("{TYPEDINPUT}", YesNoText(MessageDisplay.YesNoOption));
             }
             else
             {
@@ -286,6 +315,17 @@ namespace Underworld
             return words;
         }
 
+        const string PauseLong = "\u0001";//\p
+        const string PauseShort = "\u0002";//\P
+        static readonly System.Text.RegularExpressions.Regex ColourCode = new(@"\\([0-6])");
+
+        /// <summary>
+        /// Prints text to the scroll (scroll_print), wrapping it at Columns and splitting it at newlines. The original's
+        /// escapes: \m shows [MORE]; \0 to \6 change the colour (from the line they are on); \p waits 600 ticks and
+        /// \P 200, or until a key or click, and the text then goes on along the same line. A message shows Rows lines
+        /// before a [MORE] (the lines on screen before it may scroll away unseen, the message's own may not), and Rows - 1
+        /// after each one. A line that starts in the message's final piece may take one more (scroll_print3's flag 0).
+        /// </summary>
         public IEnumerator AddText(string newText, int option = -1, int colour = 0)
         {
             if (newText.EndsWith("\n"))
@@ -293,58 +333,131 @@ namespace Underworld
                 newText = newText.Substring(0, newText.Length - 1);
             }
             int NoOfRowsNeeded = 0;
+            int limit = Rows;
+            //the visible characters (not counting spaces) still to show, and those of the final piece
+            int unshown = NonSpace(newText);
+            int finalPiece = NonSpace(newText.Substring(FinalPieceStart(newText)));
+            int lastLineCount = 0;
             //split by new lines
-            newText = newText.Replace("\\m", " [MORE] ");
+            newText = newText.Replace("\\m", " [MORE] ").Replace("\\p", $" {PauseLong} ").Replace("\\P", $" {PauseShort} ");
             var TextLines = newText.Split('\n');
-            foreach (var textline in TextLines)
+            foreach (var rawline in TextLines)
             {//then split by whitespace into words, and Chinese into characters
-                var Words = Tokenise(textline, out var Seps);
-                bool firstWord = false;//Always add the first word.
-                string LineToAdd = "";
-                float length = 0;
-                int WordPtr = 0;
-                for (WordPtr = 0; WordPtr < Words.Count; WordPtr++)
+                var textline = ColourCode.Replace(rawline, m =>
                 {
-                    if (NoOfRowsNeeded >= Rows - 1)
-                    {//To force a [more] to appear when text is longer than the control
-                        yield return AddLine(newText: "[MORE]", Option: -1, Colour: ConversationVM.UI_SAY, ForceMore: true);
-                        NoOfRowsNeeded = 0;
-                    }
-                    bool AddNewLine = false;
-                    length = Width(LineToAdd);
-                    if (!firstWord)
+                    colour = m.Groups[1].Value[0] - '0';
+                    return "";
+                });
+                var Words = Tokenise(textline, out var Seps);
+                string LineToAdd = "";
+                bool shown = false;//the start of LineToAdd is on screen already (it was shown before a pause)
+                for (int WordPtr = 0; WordPtr < Words.Count; WordPtr++)
+                {
+                    var word = Words[WordPtr];
+                    if (word == PauseLong || word == PauseShort)
                     {
-                        LineToAdd = Words[WordPtr] + Seps[WordPtr];
-                        firstWord = true;
-                    }
-                    else
-                    {
-                        while (WordPtr < Words.Count && AddNewLine == false)
+                        if (LineToAdd.Trim() != "")
                         {
-                            AddNewLine = false;
-                            if (length + Width(Words[WordPtr]) <= Columns)
-                            {//space to add next word
-                                LineToAdd += Words[WordPtr] + Seps[WordPtr];
-                                WordPtr++;
-                            }
-                            else
-                            {
-                                AddNewLine = true;
-                                yield return AddLine(newText: LineToAdd, Option: option, Colour: colour);
-                                NoOfRowsNeeded++;
-                                LineToAdd = Words[WordPtr] + Seps[WordPtr]; //new word. new line.
-                            }
-                            length = Width(LineToAdd);
-                        }//end while
+                            yield return EmitLine(LineToAdd, shown);
+                            shown = true;
+                        }
+                        yield return ScrollWait(word == PauseLong ? 600 : 200);
+                        continue;
                     }
-                }//end loop
-                if (LineToAdd != "")
+                    if ((LineToAdd != "") && (Width(LineToAdd) + Width(word) > Columns))
+                    {//no space for the next word: new line
+                        yield return EmitLine(LineToAdd, shown);
+                        shown = false;
+                        LineToAdd = "";
+                    }
+                    LineToAdd += word + Seps[WordPtr];
+                }
+                if (LineToAdd.Trim() != "")
                 {//Store remaining data
-                    NoOfRowsNeeded++;
-                    yield return AddLine(newText: LineToAdd, Option: option, Colour: colour);
+                    yield return EmitLine(LineToAdd, shown);
                 }
             }
             yield return 0;
+
+            //Shows a line, or completes the one shown before a pause, with a [MORE] first when the message has
+            //shown as many lines as it may.
+            IEnumerator EmitLine(string line, bool replace)
+            {
+                if (replace && LinePtr > 0)
+                {
+                    var last = System.Math.Min(LinePtr, Rows) - 1;
+                    Lines[last].SetLine($"[color={ScrollColour(colour)}]{line}[/color]", option);
+                    UpdateMessageDisplay();
+                    unshown -= NonSpace(line) - lastLineCount;
+                    lastLineCount = NonSpace(line);
+                    yield break;
+                }
+                if (NoOfRowsNeeded >= limit + (unshown <= finalPiece ? 1 : 0))
+                {//To force a [more] to appear when text is longer than the control
+                    yield return AddLine(newText: "[MORE]", Option: -1, Colour: ConversationVM.UI_SAY, ForceMore: true);
+                    NoOfRowsNeeded = 0;
+                    limit = Rows - 1;
+                }
+                yield return AddLine(newText: line, Option: option, Colour: colour);
+                NoOfRowsNeeded++;
+                lastLineCount = NonSpace(line);
+                unshown -= lastLineCount;
+                if (line.Contains("[MORE]"))
+                {//a \m: the lines after it start a new count
+                    NoOfRowsNeeded = 1;
+                    limit = Rows - 1;
+                }
+            }
+        }
+
+        static readonly System.Text.RegularExpressions.Regex Escape = new(@"\\[mpP0-6]");
+
+        /// <summary>
+        /// The characters of text the scroll shows, not counting spaces (a [MORE] and the escapes do not count).
+        /// </summary>
+        static int NonSpace(string text)
+        {
+            var n = 0;
+            foreach (var c in Escape.Replace(text, "").Replace("[MORE]", ""))
+            {
+                if (!char.IsWhiteSpace(c))
+                {
+                    n++;
+                }
+            }
+            return n;
+        }
+
+        /// <summary>
+        /// Where the final piece of a message starts: scroll_print cuts it into chunks of at most 49 characters at
+        /// spaces, then scroll_print1 at each backslash and scroll_print2 after each newline, and only the last piece
+        /// is printed with flag 0.
+        /// </summary>
+        public static int FinalPieceStart(string text)
+        {
+            int start = 0;
+            while (text.Length - start > 0x31)
+            {
+                var space = text.LastIndexOf(' ', start + 0x30, 0x31);
+                start += space > start ? space - start : 0x31;
+            }
+            start = System.Math.Max(start, text.LastIndexOf('\\'));
+            return System.Math.Max(start, text.LastIndexOf('\n') + 1);
+        }
+
+        /// <summary>
+        /// scroll_wait: holds the scroll for ticks of the 1/256 s clock, or until a key or click (which the [MORE]
+        /// handling in main takes, as for [MORE]).
+        /// </summary>
+        public static IEnumerator ScrollWait(int ticks)
+        {
+            WaitingForMore = true;
+            var end = Time.GetTicksMsec() + (ulong)(ticks * 1000 / 256);
+            while (WaitingForMore && Time.GetTicksMsec() < end)
+            {
+                yield return new WaitOneFrame();
+            }
+            WaitingForMore = false;
         }
 
         public IEnumerator RestoreLinesAfterWait(MessageScrollLine[] linesToRestore, float waittime)

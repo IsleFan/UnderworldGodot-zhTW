@@ -460,9 +460,8 @@ namespace Underworld
             MissileLauncherHeadingBase = 1;
             var projectile = PrepareProjectileObject(critter);
             MissileFlagA = false;
-            if (projectile != null)
-            {
-                //make a launch sound
+            if ((projectile != null) && (_RES == GAME_UW2))
+            {//critter_fire's launch sound; UW1 only has missile_fire's
                 UWsoundeffects.PlaySoundEffectAtObject(effectNo: 0xA, obj: projectile, volDelta: 0x14);
             }
         }

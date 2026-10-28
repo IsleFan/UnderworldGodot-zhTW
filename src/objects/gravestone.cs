@@ -12,37 +12,63 @@ namespace Underworld
         }
 
         /// <summary>
-        /// Displays the grave cutscene
+        /// Looking at a gravestone (RectLook): its picture number comes from DATA\GRAVE.DAT, indexed by its text
+        /// number (the link of a quantity object, else the owner). Without a picture the inscription follows
+        /// "The gravestone reads: "; with one UW1 also shows the picture in the window (cutscene 101h, frame
+        /// picture). Nothing at all when GRAVE.DAT has no such entry.
         /// </summary>
-        /// <param name="obj"></param>
-        /// <returns></returns>
         private static void DisplayGrave(uwObject obj)
         {
-            if (_RES != GAME_UW2)
+            var index = obj.is_quant == 1 ? obj.link & 0x1FF : obj.owner;
+            if (!Loader.ReadStreamFile(System.IO.Path.Combine(BasePath, "DATA", "GRAVE.DAT"), out byte[] graves)
+                || index >= graves.Length)
             {
-                uimanager.DisplayCutsImage("cs401.n01", GetGraveID(obj),  uimanager.CutsSmall);
-            }            
-            uimanager.AddToMessageScroll(GameStrings.GetDisplayString(8, obj.link - 512));   
-           
+                return;
+            }
+            var picture = graves[index];
+            if (picture != 0)
+            {//the picture replaces what the scroll showed
+                uimanager.instance.scroll.Clear();
+            }
+            if (picture == 0)
+            {
+                uimanager.NextOutputPrependedString = GameStrings.GetDisplayString(0x1160 + obj.flags);//The gravestone reads:
+            }
+            if ((_RES != GAME_UW2) || (index != 0) || !HasLinkedTrap(obj.index))
+            {//UW2: inscription 0 is not printed when a trap 6/2/3 follows (find_obj from the gravestone on)
+                uimanager.AddToMessageScroll(GameStrings.GetDisplayString(8, index));
+            }
+            else if (picture == 0)
+            {
+                uimanager.AddToMessageScroll(uimanager.NextOutputPrependedString);
+                uimanager.NextOutputPrependedString = "";
+            }
+            if (picture != 0 && _RES != GAME_UW2)
+            {
+                uimanager.DisplayCutsImage("cs401.n01", picture - 1, uimanager.CutsSmall);
+            }
         }
 
         /// <summary>
-        /// Opens graves.dat to get the correct grave no to display.
+        /// find_obj(6, 2, 3) from the gravestone: depth first through it, what it holds and the objects after it in its list.
         /// </summary>
-        /// <param name="obj"></param>
-        /// <returns></returns>
-        public static int GetGraveID(uwObject obj)
+        static bool HasLinkedTrap(int index)
         {
-            //Load in the grave information
-            if (_RES != GAME_UW2)
+            var objects = UWTileMap.current_tilemap.LevelObjects;
+            while (index != 0)
             {
-                Loader.ReadStreamFile(System.IO.Path.Combine(BasePath, "DATA", "GRAVE.DAT"), out byte[] graves);
-                if (obj.link >= 512)
+                var o = objects[index];
+                if ((o.majorclass == 6) && (o.minorclass == 2) && (o.classindex == 3))
                 {
-                    return (short)Loader.getAt(graves, obj.link - 512, 8) - 1;
+                    return true;
                 }
+                if ((o.is_quant == 0) && (o.link != 0) && HasLinkedTrap(o.link))
+                {
+                    return true;
+                }
+                index = o.next;
             }
-            return 0;
+            return false;
         }
 
         public static gravestone CreateInstance(Node3D parent, uwObject obj, string name)

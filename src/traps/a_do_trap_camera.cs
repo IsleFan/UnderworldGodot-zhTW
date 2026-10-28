@@ -25,6 +25,7 @@ namespace Underworld
             playerdat.AutomapEnabled = automap;
             playerdat.CameraReference = playerdat.playerObject;
             playerdat.PositionPlayerCamera();
+            playerdat.PlayerStatusUpdate();//FixPlayerEquips: the light back as it was
         }
 
 

@@ -11,13 +11,16 @@ namespace Underworld
         [Export] public TextureRect Eyes;
 
 
-        public static int EyeLevel = 0; //ha.
-        public static int CurrentEyeLevel = 0;
+        /// <summary>The level shown, 1 to 3 (3 the worst wounded), 0 for the closed eyes.</summary>
+        public static int EyeLevel = 0;
+        /// <summary>adjust_eyes' place in eyes_seq, -1 while the eyes are closed.</summary>
+        static int EyeFrame = -1;
+        /// <summary>How long the eyes have stayed open at the middle of the sequence.</summary>
+        static int EyeWait = 0;
         static double EyeTimer;
-        /// <summary>
-        /// Controls the timing of when the element returns to the default "off" positiong
-        /// </summary>
-        static double TimeLastReset;
+        /// <summary>eyes_seq: open, opener, fully open (held), opener, open; each level has three pictures after the closed one.</summary>
+        static readonly int[] EyeSequence = { 1, 2, 3, 2, 1 };
+
         private void InitEyes()
         {
             grEyes = new GRLoader(GRLoader.EYES_GR, GRLoader.GRShaderMode.UIShader);
@@ -32,58 +35,55 @@ namespace Underworld
         }
 
         /// <summary>
-        /// Calculates the target image to display in the eyeball slot to indicate enemy npc health.
+        /// A blow by the player on a critter (COMBAT.C, set_screen_frame(SCR_EYES, 3 - hp * 3 / avghit), at most 2 off):
+        /// the gargoyle's eyes open on the critter's health. A blow while they are open opens them fully again.
         /// </summary>
-        /// <param name="_hp"></param>
-        /// <param name="_maxhp"></param>
         public static void SetEyeLevel(int _hp, int _maxhp)
         {
-            TimeLastReset = 0f;
-            if (_maxhp == 0)
+            var fx = _maxhp != 0 ? _hp * 3 / _maxhp : 0;
+            if (fx >= 3)
             {
-                EyeLevel = 0;
-                return;
+                fx = 2;
             }
-            //This is not quite vanilla as I'm not 100% on how the division below leads to what image to load.
-            EyeLevel = (int)(_hp*3)/_maxhp;
-            if (EyeLevel>=3)
+            EyeLevel = 3 - fx;
+            if (EyeFrame < 0)
             {
-                EyeLevel = 2;
+                EyeFrame = 0;
             }
-            EyeLevel = 3 - EyeLevel;
-            EyeLevel = int.Min(grEyes.ImageCache.GetUpperBound(0), 4 + EyeLevel);
+            else
+            {//adjust_eyes: back to the fully open picture
+                EyeFrame = 2;
+            }
+            EyeWait = 0;
         }
 
         private void _ProcessEyeAnims(double delta)
         {
-            if (InGame)
+            if (!InGame || EyeFrame < 0)
             {
-                EyeTimer+=delta;
-                TimeLastReset+=delta;
-                if (EyeTimer>0.2f)
-                {
-                    EyeTimer = 0;
-                    if (CurrentEyeLevel != EyeLevel)
-                    {                        
-                        if (CurrentEyeLevel > EyeLevel)
-                        {
-                            //step up
-                            CurrentEyeLevel--; 
-                        }
-                        else
-                        {
-                            //step down
-                            CurrentEyeLevel++;                            
-                        }
-                        instance.Eyes.Texture = grEyes.LoadImageAt(CurrentEyeLevel);
-                    }
-                }
-                if (TimeLastReset>=10f)
-                {
-                    TimeLastReset = 0f;
-                    EyeLevel = 0;
-                }
+                return;
             }
+            EyeTimer += delta;
+            if (EyeTimer < 0.1f)
+            {
+                return;
+            }
+            EyeTimer = 0;
+            if (EyeFrame == 3 && EyeWait < 0x10)
+            {//held fully open
+                EyeWait++;
+                return;
+            }
+            if (EyeFrame > 4)
+            {//done: closed again
+                EyeFrame = -1;
+                EyeWait = 0;
+                EyeLevel = 0;
+                instance.Eyes.Texture = grEyes.LoadImageAt(0);
+                return;
+            }
+            var picture = EyeSequence[EyeFrame++] + (EyeLevel - 1) * 3;
+            instance.Eyes.Texture = grEyes.LoadImageAt(System.Math.Min(picture, grEyes.ImageCache.GetUpperBound(0)));
         }
 
     }//end class

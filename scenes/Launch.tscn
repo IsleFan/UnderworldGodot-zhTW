@@ -147,7 +147,7 @@ OptionButton/styles/hover = SubResource("StyleBoxFlat_button_hover")
 OptionButton/styles/normal = SubResource("StyleBoxFlat_button")
 OptionButton/styles/pressed = SubResource("StyleBoxFlat_button")
 
-[node name="LaunchMenu" type="Control" node_paths=PackedStringArray("SelectUW1", "PathUW1", "SelectUW2", "PathUW2", "GameFilesSelector", "SoundOptionSelector", "SynthPath", "ArtOptionSelector", "LanguageOptionSelector", "ResolutionOptionSelector", "LaunchError", "PathUW1Label", "PathUW1Status", "PathUW2Label", "PathUW2Status", "RomPath", "RomLabel", "RomStatus", "RomDirSelector", "SoundLabel", "ArtLabel", "LanguageLabel", "ResolutionLabel", "StartUW1", "StartUW2", "BrowseUW1", "BrowseUW2", "BrowseSynth", "BrowseRom", "GameDirSelector", "TitleLabel", "SubtitleLabel", "SettingsTitle", "SoundHint", "SynthLabel", "SoundFontBox", "RomBox", "HdGenerate", "HdStatus", "HdScale", "ControlsLabel", "ControlsOptionSelector", "ControlsBox", "Sensitivity", "InvertMouse", "KeysButton", "ControlsHint")]
+[node name="LaunchMenu" type="Control" node_paths=PackedStringArray("SelectUW1", "PathUW1", "SelectUW2", "PathUW2", "GameFilesSelector", "SoundOptionSelector", "SynthPath", "ArtOptionSelector", "LanguageOptionSelector", "ResolutionOptionSelector", "LaunchError", "PathUW1Label", "PathUW1Status", "PathUW2Label", "PathUW2Status", "RomPath", "RomLabel", "RomStatus", "RomDirSelector", "SoundLabel", "ArtLabel", "LanguageLabel", "ResolutionLabel", "StartUW1", "StartUW2", "BrowseUW1", "BrowseUW2", "BrowseSynth", "BrowseRom", "GameDirSelector", "TitleLabel", "SubtitleLabel", "SettingsTitle", "SoundHint", "SynthLabel", "SoundFontBox", "RomBox", "HdGenerate", "HdStatus", "HdScale", "ControlsLabel", "ControlsOptionSelector", "DragLabel", "DragOptionSelector", "ControlsBox", "Sensitivity", "InvertMouse", "KeysButton", "ControlsHint")]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -198,6 +198,8 @@ HdScale = NodePath("Margins/Page/Body/SettingsCard/Settings/HdBox/HdRow/HdScale"
 HdStatus = NodePath("Margins/Page/Body/SettingsCard/Settings/HdBox/HdStatus")
 ControlsLabel = NodePath("Margins/Page/Body/SettingsCard/Settings/Grid/ControlsLabel")
 ControlsOptionSelector = NodePath("Margins/Page/Body/SettingsCard/Settings/Grid/ControlsOptions")
+DragLabel = NodePath("Margins/Page/Body/SettingsCard/Settings/Grid/DragLabel")
+DragOptionSelector = NodePath("Margins/Page/Body/SettingsCard/Settings/Grid/DragOptions")
 ControlsBox = NodePath("Margins/Page/Body/SettingsCard/Settings/ControlsBox")
 Sensitivity = NodePath("Margins/Page/Body/SettingsCard/Settings/ControlsBox/MouseRow/Sensitivity")
 InvertMouse = NodePath("Margins/Page/Body/SettingsCard/Settings/ControlsBox/MouseRow/InvertMouse")
@@ -445,6 +447,13 @@ layout_mode = 2
 layout_mode = 2
 size_flags_horizontal = 3
 
+[node name="DragLabel" type="Label" parent="Margins/Page/Body/SettingsCard/Settings/Grid"]
+layout_mode = 2
+
+[node name="DragOptions" type="OptionButton" parent="Margins/Page/Body/SettingsCard/Settings/Grid"]
+layout_mode = 2
+size_flags_horizontal = 3
+
 [node name="ArtLabel" type="Label" parent="Margins/Page/Body/SettingsCard/Settings/Grid"]
 layout_mode = 2
 
@@ -633,6 +642,7 @@ use_native_dialog = true
 [connection signal="file_selected" from="GameFilesSelector" to="." method="OnGameFilesSelectorSubmitted"]
 [connection signal="canceled" from="GameFilesSelector" to="." method="OnDialogCanceled"]
 [connection signal="item_selected" from="Margins/Page/Body/SettingsCard/Settings/Grid/ControlsOptions" to="." method="_on_controls_options_item_selected"]
+[connection signal="item_selected" from="Margins/Page/Body/SettingsCard/Settings/Grid/DragOptions" to="." method="OnDragOptionSelected"]
 [connection signal="item_selected" from="Margins/Page/Body/SettingsCard/Settings/ControlsBox/MouseRow/Sensitivity" to="." method="OnSensitivityChanged"]
 [connection signal="item_selected" from="Margins/Page/Body/SettingsCard/Settings/ControlsBox/MouseRow/InvertMouse" to="." method="OnInvertMouseSelected"]
 [connection signal="pressed" from="Margins/Page/Body/SettingsCard/Settings/ControlsBox/MouseRow/KeysButton" to="." method="ShowKeyBindings"]

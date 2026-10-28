@@ -128,7 +128,7 @@ namespace Underworld
                             //EG you detect a {creature class name} to the {direction}
                             var toPrint = ZhText.Enabled
                                 ? ZhText.Compose(GameStrings.GetDisplayString(1, 0x145), ZhText.ObjectName(0x40 + Candidates[index_var15]), "，", GameStrings.GetDisplayString(1, DirectionOffset + (index_var15 & 0x7)), "。")
-                                : $"{GameStrings.GetString(1, 0x145)}a {GameStrings.GetObjectNounUW(0x40 + Candidates[index_var15])} {GameStrings.GetString(1, DirectionOffset + (index_var15 & 0x7))} ";
+                                : $"{GameStrings.GetString(1, 0x145)}{GameStrings.GetName(0x40 + Candidates[index_var15], article: true, plural: false)} {GameStrings.GetString(1, DirectionOffset + (index_var15 & 0x7))}.";
                             uimanager.AddToMessageScroll(toPrint);
                         }
                         maxNoOfDetections_var16 = var17;

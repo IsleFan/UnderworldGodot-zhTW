@@ -85,39 +85,30 @@ namespace Underworld
           /// <summary>
           /// The current light level the player has from torches and magical lights
           /// </summary>
+          /// <summary>
+          /// The light the view is drawn with (set_light's level: the carried light, magic, the level's own light). The
+          /// save's light byte holds only the carried light and its slot, see SetCarriedLight.
+          /// </summary>
           public static int lightlevel
           {
                get
                {
-                    if (pdat == null) { return 1; }
-                    if (_RES == GAME_UW2)
-                    {
-                         return GetAt(0x65) >> 4;
-                    }
-                    else
-                    {
-                         return GetAt(0x64) >> 4;
-                    }
+                    return pdat == null ? 1 : _lightlevel;
                }
-
                set
                {
-                    //if (pdat==null){ uwsettings.instance.lightlevel = value;}
-                    if (_RES == GAME_UW2)
-                    {
-                         var tmp = GetAt(0x65);
-                         tmp = (byte)(tmp & 0x0F);
-                         tmp = (byte)(tmp | (value << 4));
-                         SetAt(0x65, tmp);
-                    }
-                    else
-                    {
-                         var tmp = GetAt(0x64);
-                         tmp = (byte)(tmp & 0x0F);
-                         tmp = (byte)(tmp | (value << 4));
-                         SetAt(0x64, tmp);
-                    }
+                    _lightlevel = value;
                }
+          }
+          static int _lightlevel = 1;
+
+          /// <summary>
+          /// player->light (FixPlayerEquips): the brightness of the brightest lit light carried in the high nibble and
+          /// its place in the low one (0 to 3 the light slots, 4 the cursor).
+          /// </summary>
+          static void SetCarriedLight(int brightness, int slot)
+          {
+               SetAt(_RES == GAME_UW2 ? 0x65 : 0x64, (byte)((brightness << 4) + slot));
           }
 
           /// <summary>
@@ -240,17 +231,13 @@ namespace Underworld
                     CameraReference = playerObject;
                }
 
-               SetAt16(0x3f + index * 2, 0);//clear data.
-               while (index < 2)
-               {//if not the third effect ID then shift down remain effect data to occupy the first 2 slots.
-                    var toMoveToIndex = index;
-                    index++;
-                    var toMoveFromIndex = index;
-                    var tmp = GetAt16(0x3f + toMoveFromIndex * 2);
-                    SetAt16(0x3F + toMoveToIndex * 2, tmp);
-                    SetAt16(0x3f + toMoveFromIndex * 2, 0);//clear data.
-               }
                ActiveSpellEffectCount--;
+               var last = ActiveSpellEffectCount;
+               if (index < last)
+               {//dispel_spell: the last spell is moved into the freed slot
+                    SetAt16(0x3F + index * 2, GetAt16(0x3F + last * 2));
+               }
+               SetAt16(0x3F + last * 2, 0);//clear data.
                motion.PlayerMotionUpdateRequired_dseg_D3 = true;
           }
 
@@ -469,6 +456,22 @@ namespace Underworld
           /// <summary>
           /// Controls if the automapping function is enabled. (A player property in UW2, a global variable in UW1)
           /// </summary>
+          /// <summary>
+          /// UW2: the level (from 1) of the last map shown, which the map opens on while the player is lost;
+          /// a value with bit 7 set is the complement of a level a map scrap was copied to (map_scrap).
+          /// </summary>
+          public static byte map_scrap
+          {
+               get
+               {
+                    return GetAt(0xF9);
+               }
+               set
+               {
+                    SetAt(0xF9, value);
+               }
+          }
+
           public static bool AutomapEnabled
           {
                get
@@ -673,7 +676,7 @@ namespace Underworld
                     if (nutritionValue > 0)
                     {
                          //apply food health boost
-                         var hpbonusToApply = foodhealthbonus / 6;
+                         var hpbonusToApply = foodhealthbonus / (_RES == GAME_UW2 ? 6 : 8);//player_eat: UW1 heals food_heal / 8
                          if (hpbonusToApply > 8)
                          {
                               hpbonusToApply = 8;

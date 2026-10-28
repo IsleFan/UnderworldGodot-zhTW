@@ -73,36 +73,15 @@ namespace Underworld
                     // if that case the usage here must be a check to see if the music is not playing. 
                     if (!MusicStreamPlayer.Instance.IsPlaying)
                     {
-                        //DEBUG_MUSIC_HASSTOPPED = false;
-                        switch (CurrentlyPlayingThemeNo)
+                        //a theme that ended, other than a combat theme or 0x18, gives way to a walking theme in the game
+                        //(change_music_maybe; scrmode 1). Without a request the theme that ended starts again, the menu's too.
+                        var combatOrIntro = ((CurrentlyPlayingThemeNo >= 2) && (CurrentlyPlayingThemeNo <= 4)) || (CurrentlyPlayingThemeNo == 0x18);
+                        if (uimanager.InGame)
                         {
-                            case 1: //intro theme.
-                                {
-                                    if (uimanager.InGame)
-                                    {
-                                        PickLevelThemeMusic(-1);
-                                    }
-                                    else
-                                    {
-                                        NewThemeToPlay = 1; //repeat them at menu?
-                                    }
-                                    break;
-                                }
-                            case >= 8 and <= 0xF://map themes.
-                                {
-                                    if (uimanager.InGame)
-                                    {
-                                        PickLevelThemeMusic(-1);
-                                    }
-                                    break;
-                                }
-                            case >= 2 and <= 4://combat themes
-                            case > 0xF: //cutscene themes
-                            default:
-                                {
-                                    //do nothing.
-                                    break;
-                                }
+                            if (!combatOrIntro)
+                            {
+                                PickLevelThemeMusic(-1);
+                            }
                         }
 
                         // WeapDrawn_2D28:
@@ -130,7 +109,7 @@ namespace Underworld
                         }
 
                         //seg_2D7B:
-                        LoadXMI(NewThemeToPlay);
+                        LoadNewMusic(NewThemeToPlay);
                         if ((NewThemeToPlay >= 2) && (NewThemeToPlay <= 4))
                         {
                             LastCombatMusicThemeChange = main.GlobalPITTimer;
@@ -213,57 +192,29 @@ namespace Underworld
                 {
                     if (!MusicStreamPlayer.Instance.IsPlaying)
                     {
-                        switch (CurrentlyPlayingThemeNo)
+                        //change_music_maybe: a theme that does not repeat by itself (0, 1, 9 to 11) or a walking theme
+                        //gives way in the game to a walking theme at random, any other repeats (the original's newmusic
+                        //is still the theme that ended; here the request is cleared once a theme loads); the weapon
+                        //drawn always calls for the armed theme
+                        if (uimanager.InGame)
                         {
-                            case 1: // intro theme
-                            case >= 2 and <= 4://map themes.
-                                {
-                                    if (uimanager.InGame)
-                                    {
-                                        PickLevelThemeMusic(-1);
-                                    }
-                                    break;
-                                }
-                            case >= 5 and <= 7://combat themes
-                            default:
-                                {
-                                    //do nothing.
-                                    break;
-                                }
-                        }
-
-                        // WeapDrawn_2D28:
-                        if (
-                            (playerdat.play_drawn != 0) && (CurrentlyPlayingThemeNo < 5)
-                            ||
-                            (playerdat.play_drawn != 0) && (CurrentlyPlayingThemeNo >= 8)
-                            )
-                        {
-                            NewThemeToPlay = Armed;//set to armed theme if not already in a combat theme.
-                        }
-                        else
-                        {
-                            switch (CurrentlyPlayingThemeNo)
+                            var repeats = (CurrentlyPlayingThemeNo >= 2 && CurrentlyPlayingThemeNo <= 8) || (CurrentlyPlayingThemeNo >= 12 && CurrentlyPlayingThemeNo <= 13);
+                            var walking = (CurrentlyPlayingThemeNo >= 2) && (CurrentlyPlayingThemeNo <= 4);
+                            if (!repeats || walking)
                             {
-                                case >= 2 and <= 4: //level themes                                
-                                case >= 5 and <= 7: //combat
-                                    if (NewThemeToPlay == 0)
-                                    {
-                                        NewThemeToPlay = CurrentlyPlayingThemeNo;//repeat theme.
-                                    }
-                                    break;
+                                PickLevelThemeMusic(-1);
+                            }
+                            else if (NewThemeToPlay == 0)
+                            {
+                                NewThemeToPlay = CurrentlyPlayingThemeNo;
+                            }
+                            if (playerdat.play_drawn != 0)
+                            {
+                                NewThemeToPlay = Armed;
                             }
                         }
-
-                        LoadXMI(NewThemeToPlay);
-                        if ((NewThemeToPlay >= 2) && (NewThemeToPlay <= 4))
-                        {
-                            LastCombatMusicThemeChange = main.GlobalPITTimer;
-                        }
-                        else
-                        {
-                            LastCombatMusicThemeChange = 0;
-                        }
+                        LoadNewMusic(NewThemeToPlay);
+                        LastCombatMusicThemeChange = 0;
                     }
                 }
                 else
@@ -303,13 +254,41 @@ namespace Underworld
             }//end uw1 logic
         }
 
+        /// <summary>Asks for a theme next (set_new_music); UW2 ignores it while the victory theme plays, UW1 never does.</summary>
         public static void ChangeThemeMusic(byte newTheme)
         {
-            if (CurrentlyPlayingThemeNo != Fanfare)
+            if ((_RES != GAME_UW2) || (CurrentlyPlayingThemeNo != Fanfare))
             {
                 NewThemeToPlay = newTheme;
             }
         }
+
+        /// <summary>
+        /// load_new_music with start set: theme 0 means the one playing, and the theme playing starts again from the top
+        /// (a theme that has ended is played again this way); another theme is loaded.
+        /// </summary>
+        public static void LoadNewMusic(byte themeNo)
+        {
+            if (themeNo == 0)
+            {
+                themeNo = CurrentlyPlayingThemeNo;
+            }
+            if (themeNo == 0)
+            {
+                return;
+            }
+            if (themeNo == CurrentlyPlayingThemeNo)
+            {
+                if (lastLoadFailed)
+                {//a theme that could not be loaded is not tried again every frame (the original turns the music off)
+                    return;
+                }
+                CurrentlyPlayingThemeNo = 0xFF;//so LoadXMI loads it again
+            }
+            LoadXMI(themeNo);
+        }
+
+        static bool lastLoadFailed;
 
         public static void LoadXMI(byte themeNo, bool Loop = false)
         {
@@ -343,7 +322,8 @@ namespace Underworld
             if (MusicStreamPlayer.Instance == null) return;
 
             string xmiPath = Path.Combine(BasePath, "SOUND", filename);
-            if (!File.Exists(xmiPath))
+            lastLoadFailed = !File.Exists(xmiPath);
+            if (lastLoadFailed)
             {
                 System.Diagnostics.Debug.Print($"Theme {filename} not found at {xmiPath}");
                 return;
